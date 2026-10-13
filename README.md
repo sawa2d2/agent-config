@@ -15,5 +15,6 @@ The installer deploys:
 │   └── rules/
 │       └── karpathy.md
 └── .claude/
-    └── CLAUDE.md
+    └── rules/
+        └── karpathy.md
 ```
