@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+source="$repo_dir/deploy/bin/ralph"
+target_dir="$HOME/.local/bin"
+target="$target_dir/ralph"
+
+[[ -f "$source" ]] || { echo "Missing: $source" >&2; exit 1; }
+mkdir -p -- "$target_dir"
+if [[ -L "$target" ]]; then
+  echo "Refusing to overwrite symlink: $target" >&2
+  exit 1
+fi
+if [[ -e "$target" ]] && ! grep -Fq 'A small fresh-context Ralph pilot for Claude Code.' "$target"; then
+  echo "Refusing to overwrite unmanaged command: $target" >&2
+  exit 1
+fi
+install -m 755 -- "$source" "$target"
+echo "Installed: $target"
