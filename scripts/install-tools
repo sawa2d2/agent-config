@@ -78,22 +78,30 @@ else
   echo 'WARNING: Claude CLI not found; Superpowers Claude plugin not installed' >&2
 fi
 
-# Spec Kit requires Python 3.11+. pipx's default interpreter may be older.
-if command -v uv >/dev/null; then
-  uv tool install --python 3.11 specify-cli --from git+https://github.com/github/spec-kit.git
-elif command -v pipx >/dev/null; then
-  python_bin=''
-  for candidate in python3.14 python3.13 python3.12 python3.11; do
-    if command -v "$candidate" >/dev/null; then
-      python_bin="$candidate"
-      break
-    fi
-  done
-  if [[ -n "$python_bin" ]]; then
-    pipx install --python "$python_bin" git+https://github.com/github/spec-kit.git
+# uv can download Python 3.11 without changing the system Python.
+uv_bin=''
+if command -v uv >/dev/null 2>&1; then
+  uv_bin="$(command -v uv)"
+elif [[ -x "$HOME/.local/bin/uv" ]]; then
+  uv_bin="$HOME/.local/bin/uv"
+elif command -v pipx >/dev/null 2>&1; then
+  pipx install uv
+  if command -v uv >/dev/null 2>&1; then
+    uv_bin="$(command -v uv)"
+  elif [[ -x "$HOME/.local/bin/uv" ]]; then
+    uv_bin="$HOME/.local/bin/uv"
+  fi
+fi
+
+if [[ -n "$uv_bin" ]]; then
+  "$uv_bin" tool install --python 3.11 specify-cli --from git+https://github.com/github/spec-kit.git
+  if command -v specify >/dev/null 2>&1; then
+    specify version
+  elif [[ -x "$HOME/.local/bin/specify" ]]; then
+    "$HOME/.local/bin/specify" version
   else
-    echo 'WARNING: Spec Kit skipped (pipx requires Python 3.11+; install uv or a newer Python)' >&2
+    echo 'WARNING: Spec Kit installed but specify is not on PATH' >&2
   fi
 else
-  echo 'WARNING: Spec Kit skipped (install uv or pipx with Python 3.11+)' >&2
+  echo 'WARNING: Spec Kit skipped (requires uv or pipx)' >&2
 fi
