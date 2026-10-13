@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+guidelines="$repo_dir/guidelines/karpathy.md"
+bob_file="$HOME/.bob/rules/karpathy.md"
+claude_file="$HOME/.claude/CLAUDE.md"
+start_marker="<!-- agent-config:karpathy:start -->"
+end_marker="<!-- agent-config:karpathy:end -->"
+
+[[ -f "$guidelines" ]] || { printf 'Missing %s\n' "$guidelines" >&2; exit 1; }
+mkdir -p -- "$(dirname -- "$bob_file")" "$(dirname -- "$claude_file")"
+
+# Only replace our own Bob rules file.
+if [[ -e "$bob_file" ]] && ! grep -Fqx '# Engineering Guidelines (Karpathy-inspired)' "$bob_file"; then
+  printf 'Refusing to overwrite unmanaged file: %s\n' "$bob_file" >&2
+  exit 1
+fi
+if [[ -L "$bob_file" || -L "$claude_file" ]]; then
+  printf 'Refusing to replace a symbolic link in destination\n' >&2
+  exit 1
+fi
+
+# Validate an existing managed block before changing any files.
+if [[ -f "$claude_file" ]]; then
+  awk -v start="$start_marker" -v end="$end_marker" '
+    $0 == start { opens++; inside=1; next }
+    $0 == end { closes++; if (!inside) invalid=1; inside=0; next }
+    END { if (inside || opens != closes || opens > 1 || invalid) exit 1 }
+  ' "$claude_file" || { printf 'Invalid managed block in %s\n' "$claude_file" >&2; exit 1; }
+fi
+
+tmp="$(mktemp "${claude_file}.tmp.XXXXXX")"
+trap 'rm -f -- "$tmp"' EXIT
+
+if [[ -f "$claude_file" ]]; then
+  awk -v start="$start_marker" -v end="$end_marker" '
+    $0 == start { inside=1; next }
+    $0 == end { inside=0; next }
+    !inside { print }
+  ' "$claude_file" > "$tmp"
+  chmod --reference="$claude_file" "$tmp"
+else
+  chmod 644 "$tmp"
+fi
+
+# Append/update exactly one managed section, leaving other Claude rules intact.
+if [[ -s "$tmp" ]]; then
+  printf '\n' >> "$tmp"
+fi
+{
+  printf '%s\n' "$start_marker"
+  cat -- "$guidelines"
+  printf '%s\n' "$end_marker"
+} >> "$tmp"
+
+cp -- "$guidelines" "$bob_file"
+mv -- "$tmp" "$claude_file"
+printf 'Installed: %s\nInstalled: %s\n' "$bob_file" "$claude_file"
