@@ -13,14 +13,18 @@ USAGE
 }
 
 fail() { printf 'ralph: %s\n' "$*" >&2; exit 1; }
+cmd="${1:-}"
+if [[ "$cmd" == -h || "$cmd" == --help || "$cmd" == help || -z "$cmd" ]]; then
+  usage
+  exit 0
+fi
+
 root="$(pwd -P)"
 state="$root/.ralph"
-
 command -v git >/dev/null || fail 'git is required'
 git rev-parse --show-toplevel >/dev/null 2>&1 || fail 'run inside a Git repository'
 [[ "$(git rev-parse --show-toplevel)" == "$root" ]] || fail 'run from the repository root'
 
-cmd="${1:-}"
 case "$cmd" in
   init)
     [[ $# -le 2 ]] || fail 'usage: ralph init [--demo]'
