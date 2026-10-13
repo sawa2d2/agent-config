@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command -v git >/dev/null || { echo 'git is required' >&2; exit 1; }
+
+tmp="$(mktemp -d)"
+trap 'rm -rf -- "$tmp"' EXIT
+
+fetch() {
+  git clone --quiet --depth 1 "https://github.com/$1.git" "$tmp/$2"
+}
+
+install_skill() {
+  local source="$1" name="$2" target dest stage
+  [[ -f "$source/SKILL.md" ]] || { echo "Missing SKILL.md: $source" >&2; return 1; }
+
+  for target in "$HOME/.bob/skills" "$HOME/.claude/skills"; do
+    mkdir -p -- "$target"
+    dest="$target/$name"
+    # Do not modify skills installed or edited outside agent-config.
+    if [[ -e "$dest" || -L "$dest" ]] && [[ ! -f "$dest/.agent-config-managed" ]]; then
+      echo "Refusing to overwrite unmanaged skill: $dest" >&2
+      return 1
+    fi
+    stage="$(mktemp -d "$target/.agent-config.XXXXXX")"
+    cp -R -- "$source/." "$stage/"
+    : > "$stage/.agent-config-managed"
+    if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi
+    mv -- "$stage" "$dest"
+    echo "Installed: $dest"
+  done
+}
+
+fetch joshuawheelock/grill-me grill-me
+fetch mattpocock/skills matt-skills
+fetch obra/superpowers superpowers
+
+install_skill "$tmp/grill-me/skills/grill-me" grill-me
+for name in grill-with-docs grilling domain-modeling; do
+  if [[ -d "$tmp/matt-skills/skills/engineering/$name" ]]; then
+    install_skill "$tmp/matt-skills/skills/engineering/$name" "$name"
+  elif [[ -d "$tmp/matt-skills/skills/productivity/$name" ]]; then
+    install_skill "$tmp/matt-skills/skills/productivity/$name" "$name"
+  else
+    echo "Missing upstream skill: $name" >&2
+    exit 1
+  fi
+done
+
+# Bob has global skills but no documented Superpowers plugin integration.
+# Claude uses the official plugin to retain Superpowers hooks and other features.
+for source in "$tmp/superpowers/skills/"*; do
+  [[ -f "$source/SKILL.md" ]] || continue
+  name="${source##*/}"
+  target="$HOME/.bob/skills"
+  mkdir -p -- "$target"
+  dest="$target/$name"
+  if [[ -e "$dest" || -L "$dest" ]] && [[ ! -f "$dest/.agent-config-managed" ]]; then
+    echo "Refusing to overwrite unmanaged skill: $dest" >&2
+    exit 1
+  fi
+  stage="$(mktemp -d "$target/.agent-config.XXXXXX")"
+  cp -R -- "$source/." "$stage/"
+  : > "$stage/.agent-config-managed"
+  if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi
+  mv -- "$stage" "$dest"
+  echo "Installed: $dest"
+done
+
+if command -v claude >/dev/null; then
+  if ! claude plugin marketplace list | grep -Fq "claude-plugins-official"; then
+    claude plugin marketplace add anthropics/claude-plugins-official
+  fi
+  if ! claude plugin list | grep -Fq "superpowers@claude-plugins-official"; then
+    claude plugin install superpowers@claude-plugins-official --scope user
+  fi
+else
+  echo 'WARNING: Claude CLI not found; Superpowers Claude plugin not installed' >&2
+fi
+
+# uv can download Python 3.11 without changing the system Python.
+uv_bin=''
+if command -v uv >/dev/null 2>&1; then
+  uv_bin="$(command -v uv)"
+elif [[ -x "$HOME/.local/bin/uv" ]]; then
+  uv_bin="$HOME/.local/bin/uv"
+elif command -v pipx >/dev/null 2>&1; then
+  pipx install uv
+  if command -v uv >/dev/null 2>&1; then
+    uv_bin="$(command -v uv)"
+  elif [[ -x "$HOME/.local/bin/uv" ]]; then
+    uv_bin="$HOME/.local/bin/uv"
+  fi
+fi
+
+if [[ -n "$uv_bin" ]]; then
+  "$uv_bin" tool install --python 3.11 specify-cli --from git+https://github.com/github/spec-kit.git
+  if command -v specify >/dev/null 2>&1; then
+    specify version
+  elif [[ -x "$HOME/.local/bin/specify" ]]; then
+    "$HOME/.local/bin/specify" version
+  else
+    echo 'WARNING: Spec Kit installed but specify is not on PATH' >&2
+  fi
+else
+  echo 'WARNING: Spec Kit skipped (requires uv or pipx)' >&2
+fi

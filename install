@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-source_dir="$repo_dir/rules"
+source_dir="$repo_dir/deploy/rules"
 
 for target in "$HOME/.bob/rules" "$HOME/.claude/rules"; do
   mkdir -p -- "$target"
@@ -17,3 +17,5 @@ for target in "$HOME/.bob/rules" "$HOME/.claude/rules"; do
     printf 'Installed: %s\n' "$dest"
   done
 done
+
+bash "$repo_dir/scripts/install-tools"

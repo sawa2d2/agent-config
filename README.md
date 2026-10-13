@@ -12,9 +12,26 @@ The installer deploys:
 ```text
 ~/
 ├── .bob/
-│   └── rules/
-│       └── karpathy.md
-└── .claude/
-    └── rules/
-        └── karpathy.md
+│   ├── rules/
+│   │   └── karpathy.md
+│   └── skills/
+│       ├── grill-me/
+│       ├── grill-with-docs/
+│       ├── grilling/
+│       ├── domain-modeling/
+│       ├── brainstorming/       # Superpowers (example)
+│       └── .../
+├── .claude/
+│   ├── rules/
+│   │   └── karpathy.md
+│   ├── skills/
+│   │   ├── grill-me/
+│   │   ├── grill-with-docs/
+│   │   ├── grilling/
+│   │   └── domain-modeling/
+│   └── plugins/                 # Superpowers via Claude plugin manager
+│       └── .../
+└── .local/
+    └── bin/
+        └── specify             # Spec Kit (uv default)
 ```
