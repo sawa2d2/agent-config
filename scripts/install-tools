@@ -40,8 +40,8 @@ install_skill "$tmp/grill-me/skills/grill-me" grill-me
 for name in grill-with-docs grilling domain-modeling; do
   if [[ -d "$tmp/matt-skills/skills/engineering/$name" ]]; then
     install_skill "$tmp/matt-skills/skills/engineering/$name" "$name"
-  elif [[ -d "$tmp/matt-skills/skills/$name" ]]; then
-    install_skill "$tmp/matt-skills/skills/$name" "$name"
+  elif [[ -d "$tmp/matt-skills/skills/productivity/$name" ]]; then
+    install_skill "$tmp/matt-skills/skills/productivity/$name" "$name"
   else
     echo "Missing upstream skill: $name" >&2
     exit 1
@@ -69,8 +69,12 @@ for source in "$tmp/superpowers/skills/"*; do
 done
 
 if command -v claude >/dev/null; then
-  claude plugin marketplace add anthropics/claude-plugins-official
-  claude plugin install superpowers@claude-plugins-official --scope user
+  if ! claude plugin marketplace list | grep -Fq "claude-plugins-official"; then
+    claude plugin marketplace add anthropics/claude-plugins-official
+  fi
+  if ! claude plugin list | grep -Fq "superpowers@claude-plugins-official"; then
+    claude plugin install superpowers@claude-plugins-official --scope user
+  fi
 else
   echo 'WARNING: Claude CLI not found; Superpowers Claude plugin not installed' >&2
 fi
