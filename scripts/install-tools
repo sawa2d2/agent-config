@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command -v git >/dev/null || { echo 'git is required' >&2; exit 1; }
+command -v uv >/dev/null || { echo 'uv is required for Spec Kit' >&2; exit 1; }
+
+tmp="$(mktemp -d)"
+trap 'rm -rf -- "$tmp"' EXIT
+
+fetch() {
+  git clone --quiet --depth 1 "https://github.com/$1.git" "$tmp/$2"
+}
+
+install_skill() {
+  local source="$1" name="$2" target dest stage
+  [[ -f "$source/SKILL.md" ]] || { echo "Missing SKILL.md: $source" >&2; return 1; }
+
+  for target in "$HOME/.bob/skills" "$HOME/.claude/skills"; do
+    mkdir -p -- "$target"
+    dest="$target/$name"
+    # Do not modify skills installed or edited outside agent-config.
+    if [[ -e "$dest" || -L "$dest" ]] && [[ ! -f "$dest/.agent-config-managed" ]]; then
+      echo "Refusing to overwrite unmanaged skill: $dest" >&2
+      return 1
+    fi
+    stage="$(mktemp -d "$target/.agent-config.XXXXXX")"
+    cp -R -- "$source/." "$stage/"
+    : > "$stage/.agent-config-managed"
+    if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi
+    mv -- "$stage" "$dest"
+    echo "Installed: $dest"
+  done
+}
+
+fetch joshuawheelock/grill-me grill-me
+fetch mattpocock/skills matt-skills
+fetch obra/superpowers superpowers
+
+install_skill "$tmp/grill-me/skills/grill-me" grill-me
+for name in grill-with-docs grilling domain-modeling; do
+  if [[ -d "$tmp/matt-skills/skills/engineering/$name" ]]; then
+    install_skill "$tmp/matt-skills/skills/engineering/$name" "$name"
+  elif [[ -d "$tmp/matt-skills/skills/$name" ]]; then
+    install_skill "$tmp/matt-skills/skills/$name" "$name"
+  else
+    echo "Missing upstream skill: $name" >&2
+    exit 1
+  fi
+done
+
+# Bob has global skills but no documented Superpowers plugin integration.
+# Claude uses the official plugin to retain Superpowers hooks and other features.
+for source in "$tmp/superpowers/skills/"*; do
+  [[ -f "$source/SKILL.md" ]] || continue
+  name="${source##*/}"
+  target="$HOME/.bob/skills"
+  mkdir -p -- "$target"
+  dest="$target/$name"
+  if [[ -e "$dest" || -L "$dest" ]] && [[ ! -f "$dest/.agent-config-managed" ]]; then
+    echo "Refusing to overwrite unmanaged skill: $dest" >&2
+    exit 1
+  fi
+  stage="$(mktemp -d "$target/.agent-config.XXXXXX")"
+  cp -R -- "$source/." "$stage/"
+  : > "$stage/.agent-config-managed"
+  if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi
+  mv -- "$stage" "$dest"
+  echo "Installed: $dest"
+done
+
+if command -v claude >/dev/null; then
+  claude plugin marketplace add anthropics/claude-plugins-official
+  claude plugin install superpowers@claude-plugins-official --scope user
+else
+  echo 'WARNING: Claude CLI not found; Superpowers Claude plugin not installed' >&2
+fi
+
+uv tool install specify-cli
+echo 'Spec Kit CLI installed. Initialize individual projects with: specify init --here --integration bob (or claude)'
