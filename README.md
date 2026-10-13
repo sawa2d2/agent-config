@@ -33,5 +33,18 @@ The installer deploys:
 │       └── .../
 └── .local/
     └── bin/
-        └── specify             # Spec Kit (uv default)
+        ├── specify             # Spec Kit (uv default)
+        └── ralph               # Ralph pilot
 ```
+
+## Ralph trial
+
+```bash
+mkdir -p /tmp/ralph-demo && cd /tmp/ralph-demo
+git init
+ralph init --demo
+ralph doctor
+ralph run 1
+```
+
+This is a minimal Claude Code fresh-context loop, not the upstream snarktank/ralph CLI. It does not auto-commit or bypass permission checks. Use a disposable repository.
