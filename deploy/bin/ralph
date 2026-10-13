@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: ralph init [--demo]
+       ralph run [iterations]
+       ralph doctor
+
+A small fresh-context Ralph pilot for Claude Code.
+Run inside a disposable Git repository for the first test.
+USAGE
+}
+
+fail() { printf 'ralph: %s\n' "$*" >&2; exit 1; }
+root="$(pwd -P)"
+state="$root/.ralph"
+
+command -v git >/dev/null || fail 'git is required'
+git rev-parse --show-toplevel >/dev/null 2>&1 || fail 'run inside a Git repository'
+[[ "$(git rev-parse --show-toplevel)" == "$root" ]] || fail 'run from the repository root'
+
+cmd="${1:-}"
+case "$cmd" in
+  init)
+    [[ $# -le 2 ]] || fail 'usage: ralph init [--demo]'
+    [[ $# -eq 1 || "$2" == '--demo' ]] || fail 'unknown init option'
+    [[ ! -e "$state" ]] || fail '.ralph already exists (nothing overwritten)'
+    mkdir -p "$state"
+    cat > "$state/prompt.md" <<'PROMPT'
+You are working on one task in a Ralph-style fresh-context coding loop.
+
+1. Read .ralph/prd.json and .ralph/progress.txt.
+2. Pick exactly one userStory where passes is false.
+3. Implement that story and verify its acceptance criteria.
+4. If and only if verified, set its passes field to true in .ralph/prd.json.
+5. Append a concise summary to .ralph/progress.txt.
+6. Do not commit, push, delete unrelated files, or modify external systems.
+7. Output <promise>COMPLETE</promise> only after every story has passes true.
+
+If a requirement is ambiguous or verification is impossible, stop and explain.
+PROMPT
+    printf '# Ralph progress\n' > "$state/progress.txt"
+    if [[ "${2:-}" == '--demo' ]]; then
+      cat > "$state/prd.json" <<'JSON'
+{
+  "userStories": [
+    {
+      "id": "DEMO-1",
+      "title": "Create a hello file",
+      "description": "Create hello.txt at the repository root with the exact line hello ralph followed by a newline.",
+      "acceptanceCriteria": ["hello.txt exists", "Its only line is hello ralph"],
+      "passes": false
+    }
+  ]
+}
+JSON
+    else
+      cat > "$state/prd.json" <<'JSON'
+{
+  "userStories": [
+    {
+      "id": "TASK-1",
+      "title": "Replace with a small task",
+      "description": "Edit this description before running Ralph.",
+      "acceptanceCriteria": ["Replace with an objective verification condition"],
+      "passes": false
+    }
+  ]
+}
+JSON
+    fi
+    echo "Initialized: $state"
+    ;;
+  doctor)
+    for tool in claude jq; do
+      if command -v "$tool" >/dev/null; then
+        printf 'OK: %s (%s)\n' "$tool" "$(command -v "$tool")"
+      else
+        printf 'MISSING: %s\n' "$tool"
+      fi
+    done
+    [[ -f "$state/prd.json" ]] && echo 'OK: .ralph/prd.json' || echo 'MISSING: .ralph/prd.json'
+    ;;
+  run)
+    [[ $# -le 2 ]] || fail 'usage: ralph run [iterations]'
+    count="${2:-1}"
+    [[ "$count" =~ ^[1-9][0-9]*$ ]] || fail 'iterations must be a positive integer'
+    (( count <= 5 )) || fail 'pilot is limited to 5 iterations'
+    command -v claude >/dev/null || fail 'Claude Code CLI not found'
+    command -v jq >/dev/null || fail 'jq is required'
+    [[ -f "$state/prd.json" && -f "$state/prompt.md" ]] || fail 'run ralph init first'
+    jq -e '.userStories | type == "array" and length > 0' "$state/prd.json" >/dev/null || fail 'invalid PRD'
+    allowed="${RALPH_ALLOWED_TOOLS:-Read,Write,Edit}"
+    for (( i=1; i<=count; i++ )); do
+      if jq -e 'all(.userStories[]; .passes == true)' "$state/prd.json" >/dev/null; then
+        echo 'All stories already complete.'
+        exit 0
+      fi
+      echo "Ralph iteration $i/$count"
+      output="$(mktemp)"
+      trap 'rm -f -- "$output"' EXIT
+      if ! { cat "$state/prompt.md"; printf '\nWork in repository: %s\n' "$root"; } |
+          claude --print --allowedTools "$allowed" | tee "$output"; then
+        fail 'Claude exited with an error; stopping loop'
+      fi
+      if jq -e 'all(.userStories[]; .passes == true)' "$state/prd.json" >/dev/null &&
+         grep -Fq '<promise>COMPLETE</promise>' "$output"; then
+        echo 'Ralph completed.'
+        exit 0
+      fi
+      rm -f -- "$output"
+      trap - EXIT
+    done
+    fail 'iteration limit reached without verified completion'
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    usage
+    [[ -z "$cmd" ]] || exit 2
+    ;;
+esac
