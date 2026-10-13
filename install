@@ -33,26 +33,38 @@ fi
 tmp="$(mktemp "${claude_file}.tmp.XXXXXX")"
 trap 'rm -f -- "$tmp"' EXIT
 
-if [[ -f "$claude_file" ]]; then
-  awk -v start="$start_marker" -v end="$end_marker" '
-    $0 == start { inside=1; next }
-    $0 == end { inside=0; next }
+if [[ -f "$claude_file" ]] && grep -Fqx "$start_marker" "$claude_file"; then
+  # Replace the managed section in place, preserving all unrelated lines.
+  awk -v start="$start_marker" -v end="$end_marker" -v source="$guidelines" '
+    $0 == start {
+      print
+      while ((getline line < source) > 0) print line
+      close(source)
+      inside=1
+      next
+    }
+    $0 == end { print; inside=0; next }
     !inside { print }
   ' "$claude_file" > "$tmp"
+elif [[ -f "$claude_file" ]]; then
+  cat -- "$claude_file" > "$tmp"
+  [[ ! -s "$tmp" ]] || printf '\n' >> "$tmp"
+else
+  : > "$tmp"
+fi
+
+if [[ ! -f "$claude_file" ]] || ! grep -Fqx "$start_marker" "$claude_file"; then
+  {
+    printf '%s\n' "$start_marker"
+    cat -- "$guidelines"
+    printf '%s\n' "$end_marker"
+  } >> "$tmp"
+fi
+if [[ -f "$claude_file" ]]; then
   chmod --reference="$claude_file" "$tmp"
 else
   chmod 644 "$tmp"
 fi
-
-# Append/update exactly one managed section, leaving other Claude rules intact.
-if [[ -s "$tmp" ]]; then
-  printf '\n' >> "$tmp"
-fi
-{
-  printf '%s\n' "$start_marker"
-  cat -- "$guidelines"
-  printf '%s\n' "$end_marker"
-} >> "$tmp"
 
 cp -- "$guidelines" "$bob_file"
 mv -- "$tmp" "$claude_file"
