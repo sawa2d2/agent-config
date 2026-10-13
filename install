@@ -17,3 +17,5 @@ for target in "$HOME/.bob/rules" "$HOME/.claude/rules"; do
     printf 'Installed: %s\n' "$dest"
   done
 done
+
+bash "$repo_dir/scripts/install-tools"
