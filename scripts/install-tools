@@ -2,7 +2,6 @@
 set -euo pipefail
 
 command -v git >/dev/null || { echo 'git is required' >&2; exit 1; }
-command -v uv >/dev/null || { echo 'uv is required for Spec Kit' >&2; exit 1; }
 
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
@@ -79,5 +78,10 @@ else
   echo 'WARNING: Claude CLI not found; Superpowers Claude plugin not installed' >&2
 fi
 
-uv tool install specify-cli
-echo 'Spec Kit CLI installed. Initialize individual projects with: specify init --here --integration bob (or claude)'
+if command -v uv >/dev/null; then
+  uv tool install specify-cli
+elif command -v pipx >/dev/null; then
+  pipx install specify-cli
+else
+  echo 'WARNING: Spec Kit skipped (install uv or pipx, then rerun ./install)' >&2
+fi
