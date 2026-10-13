@@ -78,10 +78,11 @@ else
   echo 'WARNING: Claude CLI not found; Superpowers Claude plugin not installed' >&2
 fi
 
+# Spec Kit requires Python 3.11+. pipx's default interpreter may be older.
 if command -v uv >/dev/null; then
-  uv tool install specify-cli
-elif command -v pipx >/dev/null; then
-  pipx install specify-cli
+  uv tool install --python 3.11 specify-cli --from git+https://github.com/github/spec-kit.git
+elif command -v pipx >/dev/null && command -v python3.11 >/dev/null; then
+  pipx install --python python3.11 git+https://github.com/github/spec-kit.git
 else
-  echo 'WARNING: Spec Kit skipped (install uv or pipx, then rerun ./install)' >&2
+  echo 'WARNING: Spec Kit skipped (requires uv or pipx with python3.11+)' >&2
 fi
