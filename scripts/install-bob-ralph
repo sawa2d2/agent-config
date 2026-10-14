@@ -42,4 +42,3 @@ for name in prd ralph; do
   echo "Installed: $dest"
 done
 
-echo 'Bob Ralph loop is experimental; it was not executed.'
