@@ -40,7 +40,7 @@ The installer deploys:
 
 ## Experimental Bob Ralph
 
-The installer fetches [snarktank/ralph](https://github.com/snarktank/ralph), applies `deploy/ralph/bob.patch` (a small Bob Shell 2.x backend adapter), and stores the result at `~/.local/share/agent-config/ralph`. It also installs the upstream `prd` and `ralph` skills into `~/.bob/skills/`, without executing the loop. The skills prepare PRDs; `ralph.sh` runs the loop. Existing unmanaged skills are left intact (identical copies are skipped; differing copies require manual resolution). This is experimental and not validated for production use. The old Heidloff demo is no longer installed.
+Run `bash scripts/install-bob-ralph` explicitly to install experimental Bob Ralph; the standard `bash ./install` does not install it. This separate installer fetches [snarktank/ralph](https://github.com/snarktank/ralph), applies `deploy/ralph/bob.patch` (a small Bob Shell 2.x backend adapter), and stores the result at `~/.local/share/agent-config/ralph`. It also installs the upstream `prd` and `ralph` skills into `~/.bob/skills/`, without executing the loop. The skills prepare PRDs; `ralph.sh` runs the loop. Existing unmanaged skills are left intact (identical copies are skipped; differing copies require manual resolution). This is experimental and not validated for production use. The old Heidloff demo is no longer installed.
 
 To prepare a **disposable Git repository** for a later smoke test:
 
