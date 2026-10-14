@@ -18,4 +18,19 @@ for target in "$HOME/.bob/rules" "$HOME/.claude/rules"; do
   done
 done
 
+# Install shared global instructions without overwriting unmanaged files.
+for dest in "$HOME/.bob/AGENTS.md" "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md"; do
+  mkdir -p -- "${dest%/*}"
+  if [[ -L "$dest" ]]; then
+    printf 'Skipping existing symlink (not managed): %s\n' "$dest" >&2
+    continue
+  fi
+  if [[ -e "$dest" ]] && ! cmp -s -- "$repo_dir/deploy/AGENTS.md" "$dest"; then
+    printf 'Refusing to overwrite existing global instructions: %s\n' "$dest" >&2
+    exit 1
+  fi
+  cp -- "$repo_dir/deploy/AGENTS.md" "$dest"
+  printf 'Installed: %s\n' "$dest"
+done
+
 bash "$repo_dir/scripts/install-tools"
