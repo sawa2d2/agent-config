@@ -36,30 +36,23 @@ The installer deploys:
         └── specify             # Spec Kit (uv default)
 ```
 
+## Experimental Bob Ralph
 
-## Bob Ralph trial
+The installer fetches [snarktank/ralph](https://github.com/snarktank/ralph), applies `deploy/ralph/bob.patch` (a small Bob Shell 2.x backend adapter), and stores the result at `~/.local/share/agent-config/ralph`. It does not execute Ralph. This is experimental and not validated for production use. The old Heidloff demo is no longer installed.
 
-The installer fetches [nheidloff/bob-ralph-wiggum](https://github.com/nheidloff/bob-ralph-wiggum) into `~/.local/share/agent-config/bob-ralph-wiggum` without running it. The upstream sample requires Podman and a Bob Shell API key. Test it in a disposable copy: its `init-bob.sh` deletes the copy's `.git`, builds a container image, and its loop runs file-writing and shell tools and commits changes.
+To prepare a **disposable Git repository** for a later smoke test:
 
 ```bash
-trial="$(mktemp -d)"
-cp -a "$HOME/.local/share/agent-config/bob-ralph-wiggum/." "$trial/"
+src="$HOME/.local/share/agent-config/ralph"
+trial="$(mktemp -d "$HOME/ralph-test.XXXXXX")"
 cd "$trial"
-
-export BOBSHELL_API_KEY="..."  # obtain from Bob Shell
-export GIT_USER_NAME="$(git config --global user.name)"
-export GIT_USER_EMAIL="$(git config --global user.email)"
-
-sh init-bob.sh
-sh start-container-bob.sh
+git init -b main
+mkdir -p scripts/ralph
+cp "$src/ralph.sh" "$src/CLAUDE.md" scripts/ralph/
+cp "$src/prd.json.example" scripts/ralph/prd.json
+# Edit scripts/ralph/prd.json to set branchName and small test stories.
+# Set up Bob Shell 2.x authentication before executing.
+# bash scripts/ralph/ralph.sh --tool bob 1
 ```
 
-Inside the container, verify Bob authentication first, then run one iteration before the loop:
-
-```bash
-bob --auth-method api-key -p "Hi"
-sh ../ralph/iteration.sh
-# Optional: sh ../ralph/loop.sh
-```
-
-The upstream example is a personal experiment, not an IBM-supported Bob plugin. Inspect the scripts before running them; avoid real repositories or credentials with broader access than necessary.
+The commented-out command is deliberately not run by the installer. The adapter currently reuses upstream's Claude-oriented `CLAUDE.md`, caps Bob at 10 turns / 0.5 cost units per iteration, and has not been smoke-tested. Upstream may commit, create branches, or modify files; use an isolated repository. Upstream currently suppresses per-agent command errors with `|| true`, so verify progress and exit behavior before real use.
