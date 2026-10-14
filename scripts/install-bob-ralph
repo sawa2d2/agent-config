@@ -7,15 +7,39 @@ repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 target="$HOME/.local/share/agent-config/ralph"
 if [[ -e "$target" || -L "$target" ]]; then
   echo "Already present (not overwritten): $target"
-  exit 0
+else
+  mkdir -p -- "$(dirname -- "$target")"
+  stage="$(mktemp -d "$(dirname -- "$target")/.ralph.XXXXXX")"
+  trap 'rm -rf -- "$stage"' EXIT
+  git clone --quiet --depth 1 https://github.com/snarktank/ralph.git "$stage"
+  git -C "$stage" apply --check "$repo_dir/deploy/ralph/bob.patch"
+  git -C "$stage" apply "$repo_dir/deploy/ralph/bob.patch"
+  mv -- "$stage" "$target"
+  echo "Installed experimental upstream Ralph + Bob adapter: $target"
 fi
 
-mkdir -p -- "$(dirname -- "$target")"
-stage="$(mktemp -d "$(dirname -- "$target")/.ralph.XXXXXX")"
-trap 'rm -rf -- "$stage"' EXIT
-git clone --quiet --depth 1 https://github.com/snarktank/ralph.git "$stage"
-git -C "$stage" apply --check "$repo_dir/deploy/ralph/bob.patch"
-git -C "$stage" apply "$repo_dir/deploy/ralph/bob.patch"
-mv -- "$stage" "$target"
-echo "Installed experimental upstream Ralph + Bob adapter: $target"
-echo 'Not executed; copy into a disposable Git repository before testing.'
+for name in prd ralph; do
+  source="$target/skills/$name"
+  [[ -f "$source/SKILL.md" ]] || { echo "Missing upstream skill: $source" >&2; exit 1; }
+  skill_dir="$HOME/.bob/skills"
+  dest="$skill_dir/$name"
+  mkdir -p -- "$skill_dir"
+
+  if [[ -e "$dest" || -L "$dest" ]] && [[ ! -f "$dest/.agent-config-managed" ]]; then
+    if [[ -d "$dest" && ! -L "$dest" ]] && diff -qr -- "$source" "$dest" >/dev/null; then
+      echo "Already installed manually (not managed): $dest"
+      continue
+    fi
+    echo "Refusing to overwrite unmanaged skill: $dest" >&2
+    exit 1
+  fi
+
+  stage="$(mktemp -d "$skill_dir/.agent-config.XXXXXX")"
+  cp -R -- "$source/." "$stage/"
+  : > "$stage/.agent-config-managed"
+  if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi
+  mv -- "$stage" "$dest"
+  echo "Installed: $dest"
+done
+
+echo 'Bob Ralph loop is experimental; it was not executed.'
