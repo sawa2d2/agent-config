@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command -v git >/dev/null || { echo 'git is required' >&2; exit 1; }
+
+target="$HOME/.local/share/agent-config/bob-ralph-wiggum"
+if [[ -e "$target" || -L "$target" ]]; then
+  echo "Already present (not overwritten): $target"
+  exit 0
+fi
+
+mkdir -p -- "$(dirname -- "$target")"
+git clone --depth 1 https://github.com/nheidloff/bob-ralph-wiggum.git "$target"
+echo "Installed Bob Ralph sample: $target"
+echo 'Run it only in a disposable copy; upstream init-bob.sh removes .git and builds a container.'
