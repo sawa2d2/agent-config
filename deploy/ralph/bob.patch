@@ -1,0 +1,35 @@
+diff --git a/ralph.sh b/ralph.sh
+--- a/ralph.sh
++++ b/ralph.sh
+@@ -1,5 +1,5 @@
+ #!/bin/bash
+ # Ralph Wiggum - Long-running AI agent loop
+-# Usage: ./ralph.sh [--tool amp|claude] [max_iterations]
++# Usage: ./ralph.sh [--tool amp|claude|bob] [max_iterations]
+ 
+ set -e
+@@ -30,6 +30,6 @@
+ 
+ # Validate tool choice
+-if [[ "$TOOL" != "amp" && "$TOOL" != "claude" ]]; then
+-  echo "Error: Invalid tool '$TOOL'. Must be 'amp' or 'claude'."
++if [[ "$TOOL" != "amp" && "$TOOL" != "claude" && "$TOOL" != "bob" ]]; then
++  echo "Error: Invalid tool '$TOOL'. Must be 'amp', 'claude', or 'bob'."
+   exit 1
+ fi
+@@ -91,8 +91,11 @@
+   if [[ "$TOOL" == "amp" ]]; then
+     OUTPUT=$(cat "$SCRIPT_DIR/prompt.md" | amp --dangerously-allow-all 2>&1 | tee /dev/stderr) || true
+-  else
+-    # Claude Code: use --dangerously-skip-permissions for autonomous operation, --print for output
+-    OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+-  fi
++  elif [[ "$TOOL" == "claude" ]]; then
++    # Claude Code: use --dangerously-skip-permissions for autonomous operation, --print for output
++    OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
++  else
++    # Experimental Bob Shell 2.x adapter; reuse upstream Claude-oriented prompt.
++    OUTPUT=$(bob run --max-turns 10 --max-cost 0.5 "$(cat "$SCRIPT_DIR/CLAUDE.md")" 2>&1 | tee /dev/stderr) || true
++  fi
+   
+   # Check for completion signal
