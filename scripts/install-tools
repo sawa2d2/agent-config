@@ -77,7 +77,7 @@ if command -v claude >/dev/null; then
     fi
   done
 else
-  echo 'WARNING: Claude CLI not found; Superpowers Claude plugin not installed' >&2
+  echo 'WARNING: Claude CLI not found; Superpowers and Ralph Loop plugins not installed' >&2
 fi
 
 # uv can download Python 3.11 without changing the system Python.
