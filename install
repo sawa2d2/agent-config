@@ -19,3 +19,4 @@ for target in "$HOME/.bob/rules" "$HOME/.claude/rules"; do
 done
 
 bash "$repo_dir/scripts/install-tools"
+bash "$repo_dir/scripts/install-bob-ralph"
