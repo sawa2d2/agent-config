@@ -3,13 +3,19 @@ set -euo pipefail
 
 command -v git >/dev/null || { echo 'git is required' >&2; exit 1; }
 
-target="$HOME/.local/share/agent-config/bob-ralph-wiggum"
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+target="$HOME/.local/share/agent-config/ralph"
 if [[ -e "$target" || -L "$target" ]]; then
   echo "Already present (not overwritten): $target"
   exit 0
 fi
 
 mkdir -p -- "$(dirname -- "$target")"
-git clone --depth 1 https://github.com/nheidloff/bob-ralph-wiggum.git "$target"
-echo "Installed Bob Ralph sample: $target"
-echo 'Run it only in a disposable copy; upstream init-bob.sh removes .git and builds a container.'
+stage="$(mktemp -d "$(dirname -- "$target")/.ralph.XXXXXX")"
+trap 'rm -rf -- "$stage"' EXIT
+git clone --quiet --depth 1 https://github.com/snarktank/ralph.git "$stage"
+git -C "$stage" apply --check "$repo_dir/deploy/ralph/bob.patch"
+git -C "$stage" apply "$repo_dir/deploy/ralph/bob.patch"
+mv -- "$stage" "$target"
+echo "Installed experimental upstream Ralph + Bob adapter: $target"
+echo 'Not executed; copy into a disposable Git repository before testing.'
