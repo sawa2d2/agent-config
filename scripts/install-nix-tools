@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# AI-specific packages belong to agent-config, not dotfiles.
+if ! command -v nix >/dev/null 2>&1; then
+  printf '%s\n' 'WARNING: Nix not installed; skipping AI Nix packages.' >&2
+  exit 0
+fi
+
+# nixpkgs supplies the ACP adapter directly. No dotfiles flake, Home Manager
+# configuration, or sibling checkout is needed.
+nix profile install 'nixpkgs#claude-agent-acp'
