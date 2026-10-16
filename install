@@ -34,3 +34,4 @@ for dest in "$HOME/.bob/AGENTS.md" "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENT
 done
 
 bash "$repo_dir/scripts/install-tools"
+bash "$repo_dir/scripts/install-nix-tools"
