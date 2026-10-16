@@ -7,6 +7,10 @@ if ! command -v nix >/dev/null 2>&1; then
   exit 0
 fi
 
-# nixpkgs supplies the ACP adapter directly. No dotfiles flake, Home Manager
-# configuration, or sibling checkout is needed.
+if command -v claude-agent-acp >/dev/null 2>&1; then
+  printf '%s\n' 'Already available: claude-agent-acp'
+  exit 0
+fi
+
+# Does not depend on a dotfiles flake, Home Manager, or sibling checkout.
 nix profile install 'nixpkgs#claude-agent-acp'
