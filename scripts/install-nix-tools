@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Manage the ACP adapter through Nix, regardless of other binaries on PATH.
 if ! command -v nix >/dev/null 2>&1; then
   printf '%s\n' 'WARNING: Nix not installed; skipping AI Nix packages.' >&2
   exit 0
 fi
 
-if nix profile list | grep -Fq 'claude-agent-acp'; then
-  printf '%s\n' 'Already managed by Nix: claude-agent-acp'
-  exit 0
-fi
-
-NIXPKGS_ALLOW_UNFREE=1 nix profile add --impure 'nixpkgs#claude-agent-acp'
+# The ACP adapter depends on Claude Code, but does not expose the claude CLI.
+for pkg in claude-code claude-agent-acp; do
+  if nix profile list | grep -Eq "^Name:[[:space:]]+$pkg$"; then
+    printf 'Already managed by Nix: %s\n' "$pkg"
+  else
+    NIXPKGS_ALLOW_UNFREE=1 nix profile add --impure "nixpkgs#$pkg"
+  fi
+done

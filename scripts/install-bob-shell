@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if command -v bob >/dev/null 2>&1; then
+  printf 'Already installed: %s\n' "$(command -v bob)"
+  exit 0
+fi
+
+command -v curl >/dev/null 2>&1 || { echo 'curl is required' >&2; exit 1; }
+
+tmp=$(mktemp)
+trap 'rm -f -- "$tmp"' EXIT
+curl -fsSL https://bob.ibm.com/download/bobshell.sh -o "$tmp"
+bash "$tmp"

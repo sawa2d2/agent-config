@@ -1,49 +1,8 @@
 # agent-config
 
+Shared configuration and tooling for Bob, Claude Code, and Codex. No dotfiles dependency.
+
 ## Install
-
-```bash
-cd agent-config
-bash ./install
-```
-
-The installer deploys:
-
-```text
-~/
-├── .bob/
-│   ├── rules/
-│   │   └── karpathy.md
-│   └── skills/
-│       ├── grill-me/
-│       ├── grill-with-docs/
-│       ├── grilling/
-│       ├── domain-modeling/
-│       ├── brainstorming/       # Superpowers (example)
-│       ├── prd/                # snarktank/ralph
-│       ├── ralph/              # snarktank/ralph
-│       └── .../
-├── .claude/
-│   ├── rules/
-│   │   └── karpathy.md
-│   ├── skills/
-│   │   ├── grill-me/
-│   │   ├── grill-with-docs/
-│   │   ├── grilling/
-│   │   └── domain-modeling/
-│   └── plugins/                 # Superpowers + Ralph Loop (official)
-│       └── .../
-└── .local/
-    └── bin/
-        └── specify             # Spec Kit (uv default)
-```
-
-`deploy/AGENTS.md` supplies shared global defaults for Bob, Claude Code, and Codex. The installer refuses to overwrite differing existing regular instruction files. Existing symlinks are preserved and skipped with a warning, so their contents are not updated; check their targets separately. Repository-specific instructions remain in each repository.
-
-## Standalone AI tool installation
-
-`agent-config` does not depend on `dotfiles`, its Nix flake, Home Manager
-configuration, or its install script. Clone and install this repository alone:
 
 ```bash
 git clone https://github.com/sawa2d2/agent-config.git
@@ -51,30 +10,38 @@ cd agent-config
 bash ./install
 ```
 
-The regular installer also installs `claude-agent-acp` from nixpkgs when Nix
-is available. If Nix is absent, this optional step is skipped with a warning.
-To install just that package, run `bash scripts/install-nix-tools`.
-Nix must have flakes enabled (as it does when the existing `nix` flake
-commands work). AI-specific package ownership stays in this repository;
-general-purpose shell and editor packages stay in `dotfiles`.
+Installs global instructions, agent skills, Spec Kit, Claude Code CLI and its ACP adapter (via Nix when available). Existing unmanaged instructions are protected.
 
-## Experimental Bob Ralph
+## Neovim chat (optional)
 
-Run `bash scripts/install-bob-ralph` explicitly to install experimental Bob Ralph; the standard `bash ./install` does not install it. This separate installer fetches [snarktank/ralph](https://github.com/snarktank/ralph), applies `deploy/ralph/bob.patch` (a small Bob Shell 2.x backend adapter), and stores the result at `~/.local/share/agent-config/ralph`. It also installs the upstream `prd` and `ralph` skills into `~/.bob/skills/`, without executing the loop. The skills prepare PRDs; `ralph.sh` runs the loop. Existing unmanaged skills are left intact (identical copies are skipped; differing copies require manual resolution). This is experimental and not validated for production use. The old Heidloff demo is no longer installed.
-
-To prepare a **disposable Git repository** for a later smoke test:
+Requires Neovim 0.11+, Nix on Linux x86_64, and authenticated Claude Code or IBM Bob Shell.
 
 ```bash
-src="$HOME/.local/share/agent-config/ralph"
-trial="$(mktemp -d "$HOME/ralph-test.XXXXXX")"
-cd "$trial"
-git init -b main
-mkdir -p scripts/ralph
-cp "$src/ralph.sh" "$src/CLAUDE.md" scripts/ralph/
-cp "$src/prd.json.example" scripts/ralph/prd.json
-# Edit scripts/ralph/prd.json to set branchName and small test stories.
-# Set up Bob Shell 2.x authentication before executing.
-# bash scripts/ralph/ralph.sh --tool bob 1
+bash scripts/install-nvim-acp
+bash nix/apply
 ```
 
-The commented-out command is deliberately not run by the installer. The adapter currently reuses upstream's Claude-oriented `CLAUDE.md`, caps Bob at 10 turns / 0.5 cost units per iteration, and has not been smoke-tested. Upstream may commit, create branches, or modify files; use an isolated repository. Upstream currently suppresses per-agent command errors with `|| true`, so verify progress and exit behavior before real use.
+Restart Neovim and press `<leader>a` to open or close CodeCompanion chat. Press `Ctrl-S` to send; use `ga` in the chat to choose an agent. To choose at launch:
+
+```bash
+AGENT_CONFIG_ACP_AGENT=claude_code nvim .
+AGENT_CONFIG_ACP_AGENT=bob nvim .
+```
+
+For Claude token authentication, run `claude setup-token` and export `CLAUDE_CODE_OAUTH_TOKEN` before launching Neovim. Never commit tokens.
+
+## Bob Shell (optional)
+
+```bash
+bash scripts/install-bob-shell
+```
+
+Uses IBM's official installer, not Nix. Bob authentication is separate.
+
+## Experimental Bob Ralph (optional)
+
+```bash
+bash scripts/install-bob-ralph
+```
+
+Installs the experimental Ralph runner and Bob skills without running the loop. Test it only in a disposable repository.

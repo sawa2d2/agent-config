@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+nix_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+if ! command -v nix >/dev/null 2>&1; then
+  echo "Nix is required to install ACP dependencies." >&2
+  exit 1
+fi
+if [[ $(uname -s):$(uname -m) != Linux:x86_64 ]]; then
+  echo "This standalone Nix package set currently supports x86_64 Linux only." >&2
+  exit 1
+fi
+
+output_dir="$HOME/.local/share/agent-config/nix"
+plugin_dir="${XDG_DATA_HOME:-"$HOME/.local/share"}/nvim/site/pack/agent-config/start"
+
+# Refuse to replace paths not installed by this script.
+check_link() {
+  local path=$1 target=$2
+  if [[ -e "$path" || -L "$path" ]]; then
+    if [[ ! -L "$path" || $(readlink "$path") != "$target" ]]; then
+      echo "Refusing to overwrite unmanaged path: $path" >&2
+      exit 1
+    fi
+  fi
+}
+
+check_link "$plugin_dir/codecompanion-nvim" "$output_dir/codecompanion-nvim"
+check_link "$plugin_dir/plenary-nvim" "$output_dir/plenary-nvim"
+
+mkdir -p -- "$output_dir" "$plugin_dir"
+
+for pkg in codecompanion-nvim plenary-nvim; do
+  nix build --impure --out-link "$output_dir/$pkg" "$nix_dir#$pkg"
+done
+
+ensure_link() {
+  local source=$1 destination=$2
+  if [[ ! -L "$destination" ]]; then
+    ln -s -- "$source" "$destination"
+  fi
+}
+ensure_link "$output_dir/codecompanion-nvim" "$plugin_dir/codecompanion-nvim"
+ensure_link "$output_dir/plenary-nvim" "$plugin_dir/plenary-nvim"
+
+printf 'Installed Neovim ACP plugins.\n'

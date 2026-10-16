@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+source_file="$repo_dir/deploy/nvim/plugin/agent-acp.lua"
+destination="$HOME/.config/nvim/plugin/agent-acp.lua"
+mkdir -p -- "${destination%/*}"
+if [[ -e "$destination" || -L "$destination" ]]; then
+  if [[ -L "$destination" && $(readlink "$destination") == "$source_file" ]]; then
+    printf 'Already installed: %s\n' "$destination"
+    exit 0
+  fi
+  printf 'Refusing to overwrite existing file or symlink: %s\n' "$destination" >&2
+  exit 1
+fi
+ln -s "$source_file" "$destination"
+printf 'Installed: %s -> %s\n' "$destination" "$source_file"
