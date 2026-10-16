@@ -12,4 +12,4 @@ if nix profile list | grep -Fq 'claude-agent-acp'; then
   exit 0
 fi
 
-nix profile install 'nixpkgs#claude-agent-acp'
+NIXPKGS_ALLOW_UNFREE=1 nix profile add --impure 'nixpkgs#claude-agent-acp'
