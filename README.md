@@ -40,6 +40,24 @@ The installer deploys:
 
 `deploy/AGENTS.md` supplies shared global defaults for Bob, Claude Code, and Codex. The installer refuses to overwrite differing existing regular instruction files. Existing symlinks are preserved and skipped with a warning, so their contents are not updated; check their targets separately. Repository-specific instructions remain in each repository.
 
+## Standalone AI tool installation
+
+`agent-config` does not depend on `dotfiles`, its Nix flake, Home Manager
+configuration, or its install script. Clone and install this repository alone:
+
+```bash
+git clone https://github.com/sawa2d2/agent-config.git
+cd agent-config
+bash ./install
+```
+
+The regular installer also installs `claude-agent-acp` from nixpkgs when Nix
+is available. If Nix is absent, this optional step is skipped with a warning.
+To install just that package, run `bash scripts/install-nix-tools`.
+Nix must have flakes enabled (as it does when the existing `nix` flake
+commands work). AI-specific package ownership stays in this repository;
+general-purpose shell and editor packages stay in `dotfiles`.
+
 ## Experimental Bob Ralph
 
 Run `bash scripts/install-bob-ralph` explicitly to install experimental Bob Ralph; the standard `bash ./install` does not install it. This separate installer fetches [snarktank/ralph](https://github.com/snarktank/ralph), applies `deploy/ralph/bob.patch` (a small Bob Shell 2.x backend adapter), and stores the result at `~/.local/share/agent-config/ralph`. It also installs the upstream `prd` and `ralph` skills into `~/.bob/skills/`, without executing the loop. The skills prepare PRDs; `ralph.sh` runs the loop. Existing unmanaged skills are left intact (identical copies are skipped; differing copies require manual resolution). This is experimental and not validated for production use. The old Heidloff demo is no longer installed.
