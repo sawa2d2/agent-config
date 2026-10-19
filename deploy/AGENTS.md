@@ -25,6 +25,13 @@
 
 ## Verification
 - Use the repository's existing verification commands.
+- Iterate through implementation, testing, diagnosis, and fixes while making meaningful progress, until relevant tests pass.
+- Do not delegate executable checks to the user when the agent can run them.
+- Stop and consult the user when permissions, credentials, environment restrictions, or external dependencies prevent further progress.
+- Do not retry an unchanged failing operation without a concrete reason to expect a different result.
+- Investigate reasonable alternatives without bypassing security controls or exceeding granted permissions.
+- When blocked, report the evidence, attempted remedies, and the specific user action needed.
+- Do not elevate privileges or weaken security controls solely to pass tests without authorization.
 - Never claim a check passed unless it was actually executed.
 - Distinguish verified results from assumptions and untested behavior.
 - When the user requests test cases or verification steps, provide copy-paste-ready shell commands, preferably one command per test on a single line.
