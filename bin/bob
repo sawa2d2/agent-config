@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve the original Bob CLI without recursively invoking this wrapper.
+wrapper_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+original_path=$PATH
+PATH=
+IFS=: read -r -a entries <<< "$original_path"
+for entry in "${entries[@]}"; do
+  [[ -n "$entry" ]] || entry=.
+  [[ "$(cd -- "$entry" 2>/dev/null && pwd -P || true)" == "$wrapper_dir" ]] && continue
+  PATH="${PATH:+$PATH:}$entry"
+done
+export PATH
+real_bob=$(command -v bob || true)
+[[ -n "$real_bob" ]] || { echo 'bob: original Bob Shell executable not found' >&2; exit 127; }
+
+if (( $# == 0 )); then
+  exec "$real_bob" chat --resume latest --yolo
+fi
+exec "$real_bob" "$@"
