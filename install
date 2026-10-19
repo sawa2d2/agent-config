@@ -19,7 +19,8 @@ for target in "$HOME/.bob/rules" "$HOME/.claude/rules"; do
 done
 
 # Link shared global instructions so repository updates take effect immediately.
-for dest in "$HOME/.bob/AGENTS.md" "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md"; do
+# Bob Shell reliably loads global instructions from ~/.bob/rules/.
+for dest in "$HOME/.bob/rules/agent-config.md" "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md"; do
   source="$repo_dir/deploy/AGENTS.md"
   mkdir -p -- "${dest%/*}"
   if [[ -L "$dest" ]]; then
@@ -37,6 +38,11 @@ for dest in "$HOME/.bob/AGENTS.md" "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENT
   ln -s -- "$source" "$dest"
   printf 'Linked: %s -> %s\n' "$dest" "$source"
 done
+
+# Preserve legacy Bob AGENTS.md; it may contain user-managed instructions.
+if [[ -e "$HOME/.bob/AGENTS.md" || -L "$HOME/.bob/AGENTS.md" ]]; then
+  printf 'NOTICE: legacy ~/.bob/AGENTS.md remains in place; review it manually.\n' >&2
+fi
 
 bash "$repo_dir/scripts/install-tools"
 bash "$repo_dir/scripts/install-nix-tools"
