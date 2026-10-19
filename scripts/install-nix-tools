@@ -7,7 +7,7 @@ if ! command -v nix >/dev/null 2>&1; then
 fi
 
 # The ACP adapter depends on Claude Code, but does not expose the claude CLI.
-for pkg in claude-code claude-agent-acp; do
+for pkg in claude-code claude-agent-acp codex; do
   if nix profile list | grep -Eq "^Name:[[:space:]]+$pkg$"; then
     printf 'Already managed by Nix: %s\n' "$pkg"
   else
