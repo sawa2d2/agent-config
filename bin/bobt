@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for cmd in bob jq fzf; do
+case ${1:-} in
+  '') [[ $# == 0 ]] || exit 2 ;;
+  -l) [[ $# == 1 ]] || { echo 'Usage: bobt [-l]' >&2; exit 2; } ;;
+  *) echo 'Usage: bobt [-l]' >&2; exit 2 ;;
+esac
+
+command -v bob >/dev/null 2>&1 || { echo 'bobt: bob is required' >&2; exit 1; }
+
+if (( $# == 0 )); then
+  exec bob chat --resume latest --yolo
+fi
+
+for cmd in jq fzf; do
   command -v "$cmd" >/dev/null 2>&1 || {
     printf 'bobt: %s is required\n' "$cmd" >&2
     exit 1
