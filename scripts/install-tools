@@ -14,7 +14,7 @@ install_skill() {
   local source="$1" name="$2" target dest stage
   [[ -f "$source/SKILL.md" ]] || { echo "Missing SKILL.md: $source" >&2; return 1; }
 
-  for target in "$HOME/.bob/skills" "$HOME/.claude/skills"; do
+  for target in "$HOME/.bob/skills" "$HOME/.claude/skills" "$HOME/.codex/skills"; do
     mkdir -p -- "$target"
     dest="$target/$name"
     # Do not modify skills installed or edited outside agent-config.
@@ -47,24 +47,25 @@ for name in grill-with-docs grilling domain-modeling; do
   fi
 done
 
-# Bob has global skills but no documented Superpowers plugin integration.
+# Bob and Codex use standalone skills; Claude uses the official plugin.
 # Claude uses the official plugin to retain Superpowers hooks and other features.
 for source in "$tmp/superpowers/skills/"*; do
   [[ -f "$source/SKILL.md" ]] || continue
   name="${source##*/}"
-  target="$HOME/.bob/skills"
-  mkdir -p -- "$target"
-  dest="$target/$name"
-  if [[ -e "$dest" || -L "$dest" ]] && [[ ! -f "$dest/.agent-config-managed" ]]; then
-    echo "Refusing to overwrite unmanaged skill: $dest" >&2
-    exit 1
-  fi
-  stage="$(mktemp -d "$target/.agent-config.XXXXXX")"
-  cp -R -- "$source/." "$stage/"
-  : > "$stage/.agent-config-managed"
-  if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi
-  mv -- "$stage" "$dest"
-  echo "Installed: $dest"
+  for target in "$HOME/.bob/skills" "$HOME/.codex/skills"; do
+    mkdir -p -- "$target"
+    dest="$target/$name"
+    if [[ -e "$dest" || -L "$dest" ]] && [[ ! -f "$dest/.agent-config-managed" ]]; then
+      echo "Refusing to overwrite unmanaged skill: $dest" >&2
+      exit 1
+    fi
+    stage="$(mktemp -d "$target/.agent-config.XXXXXX")"
+    cp -R -- "$source/." "$stage/"
+    : > "$stage/.agent-config-managed"
+    if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi
+    mv -- "$stage" "$dest"
+    echo "Installed: $dest"
+  done
 done
 
 if command -v claude >/dev/null; then
