@@ -2,13 +2,13 @@
 set -euo pipefail
 
 if (( $# != 0 )); then
-  echo 'Usage: bobt' >&2
+  echo 'Usage: bobl' >&2
   exit 2
 fi
 
 for cmd in bob jq fzf; do
   command -v "$cmd" >/dev/null 2>&1 || {
-    printf 'bobt: %s is required\n' "$cmd" >&2
+    printf 'bobl: %s is required\n' "$cmd" >&2
     exit 1
   }
 done

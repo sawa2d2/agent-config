@@ -3,13 +3,13 @@ set -euo pipefail
 
 for cmd in bob sqlite3 fzf; do
   command -v "$cmd" >/dev/null 2>&1 || {
-    printf 'bobta: %s is required\n' "$cmd" >&2
+    printf 'bobla: %s is required\n' "$cmd" >&2
     exit 1
   }
 done
 
 db="$HOME/.bob/db/bob.db"
-[[ -f "$db" ]] || { printf 'bobta: database not found: %s\n' "$db" >&2; exit 1; }
+[[ -f "$db" ]] || { printf 'bobla: database not found: %s\n' "$db" >&2; exit 1; }
 
 # Internal Bob database schema: read-only access; never modify task records.
 rows=$(sqlite3 -readonly -separator $'\t' "$db" "
@@ -30,7 +30,7 @@ rows=$(sqlite3 -readonly -separator $'\t' "$db" "
   ORDER BY updated_at DESC;
 ")
 
-[[ -n "$rows" ]] || { echo 'bobta: no tasks found' >&2; exit 0; }
+[[ -n "$rows" ]] || { echo 'bobla: no tasks found' >&2; exit 0; }
 
 selected=$(printf '%s\n' "$rows" |
   fzf --delimiter=$'\t' --with-nth=3,4,5 --no-sort \
@@ -38,7 +38,7 @@ selected=$(printf '%s\n' "$rows" |
 
 IFS=$'\t' read -r task_id directory _ <<< "$selected"
 [[ -n "$task_id" && -n "$directory" ]] || exit 1
-[[ -d "$directory" ]] || { printf 'bobta: directory not found: %s\n' "$directory" >&2; exit 1; }
+[[ -d "$directory" ]] || { printf 'bobla: directory not found: %s\n' "$directory" >&2; exit 1; }
 
 cd -- "$directory"
 exec bob chat --resume "$task_id" --yolo
