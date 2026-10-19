@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+for cmd in bob sqlite3 fzf; do
+  command -v "$cmd" >/dev/null 2>&1 || {
+    printf 'bobta: %s is required\n' "$cmd" >&2
+    exit 1
+  }
+done
+
+db="$HOME/.bob/db/bob.db"
+[[ -f "$db" ]] || { printf 'bobta: database not found: %s\n' "$db" >&2; exit 1; }
+
+# Internal Bob database schema: read-only access; never modify task records.
+rows=$(sqlite3 -readonly -separator $'\t' "$db" "
+  SELECT id,
+         directory,
+         datetime(
+           CASE WHEN updated_at >= 100000000000 THEN updated_at / 1000
+                ELSE updated_at END,
+           'unixepoch', 'localtime'
+         ),
+         replace(replace(replace(title, char(9), ' '), char(10), ' '), char(13), ' '),
+         directory
+  FROM tasks
+  ORDER BY updated_at DESC;
+")
+
+[[ -n "$rows" ]] || { echo 'bobta: no tasks found' >&2; exit 0; }
+
+selected=$(printf '%s\n' "$rows" |
+  fzf --delimiter=$'\t' --with-nth=3,4,5 --no-sort \
+      --header='UPDATED | TITLE | DIRECTORY') || exit 0
+
+IFS=$'\t' read -r task_id directory _ <<< "$selected"
+[[ -n "$task_id" && -n "$directory" ]] || exit 1
+[[ -d "$directory" ]] || { printf 'bobta: directory not found: %s\n' "$directory" >&2; exit 1; }
+
+cd -- "$directory"
+exec bob chat --resume "$task_id"

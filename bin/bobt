@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+for cmd in bob jq fzf; do
+  command -v "$cmd" >/dev/null 2>&1 || {
+    printf 'bobt: %s is required\n' "$cmd" >&2
+    exit 1
+  }
+done
+
+task_id=$(
+  bob --list-tasks all |
+    jq -r 'select(type == "object") | [(.ID // .id // ""), (.UPDATED // .updated // .updatedAt // ""), (.TITLE // .title // "")] | map(tostring) | @tsv' |
+    fzf --delimiter=$'\t' --with-nth=2,3 --header='UPDATED | TITLE' --no-sort |
+    cut -f1
+) || exit $?
+
+[[ -n "$task_id" ]] || exit 0
+exec bob chat --resume "$task_id"

@@ -35,3 +35,10 @@ done
 
 bash "$repo_dir/scripts/install-tools"
 bash "$repo_dir/scripts/install-nix-tools"
+
+# Install the Bob task picker as an executable command.
+mkdir -p -- "$HOME/.local/bin"
+for name in bobt bobta; do
+  install -m 755 "$repo_dir/bin/$name" "$HOME/.local/bin/$name"
+  printf 'Installed: %s\n' "$HOME/.local/bin/$name"
+done
