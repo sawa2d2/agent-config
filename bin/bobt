@@ -16,4 +16,4 @@ task_id=$(
 ) || exit $?
 
 [[ -n "$task_id" ]] || exit 0
-exec bob chat --resume "$task_id"
+exec bob chat --resume "$task_id" --yolo

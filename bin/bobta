@@ -20,8 +20,12 @@ rows=$(sqlite3 -readonly -separator $'\t' "$db" "
                 ELSE updated_at END,
            'unixepoch', 'localtime'
          ),
-         replace(replace(replace(title, char(9), ' '), char(10), ' '), char(13), ' '),
-         directory
+         printf('%-20s', CASE
+           WHEN directory = '' THEN '(none)'
+           WHEN length(directory) > 20 THEN '…' || substr(directory, -19)
+           ELSE directory
+         END),
+         replace(replace(replace(title, char(9), ' '), char(10), ' '), char(13), ' ')
   FROM tasks
   ORDER BY updated_at DESC;
 ")
@@ -30,11 +34,11 @@ rows=$(sqlite3 -readonly -separator $'\t' "$db" "
 
 selected=$(printf '%s\n' "$rows" |
   fzf --delimiter=$'\t' --with-nth=3,4,5 --no-sort \
-      --header='UPDATED | TITLE | DIRECTORY') || exit 0
+      --header='UPDATED | DIRECTORY | TITLE') || exit 0
 
 IFS=$'\t' read -r task_id directory _ <<< "$selected"
 [[ -n "$task_id" && -n "$directory" ]] || exit 1
 [[ -d "$directory" ]] || { printf 'bobta: directory not found: %s\n' "$directory" >&2; exit 1; }
 
 cd -- "$directory"
-exec bob chat --resume "$task_id"
+exec bob chat --resume "$task_id" --yolo
