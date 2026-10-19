@@ -39,6 +39,11 @@
 - Prefer noninteractive CLI checks over manual UI steps; for Vim/Neovim, use headless commands where practical.
 - State expected results briefly, and use multiline commands only when a one-liner would be unsafe or materially less clear.
 
+## Language
+- Write source code, code comments, identifiers, commit messages, and project documentation in English.
+- Keep user-facing conversation in concise Japanese plain form (常体).
+- Preserve existing external interfaces and required literal strings; do not translate user-provided text or localization content unless requested.
+
 ## Communication
 - Respond in concise Japanese using plain form (常体), not polite です・ます form.
 - Be direct and technically precise; avoid unnecessary explanations and verbosity.
