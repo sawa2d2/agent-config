@@ -18,19 +18,24 @@ for target in "$HOME/.bob/rules" "$HOME/.claude/rules"; do
   done
 done
 
-# Install shared global instructions without overwriting unmanaged files.
+# Link shared global instructions so repository updates take effect immediately.
 for dest in "$HOME/.bob/AGENTS.md" "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md"; do
+  source="$repo_dir/deploy/AGENTS.md"
   mkdir -p -- "${dest%/*}"
   if [[ -L "$dest" ]]; then
-    printf 'Skipping existing symlink (not managed): %s\n' "$dest" >&2
-    continue
-  fi
-  if [[ -e "$dest" ]] && ! cmp -s -- "$repo_dir/deploy/AGENTS.md" "$dest"; then
-    printf 'Refusing to overwrite existing global instructions: %s\n' "$dest" >&2
+    if [[ "$(readlink "$dest")" == "$source" ]]; then
+      printf 'SKIP: %s\n' "$dest"
+      continue
+    fi
+    printf 'Refusing to replace existing symlink: %s\n' "$dest" >&2
     exit 1
   fi
-  cp -- "$repo_dir/deploy/AGENTS.md" "$dest"
-  printf 'Installed: %s\n' "$dest"
+  if [[ -e "$dest" ]]; then
+    [[ -f "$dest" ]] || { printf 'Refusing to replace non-file: %s\n' "$dest" >&2; exit 1; }
+    rm -- "$dest"
+  fi
+  ln -s -- "$source" "$dest"
+  printf 'Linked: %s -> %s\n' "$dest" "$source"
 done
 
 bash "$repo_dir/scripts/install-tools"
