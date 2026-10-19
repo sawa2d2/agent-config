@@ -11,12 +11,17 @@
 - Avoid modifying files outside the requested scope.
 
 ## Git Workflow
-- Follow the repository's branching strategy and branch protection rules.
-- Work on a development or feature branch for code changes.
-- Commits and pushes to development and feature branches are permitted without additional approval.
-- Never bypass branch protection or force-push without explicit approval.
-- Do not merge into the default branch without explicit approval.
+- Follow repository-specific branching rules; for new code changes, create a development branch before editing.
+- Work directly in the repository; do not create Git worktrees.
+- The primary agent owns Git operations. Subagents must not create branches, commit, or push unless explicitly delegated by the primary agent.
+- Implement, verify, and fix failures autonomously. Commit and push completed changes to the development branch without asking for approval.
+- Never commit directly to the default branch, force-push without explicit approval, create pull requests, or merge branches.
 - Preserve unrelated working-tree changes.
+
+### Finalization
+- When the user says `approved`, output one concise commit message summarizing the entire development branch.
+- Do not perform any Git operations in response to `approved`.
+- Leave squash merging, branch deletion, and other finalization operations to the user.
 
 ## Verification
 - Use the repository's existing verification commands.
