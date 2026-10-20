@@ -36,6 +36,22 @@ AGENT_CONFIG_THEME_VARIANT=violet bash scripts/install-claude-theme
 Claude Code does not currently expose a user-message-only foreground token;
 changing `text` to dark would also darken assistant responses.
 
+## Bob Shell theme
+
+`./install` also writes `~/.bob/theme.json` with the same user message
+background. Bob reads this file through an undocumented mechanism (observed in
+Bob Shell 2.0.6); it replaces terminal background detection, so the file pins
+Bob's built-in dark palette and changes only `backgroundColor`. A user-managed
+`theme.json` is never overwritten. The `bin/bob` wrapper refreshes it on each
+launch. To refresh manually:
+
+```bash
+bash scripts/install-bob-theme
+```
+
+The background applies only in true-color terminals; Bob uses fixed ANSI
+colors for user messages in 256- and 16-color terminals.
+
 ## Neovim chat (optional)
 
 Requires Neovim 0.11+, Nix on Linux x86_64, and authenticated Claude Code or IBM Bob Shell.

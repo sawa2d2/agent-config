@@ -5,6 +5,9 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 mkdir -p "$tmp/real"
+# Wrappers refresh themes under HOME; keep the real home untouched.
+export HOME="$tmp/home"
+export XDG_CONFIG_HOME="$HOME/.config"
 
 # Fake CLIs record their argv and the PATH they were launched with.
 for cli in bob claude codex; do
@@ -33,6 +36,7 @@ expect() {
 # Without arguments, resume the latest session in the current directory.
 expect $'chat\n--resume\nlatest\n--auto-approve' bob
 expect '--continue' claude
+[[ -f "$HOME/.bob/theme.json" ]] || fail 'bob: theme was not refreshed'
 expect $'resume\n--last' codex
 
 # Explicit arguments are passed through unchanged.

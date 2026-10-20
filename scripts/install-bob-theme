@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Standalone palette shared with install-claude-theme; keep the two in sync.
+# Re-run after changing the global dotfiles theme.
+state_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/theme"
+variant=${AGENT_CONFIG_THEME_VARIANT:-}
+if [[ -z $variant && -f $state_file ]]; then
+  IFS= read -r variant < "$state_file" || true
+fi
+variant=${variant:-teal}
+
+case "$variant" in
+  teal) selected='#79bfc0' ;;
+  violet) selected='#b1a5e5' ;;
+  orange) selected='#e9b888' ;;
+  blue) selected='#75b8ed' ;;
+  red) selected='#ed9298' ;;
+  green) selected='#82cfaa' ;;
+  *) printf 'Unknown theme variant: %s\n' "$variant" >&2; exit 2 ;;
+esac
+
+command -v python3 >/dev/null 2>&1 || {
+  echo 'python3 is required to write the Bob theme safely' >&2
+  exit 1
+}
+
+BOB_SELECTED_COLOR="$selected" python3 - <<'PY'
+import colorsys
+import json
+import os
+from pathlib import Path
+import tempfile
+
+theme_file = Path.home() / ".bob/theme.json"
+name = "Agent Config (Selected)"
+
+# Same muted dark shade as the Claude user-message background.
+selected = os.environ["BOB_SELECTED_COLOR"]
+rgb = [int(selected[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+hue, _, _ = colorsys.rgb_to_hsv(*rgb)
+dark = colorsys.hsv_to_rgb(hue, 0.38, 0.53)
+background = "#" + "".join(f"{round(channel * 255):02x}" for channel in dark)
+
+# Bob Shell (observed in 2.0.6) merges ~/.bob/theme.json over its fallback
+# palette and skips terminal background detection. Pin its built-in dark
+# palette so only the user-message background (backgroundColor) changes.
+theme = {
+    "name": name,
+    "primaryColor": "cyan",
+    "secondaryColor": "#c6c6c6",
+    "accentColor": "magenta",
+    "highlightColor": "green",
+    "successColor": "green",
+    "errorColor": "red",
+    "warningColor": "yellow",
+    "infoColor": "cyan",
+    "borderColor": "gray",
+    "dimColor": "#a8a8a8",
+    "foregroundColor": "#f4f4f4",
+    "backgroundColor": background,
+    "gradientStart": "#D0E2FF",
+    "gradientEnd": "#78A9FF",
+    "gradientAccentStart": "#78A9FF",
+    "gradientAccentEnd": "#BE95FF",
+}
+
+if theme_file.is_symlink():
+    raise RuntimeError(f"Refusing to overwrite symlink: {theme_file}")
+if theme_file.exists():
+    with theme_file.open(encoding="utf-8") as stream:
+        existing = json.load(stream)
+    if not isinstance(existing, dict) or existing.get("name") != name:
+        raise RuntimeError(f"Refusing to replace unmanaged theme: {theme_file}")
+
+theme_file.parent.mkdir(parents=True, exist_ok=True)
+fd, temporary = tempfile.mkstemp(prefix=f".{theme_file.name}.", dir=theme_file.parent)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        json.dump(theme, stream, ensure_ascii=False, indent=2)
+        stream.write("\n")
+    if theme_file.exists():
+        os.chmod(temporary, theme_file.stat().st_mode & 0o777)
+    os.replace(temporary, theme_file)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+print(f"Bob theme: {selected} -> {background} (readable light text)")
+print(f"Enabled: {theme_file}")
+PY
