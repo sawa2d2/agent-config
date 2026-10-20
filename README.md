@@ -122,3 +122,12 @@ repositories are excluded. Select with `Tab`; after confirmation it removes the
 transcript and that session's `projects/<project>/<session-id>/`,
 `file-history/<session-id>` and `session-env/<session-id>` data. Project memory
 is never touched.
+
+To delete Bob tasks, run `bobrm` (requires Python 3 and fzf). It lists the
+resumable tasks of the current Git repository (or, outside Git, the current
+directory) with the same rules as `clauderm`, matching Bob's stored workspace
+(`project_id`, such as `file:/path/to/dir`). Rows show the update time, the raw
+`project_id`, title and task ID. After confirmation it deletes the selected tasks from
+`~/.bob/db/bob.db` as Bob does: subtasks first, then the task, with messages
+removed by cascade. Tasks locked by a running Bob are neither listed nor
+deleted. The database schema is internal to Bob Shell (observed in 2.0.6).

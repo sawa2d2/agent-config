@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (( $# != 0 )); then
+  echo 'Usage: bobrm' >&2
+  exit 2
+fi
+
+for cmd in python3 fzf; do
+  command -v "$cmd" >/dev/null 2>&1 || {
+    printf 'bobrm: %s is required\n' "$cmd" >&2
+    exit 1
+  }
+done
+
+db="$HOME/.bob/db/bob.db"
+[[ -f "$db" ]] || { printf 'bobrm: database not found: %s\n' "$db" >&2; exit 1; }
+# Tasks belong to the Git repository they were started in (else the directory).
+project_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)
+
+# Internal Bob database schema (observed in Bob Shell 2.0.6): resumable tasks are
+# top-level rows with a user message, and project_id holds the launch directory
+# as "<scheme>:<path>[?query]" (directory is stored empty). Tasks locked by a
+# running Bob are skipped. PROJECT_ID shows the stored value as-is.
+rows=$(BOB_DB="$db" PROJECT_ROOT="$project_root" python3 - <<'PY'
+import functools
+import os
+import re
+import sqlite3
+import subprocess
+import time
+from datetime import datetime
+import unicodedata
+
+def width(text):
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
+
+def clean(text, limit=60):
+    text = " ".join(str(text).split())
+    if width(text) <= limit:
+        return text
+    while width(text) > limit - 1:
+        text = text[:-1]
+    return text + "…"
+
+def pad(text, size):
+    return text + " " * (size - width(text))
+
+project_root = os.environ["PROJECT_ROOT"]
+
+def workspace_path(value):
+    # Same parsing as Bob: an optional URI scheme (default file), then "?query".
+    match = re.match(r"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$", value or "")
+    scheme, path = match.groups() if match else ("file", value or "")
+    path = path.split("?", 1)[0]
+    return path if scheme == "file" and os.path.isabs(path) else None
+
+@functools.lru_cache(maxsize=None)
+def root_of(directory):
+    try:
+        result = subprocess.run(["git", "-C", directory, "rev-parse", "--show-toplevel"],
+                                capture_output=True, text=True)
+    except OSError:
+        result = None
+    if result is not None and result.returncode == 0:
+        return result.stdout.strip()
+    return os.path.realpath(directory)
+
+db = sqlite3.connect(f"file:{os.environ['BOB_DB']}?mode=ro", uri=True)
+db.execute("PRAGMA busy_timeout = 5000")
+tasks = db.execute("""
+    SELECT id, updated_at, directory, project_id, title, first_message FROM tasks
+    WHERE parent_id IS NULL
+      AND EXISTS (SELECT 1 FROM messages WHERE messages.task_id = tasks.id AND messages.role = 'user')
+      AND (locked_by IS NULL OR lock_lease_until IS NULL OR lock_lease_until < ?)
+    ORDER BY updated_at DESC, id DESC
+""", (int(time.time() * 1000),)).fetchall()
+
+rows = []
+for task_id, updated_at, directory, project_id, title, first_message in tasks:
+    workspace = workspace_path(directory or project_id)
+    if workspace is None or root_of(workspace) != project_root:
+        continue
+    seconds = updated_at / 1000 if updated_at >= 100_000_000_000 else updated_at
+    updated = datetime.fromtimestamp(seconds).strftime("%Y-%m-%d %H:%M")
+    rows.append([task_id, updated, project_id or "(empty)",
+                 clean(title or first_message or "(no title)")])
+
+# A hidden id field precedes a display line padded to terminal width with
+# three-space separators; the first line is the header.
+if rows:
+    columns = [["UPDATED", "PROJECT_ID", "TITLE", "ID"]] + [row[1:] + [row[0]] for row in rows]
+    sizes = [max(width(column[i]) for column in columns) for i in range(3)]
+    for task_id, column in zip([""] + [row[0] for row in rows], columns):
+        line = "   ".join([pad(value, size) for value, size in zip(column, sizes)] + [column[3]])
+        print(f"{task_id}\t{line}")
+PY
+)
+
+[[ -n "$rows" ]] || { printf 'bobrm: no tasks found for %s\n' "$project_root" >&2; exit 0; }
+
+selected=$(printf '%s\n' "$rows" |
+  fzf --multi --delimiter=$'\t' --with-nth=2 --no-sort \
+      --header-lines=1 --header='TAB: select') || exit 0
+
+task_ids=()
+while IFS=$'\t' read -r task_id line; do
+  [[ -n $task_id ]] || continue
+  task_ids+=("$task_id")
+  printf '%s\n' "$line"
+done <<< "$selected"
+(( ${#task_ids[@]} )) || exit 0
+
+read -r -p "Remove these ${#task_ids[@]} tasks from $db? [y/N] " answer || answer=
+[[ $answer == [yY] ]] || { echo 'Aborted.' >&2; exit 1; }
+
+# Mirror Bob's own deletion: subtasks first, then the task; messages cascade.
+BOB_DB="$db" python3 - "${task_ids[@]}" <<'PY'
+import os
+import sqlite3
+import sys
+import time
+
+db = sqlite3.connect(os.environ["BOB_DB"], isolation_level=None)
+db.execute("PRAGMA foreign_keys = ON")
+db.execute("PRAGMA busy_timeout = 5000")
+unlocked = "(locked_by IS NULL OR lock_lease_until IS NULL OR lock_lease_until < ?)"
+removed = 0
+db.execute("BEGIN IMMEDIATE")
+try:
+    for task_id in sys.argv[1:]:
+        now = int(time.time() * 1000)
+        if db.execute(f"SELECT 1 FROM tasks WHERE id = ? AND {unlocked}", (task_id, now)).fetchone() is None:
+            print(f"Skipped (missing or in use): {task_id}", file=sys.stderr)
+            continue
+        db.execute("DELETE FROM tasks WHERE parent_id = ?", (task_id,))
+        removed += db.execute("DELETE FROM tasks WHERE id = ?", (task_id,)).rowcount
+    db.execute("COMMIT")
+except BaseException:
+    db.execute("ROLLBACK")
+    raise
+print(f"Removed {removed} tasks.")
+PY
