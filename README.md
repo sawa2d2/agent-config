@@ -47,3 +47,16 @@ bash scripts/install-bob-ralph
 ```
 
 Installs the experimental Ralph runner and Bob skills without running the loop. Test it only in a disposable repository.
+
+## CLI session resume
+
+Launchers live in `bin/`; put this directory before the original CLI executables on `PATH`, or alias the commands to these files when another tool reorders `PATH`. Launchers dispatch to the original CLI when any arguments are supplied.
+
+| Tool | Current directory, latest | Current directory, picker | All directories |
+| --- | --- | --- | --- |
+| Bob | `bob` | `bobl` (all-task API) | `bobla` |
+| Claude Code | `claude` | `claudel` | In `claudel` picker, press `Ctrl+A` |
+| Codex | `codex` | `codexl` | `codexla` |
+
+For a fresh conversation, invoke the original CLI directly (bypassing the wrapper) or use a supported new-session command for your installed CLI version.
+The native resume pickers are used rather than custom fzf/database parsing.

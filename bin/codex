@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve the underlying CLI without recursively invoking this wrapper.
+wrapper_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+original_path=$PATH
+PATH=
+IFS=: read -r -a entries <<< "$original_path"
+for entry in "${entries[@]}"; do
+  [[ -n "$entry" ]] || entry=.
+  [[ "$(cd -- "$entry" 2>/dev/null && pwd -P || true)" == "$wrapper_dir" ]] && continue
+  PATH="${PATH:+$PATH:}$entry"
+done
+export PATH
+real_cli=$(command -v codex || true)
+[[ -n "$real_cli" ]] || { echo 'codex: original codex CLI not found' >&2; exit 127; }
+
+if (( $# == 0 )); then
+  exec "$real_cli" resume --last
+fi
+exec "$real_cli" "$@"
