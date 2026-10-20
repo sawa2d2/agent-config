@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Merge agent-config managed Claude Code settings: theme and default renderer.
 # Standalone palette: no dependency on the dotfiles checkout.
 # Re-run after changing the global dotfiles theme.
 state_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/theme"
@@ -82,6 +83,9 @@ write_json(theme_file, {
     "overrides": {"userMessageBackground": background},
 })
 settings["theme"] = "custom:agent-config-selected"
+# Inline rendering keeps output in terminal/tmux scrollback for copy mode.
+# setdefault preserves an explicit choice such as /tui fullscreen.
+settings.setdefault("tui", "default")
 write_json(settings_file, settings)
 print(f"Claude theme: {selected} -> {background} (readable light text)")
 print(f"Enabled: {settings_file}")

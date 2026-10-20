@@ -24,8 +24,8 @@ real_cli=$(command -v claude || true)
 # Preserve RGB colors inside tmux; otherwise Claude may quantize them to 256 colors.
 export CLAUDE_CODE_TMUX_TRUECOLOR=1
 
-# Refresh the selected theme before starting Claude.
-bash "$repo_dir/scripts/install-claude-theme" >/dev/null
+# Refresh the managed Claude settings (theme and renderer) before starting.
+bash "$repo_dir/scripts/install-claude-settings" >/dev/null
 
 # Resume the latest session when no arguments are supplied.
 if (( $# == 0 )); then

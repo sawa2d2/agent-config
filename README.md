@@ -18,19 +18,21 @@ Installs global instructions, agent skills, Spec Kit, Claude Code CLI and its AC
 
 `./install` enables `custom:agent-config-selected`. User message backgrounds
 follow the saved dotfiles theme variant (default: teal), with a darker shade
-for contrast against Claude Code's light text. Other settings in
+for contrast against Claude Code's light text. It also sets `"tui": "default"`
+when no renderer is configured, so output stays in terminal and tmux scrollback;
+an explicit `/tui fullscreen` choice is kept. Other settings in
 `~/.claude/settings.json` are preserved. Python 3 is required.
 
-To refresh the theme on every new Claude CLI session, ensure `~/agent-config/bin` precedes the original Claude executable in `PATH`. The `bin/claude` wrapper refreshes colors and then executes the real CLI with its original arguments. To refresh manually instead, run:
+To refresh these settings on every new Claude CLI session, ensure `~/agent-config/bin` precedes the original Claude executable in `PATH`. The `bin/claude` wrapper refreshes them and then executes the real CLI with its original arguments. To refresh manually instead, run:
 
 ```bash
-bash scripts/install-claude-theme
+bash scripts/install-claude-settings
 ```
 
 To override the theme variant without dotfiles:
 
 ```bash
-AGENT_CONFIG_THEME_VARIANT=violet bash scripts/install-claude-theme
+AGENT_CONFIG_THEME_VARIANT=violet bash scripts/install-claude-settings
 ```
 
 Claude Code does not currently expose a user-message-only foreground token;

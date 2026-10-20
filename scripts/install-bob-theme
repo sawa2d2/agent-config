@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Standalone palette shared with install-claude-theme; keep the two in sync.
+# Standalone palette shared with install-claude-settings; keep the two in sync.
 # Re-run after changing the global dotfiles theme.
 state_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/theme"
 variant=${AGENT_CONFIG_THEME_VARIANT:-}
