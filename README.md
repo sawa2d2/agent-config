@@ -113,3 +113,12 @@ To start a new session, pass any argument so the launcher dispatches to the orig
 Claude Code and Codex have no `chat` subcommand; `claude chat` starts a new session with `chat` as the first prompt. A leading backslash skips the alias and runs the original CLI. Bob reads auto-approval only from command-line arguments (`--yolo` is a deprecated alias of `--auto-approve`).
 
 The native resume pickers are used rather than custom fzf/database parsing.
+
+To delete Claude Code sessions, run `clauderm` (requires Python 3 and fzf).
+It lists the sessions of the current Git repository (or, outside Git, the
+current directory), newest first, with their title and transcript path
+(`~/.claude/projects/<project>/<session-id>.jsonl`). Sessions of nested
+repositories are excluded. Select with `Tab`; after confirmation it removes the
+transcript and that session's `projects/<project>/<session-id>/`,
+`file-history/<session-id>` and `session-env/<session-id>` data. Project memory
+is never touched.

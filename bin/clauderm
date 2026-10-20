@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (( $# != 0 )); then
+  echo 'Usage: clauderm' >&2
+  exit 2
+fi
+
+for cmd in python3 fzf; do
+  command -v "$cmd" >/dev/null 2>&1 || {
+    printf 'clauderm: %s is required\n' "$cmd" >&2
+    exit 1
+  }
+done
+
+claude_dir="$HOME/.claude"
+# Sessions belong to the Git repository they were started in (else the directory).
+project_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)
+
+# Internal Claude Code layout: each resumable session is
+# projects/<project>/<session-id>.jsonl. Read-only listing, newest first.
+rows=$(CLAUDE_DIR="$claude_dir" PROJECT_ROOT="$project_root" python3 - <<'PY'
+import functools
+import json
+import os
+import subprocess
+from datetime import datetime
+from pathlib import Path
+import unicodedata
+
+def width(text):
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
+
+def clean(text, limit=60):
+    text = " ".join(str(text).split())
+    if width(text) <= limit:
+        return text
+    while width(text) > limit - 1:
+        text = text[:-1]
+    return text + "…"
+
+def pad(text, size):
+    return text + " " * (size - width(text))
+
+def first_prompt(content):
+    parts = [content] if isinstance(content, str) else [
+        part.get("text", "") for part in content or []
+        if isinstance(part, dict) and part.get("type") == "text"
+    ]
+    # Skip injected command and reminder blocks.
+    return next((p for p in parts if p.strip() and not p.lstrip().startswith("<")), "")
+
+project_root = os.environ["PROJECT_ROOT"]
+
+@functools.lru_cache(maxsize=None)
+def root_of(cwd):
+    try:
+        result = subprocess.run(["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+                                capture_output=True, text=True)
+    except OSError:
+        result = None
+    if result is not None and result.returncode == 0:
+        return result.stdout.strip()
+    return os.path.realpath(cwd)
+
+sessions = []
+for path in Path(os.environ["CLAUDE_DIR"], "projects").glob("*/*.jsonl"):
+    title = ai_title = prompt = cwd = ""
+    with path.open(encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(entry, dict):
+                continue
+            kind = entry.get("type")
+            if kind == "custom-title":
+                title = entry.get("customTitle") or title
+            elif kind == "ai-title":
+                ai_title = entry.get("aiTitle") or ai_title
+            elif kind == "user" and not entry.get("isMeta"):
+                cwd = cwd or entry.get("cwd", "")
+                message = entry.get("message")
+                if not prompt and isinstance(message, dict):
+                    prompt = first_prompt(message.get("content"))
+    if not cwd or root_of(cwd) != project_root:
+        continue
+    mtime = path.stat().st_mtime
+    updated = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+    sessions.append((mtime, [path.stem, updated,
+                             clean(title or ai_title or prompt or "(no prompt)"), str(path)]))
+
+# Hidden fields (id, transcript) precede a display line padded to terminal
+# width with three-space separators; the first line is the header.
+if sessions:
+    rows = [row for _, row in sorted(sessions, key=lambda item: item[0], reverse=True)]
+    columns = [["UPDATED", "TITLE", "PATH"]] + [row[1:] for row in rows]
+    sizes = [max(width(column[i]) for column in columns) for i in (0, 1)]
+    for hidden, (updated, title, transcript) in zip([["", ""]] + [[r[0], r[3]] for r in rows], columns):
+        line = "   ".join([pad(updated, sizes[0]), pad(title, sizes[1]), transcript])
+        print("\t".join(hidden + [line]))
+PY
+)
+
+[[ -n "$rows" ]] || { printf 'clauderm: no sessions found for %s\n' "$project_root" >&2; exit 0; }
+
+selected=$(printf '%s\n' "$rows" |
+  fzf --multi --delimiter=$'\t' --with-nth=3 --no-sort \
+      --header-lines=1 --header='TAB: select') || exit 0
+
+targets=()
+while IFS=$'\t' read -r session_id transcript _; do
+  [[ $session_id =~ ^[A-Za-z0-9_-]+$ && $transcript == "$claude_dir/projects/"*"/$session_id.jsonl" ]] || {
+    printf 'clauderm: unexpected session row: %s\n' "$session_id" >&2
+    exit 1
+  }
+  for path in "$transcript" "${transcript%.jsonl}" \
+    "$claude_dir/file-history/$session_id" "$claude_dir/session-env/$session_id"; do
+    [[ -e $path || -L $path ]] && targets+=("$path")
+  done
+done <<< "$selected"
+
+printf '%s\n' "${targets[@]}"
+read -r -p "Remove these ${#targets[@]} paths? [y/N] " answer || answer=
+[[ $answer == [yY] ]] || { echo 'Aborted.' >&2; exit 1; }
+
+rm -rf -- "${targets[@]}"
+echo "Removed ${#targets[@]} paths."
