@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Exclude our convenience wrapper: it is not the actual Bob Shell binary.
+repo_bin=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../bin" && pwd -P)
+original_path=$PATH
+PATH=
+IFS=: read -r -a entries <<< "$original_path"
+for entry in "${entries[@]}"; do
+  [[ -n $entry ]] || entry=.
+  resolved=$(cd -- "$entry" 2>/dev/null && pwd -P || true)
+  [[ $resolved == "$repo_bin" ]] && continue
+  PATH="${PATH:+$PATH:}$entry"
+done
+export PATH
+
 if command -v bob >/dev/null 2>&1; then
   printf 'Already installed: %s\n' "$(command -v bob)"
   exit 0
