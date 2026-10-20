@@ -44,5 +44,13 @@ if [[ -e "$HOME/.bob/AGENTS.md" || -L "$HOME/.bob/AGENTS.md" ]]; then
   printf 'NOTICE: legacy ~/.bob/AGENTS.md remains in place; review it manually.\n' >&2
 fi
 
+# Claude message contrast follows the saved dotfiles theme, if present.
+# The palette is embedded, so agent-config remains independently installable.
+if command -v python3 >/dev/null 2>&1; then
+  bash "$repo_dir/scripts/install-claude-theme"
+else
+  echo 'WARNING: Claude theme skipped (python3 is required)' >&2
+fi
+
 bash "$repo_dir/scripts/install-tools"
 bash "$repo_dir/scripts/install-nix-tools"

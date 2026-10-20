@@ -14,6 +14,28 @@ Clones into `~/agent-config` (override with `AGENT_CONFIG_DIR`) and runs the exi
 
 Installs global instructions, agent skills, Spec Kit, Claude Code CLI and its ACP adapter (via Nix when available). Existing unmanaged instructions are protected.
 
+## Claude Code theme
+
+`./install` enables `custom:agent-config-selected`. User message backgrounds
+follow the saved dotfiles theme variant (default: teal), with a darker shade
+for contrast against Claude Code's light text. Other settings in
+`~/.claude/settings.json` are preserved. Python 3 is required.
+
+To refresh the theme on every new Claude CLI session, ensure `~/agent-config/bin` precedes the original Claude executable in `PATH`. The `bin/claude` wrapper refreshes colors and then executes the real CLI with its original arguments. To refresh manually instead, run:
+
+```bash
+bash scripts/install-claude-theme
+```
+
+To override the theme variant without dotfiles:
+
+```bash
+AGENT_CONFIG_THEME_VARIANT=violet bash scripts/install-claude-theme
+```
+
+Claude Code does not currently expose a user-message-only foreground token;
+changing `text` to dark would also darken assistant responses.
+
 ## Neovim chat (optional)
 
 Requires Neovim 0.11+, Nix on Linux x86_64, and authenticated Claude Code or IBM Bob Shell.

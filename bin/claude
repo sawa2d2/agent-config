@@ -2,20 +2,34 @@
 set -euo pipefail
 
 # Resolve the underlying CLI without recursively invoking this wrapper.
-wrapper_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+wrapper_dir="$repo_dir/bin"
 original_path=$PATH
 PATH=
 IFS=: read -r -a entries <<< "$original_path"
 for entry in "${entries[@]}"; do
   [[ -n "$entry" ]] || entry=.
-  [[ "$(cd -- "$entry" 2>/dev/null && pwd -P || true)" == "$wrapper_dir" ]] && continue
+  resolved=$(cd -- "$entry" 2>/dev/null && pwd -P || true)
+  [[ "$resolved" == "$wrapper_dir" ]] && continue
   PATH="${PATH:+$PATH:}$entry"
 done
 export PATH
-real_cli=$(command -v claude || true)
-[[ -n "$real_cli" ]] || { echo 'claude: original claude CLI not found' >&2; exit 127; }
 
+real_cli=$(command -v claude || true)
+[[ -n "$real_cli" ]] || {
+  echo 'claude: original Claude Code executable not found' >&2
+  exit 127
+}
+
+# Preserve RGB colors inside tmux; otherwise Claude may quantize them to 256 colors.
+export CLAUDE_CODE_TMUX_TRUECOLOR=1
+
+# Refresh the selected theme before starting Claude.
+bash "$repo_dir/scripts/install-claude-theme" >/dev/null
+
+# Resume the latest session when no arguments are supplied.
 if (( $# == 0 )); then
   exec "$real_cli" --continue
 fi
+
 exec "$real_cli" "$@"
