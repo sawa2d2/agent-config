@@ -50,7 +50,13 @@ Installs the experimental Ralph runner and Bob skills without running the loop. 
 
 ## CLI session resume
 
-Launchers live in `bin/`; put this directory before the original CLI executables on `PATH`, or alias the commands to these files when another tool reorders `PATH`. Launchers dispatch to the original CLI when any arguments are supplied.
+Launchers live in `bin/` and dispatch to the original CLI when any arguments are supplied. Enable them in interactive Bash or Zsh with one line anywhere in your startup file:
+
+```bash
+[[ -f "$HOME/agent-config/shell/aliases.sh" ]] && source "$HOME/agent-config/shell/aliases.sh"
+```
+
+Aliases take precedence however nvm, Nix or other startup files reorder `PATH` later. Scripts and other non-interactive callers still run the original CLIs.
 
 | Tool | Current directory, latest | Current directory, picker | All directories |
 | --- | --- | --- | --- |
@@ -58,5 +64,14 @@ Launchers live in `bin/`; put this directory before the original CLI executables
 | Claude Code | `claude` | `claudel` | In `claudel` picker, press `Ctrl+A` |
 | Codex | `codex` | `codexl` | `codexla` |
 
-For a fresh conversation, invoke the original CLI directly (bypassing the wrapper) or use a supported new-session command for your installed CLI version.
+To start a new session, pass any argument so the launcher dispatches to the original CLI:
+
+| Tool | New session | Empty new session |
+| --- | --- | --- |
+| Bob | `bob chat --auto-approve` | Same |
+| Claude Code | `claude "<prompt>"` | `\claude` |
+| Codex | `codex "<prompt>"` | `\codex` |
+
+Claude Code and Codex have no `chat` subcommand; `claude chat` starts a new session with `chat` as the first prompt. A leading backslash skips the alias and runs the original CLI. Bob reads auto-approval only from command-line arguments (`--yolo` is a deprecated alias of `--auto-approve`).
+
 The native resume pickers are used rather than custom fzf/database parsing.
