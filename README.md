@@ -4,11 +4,13 @@ Shared configuration and tooling for Bob, Claude Code, and Codex. No dotfiles de
 
 ## Install
 
+Requires Git.
+
 ```bash
-git clone https://github.com/sawa2d2/agent-config.git
-cd agent-config
-bash ./install
+curl -fsSL https://raw.githubusercontent.com/sawa2d2/agent-config/main/bootstrap.sh | bash
 ```
+
+Clones into `~/agent-config` (override with `AGENT_CONFIG_DIR`) and runs the existing installer. An existing Git checkout is reused without pulling; other existing destinations are not overwritten.
 
 Installs global instructions, agent skills, Spec Kit, Claude Code CLI and its ACP adapter (via Nix when available). Existing unmanaged instructions are protected.
 
