@@ -1,0 +1,342 @@
+#!/usr/bin/env python3
+"""Manage Bob Shell tasks stored in ~/.bob/db/bob.db.
+
+Relies on Bob's internal database schema (observed in Bob Shell 2.0.6):
+resumable tasks are top-level rows with a user message, and project_id holds
+the launch directory as "<scheme>:<path>[?query]" (directory is stored empty).
+Tasks locked by a running Bob are never modified.
+"""
+
+import argparse
+import functools
+import json
+import os
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+import time
+import unicodedata
+from datetime import datetime
+from pathlib import Path
+
+DB_PATH = Path.home() / ".bob/db/bob.db"
+UNLOCKED = "(locked_by IS NULL OR lock_lease_until IS NULL OR lock_lease_until < ?)"
+
+
+def fail(message, status=1):
+    print(f"bobtask: {message}", file=sys.stderr)
+    sys.exit(status)
+
+
+def now_ms():
+    return int(time.time() * 1000)
+
+
+def width(text):
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
+
+
+def clean(text, limit=60):
+    text = " ".join(str(text).split())
+    if width(text) <= limit:
+        return text
+    while width(text) > limit - 1:
+        text = text[:-1]
+    return text + "…"
+
+
+def pad(text, size):
+    return text + " " * (size - width(text))
+
+
+def format_time(value):
+    seconds = value / 1000 if value >= 100_000_000_000 else value
+    return datetime.fromtimestamp(seconds).strftime("%Y-%m-%d %H:%M")
+
+
+def workspace_path(value):
+    """Return the local path of a stored workspace, parsed as Bob does."""
+    match = re.match(r"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$", value or "")
+    scheme, path = match.groups() if match else ("file", value or "")
+    path = path.split("?", 1)[0]
+    return path if scheme == "file" and os.path.isabs(path) else None
+
+
+@functools.cache
+def root_of(directory):
+    """Git repository root of directory, else the directory itself."""
+    try:
+        result = subprocess.run(["git", "-C", directory, "rev-parse", "--show-toplevel"],
+                                capture_output=True, text=True)
+    except OSError:
+        result = None
+    if result is not None and result.returncode == 0:
+        return result.stdout.strip()
+    return os.path.realpath(directory)
+
+
+def current_project():
+    return root_of(os.getcwd())
+
+
+def connect(readonly):
+    if not DB_PATH.is_file():
+        fail(f"database not found: {DB_PATH}")
+    if readonly:
+        db = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    else:
+        db = sqlite3.connect(DB_PATH, isolation_level=None)
+        db.execute("PRAGMA foreign_keys = ON")
+    db.execute("PRAGMA busy_timeout = 5000")
+    db.row_factory = sqlite3.Row
+    return db
+
+
+def resumable_tasks(db, project):
+    """Unlocked resumable tasks, newest first; project=None means all."""
+    rows = db.execute(f"""
+        SELECT * FROM tasks
+        WHERE parent_id IS NULL
+          AND EXISTS (SELECT 1 FROM messages WHERE messages.task_id = tasks.id AND messages.role = 'user')
+          AND {UNLOCKED}
+        ORDER BY updated_at DESC, id DESC
+    """, (now_ms(),)).fetchall()
+    tasks = []
+    for row in rows:
+        path = workspace_path(row["directory"] or row["project_id"])
+        if path is not None and (project is None or root_of(path) == project):
+            tasks.append(row)
+    return tasks
+
+
+def table(tasks):
+    """Header and one line per task, padded to terminal width with three-space separators."""
+    columns = [["UPDATED", "PROJECT_ID", "TITLE", "ID"]] + [
+        [format_time(t["updated_at"]), t["project_id"] or "(empty)",
+         clean(t["title"] or t["first_message"] or "(no title)"), t["id"]]
+        for t in tasks
+    ]
+    sizes = [max(width(column[i]) for column in columns) for i in range(3)]
+    return ["   ".join([pad(value, size) for value, size in zip(column[:3], sizes)] + [column[3]])
+            for column in columns]
+
+
+def pick(tasks, multi):
+    """Let the user choose tasks with fzf; returns [] when cancelled."""
+    if shutil.which("fzf") is None:
+        fail("fzf is required")
+    # A hidden id field precedes each display line; the first line is the header.
+    lines = [f"{task_id}\t{display}" for task_id, display in zip([""] + [t["id"] for t in tasks], table(tasks))]
+    command = ["fzf", "--delimiter=\t", "--with-nth=2", "--no-sort", "--header-lines=1"]
+    if multi:
+        command += ["--multi", "--bind=ctrl-a:select-all,ctrl-d:deselect-all",
+                    "--header=TAB: select | CTRL-A: select all | CTRL-D: clear"]
+    result = subprocess.run(command, input="\n".join(lines) + "\n", stdout=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        return []
+    chosen = {line.split("\t", 1)[0] for line in result.stdout.splitlines()}
+    return [t for t in tasks if t["id"] in chosen]
+
+
+def scoped_tasks(db, args):
+    """Tasks of every directory, or only the current project with --current."""
+    project = current_project() if args.current else None
+    tasks = resumable_tasks(db, project)
+    if not tasks:
+        print(f"bobtask: no tasks found{f' for {project}' if project else ''}", file=sys.stderr)
+        sys.exit(0)
+    return tasks
+
+
+def pick_tasks(db, args, multi):
+    return pick(scoped_tasks(db, args), multi)
+
+
+def confirm(tasks, question):
+    for task in tasks:
+        print(f"{format_time(task['updated_at'])}   {clean(task['title'] or task['first_message'] or '(no title)')}   {task['id']}")
+    try:
+        answer = input(f"{question} [y/N] ")
+    except EOFError:
+        answer = ""
+    if answer not in ("y", "Y"):
+        fail("aborted")
+
+
+def descendants(db, task_id):
+    """Subtask ids of task_id, deepest first."""
+    rows = db.execute("""
+        WITH RECURSIVE tree(id, depth) AS (
+            SELECT id, 1 FROM tasks WHERE parent_id = ?
+            UNION SELECT tasks.id, tree.depth + 1 FROM tasks JOIN tree ON tasks.parent_id = tree.id
+        ) SELECT id FROM tree ORDER BY depth DESC
+    """, (task_id,)).fetchall()
+    return [row["id"] for row in rows]
+
+
+def modify(db, tasks, change):
+    """Apply change(task_id) to each still-unlocked task in one transaction."""
+    done = 0
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        for task in tasks:
+            if db.execute(f"SELECT 1 FROM tasks WHERE id = ? AND {UNLOCKED}", (task["id"], now_ms())).fetchone() is None:
+                print(f"Skipped (missing or in use): {task['id']}", file=sys.stderr)
+                continue
+            change(task["id"])
+            done += 1
+        db.execute("COMMIT")
+    except BaseException:
+        db.execute("ROLLBACK")
+        raise
+    return done
+
+
+def command_list(args):
+    print("\n".join(table(scoped_tasks(connect(readonly=True), args))))
+
+
+def command_rm(args):
+    db = connect(readonly=False)
+    tasks = pick_tasks(db, args, multi=True)
+    if not tasks:
+        return
+    confirm(tasks, f"Remove these {len(tasks)} tasks from {DB_PATH}?")
+
+    # Like Bob's own deletion, subtasks go first and messages cascade; nested
+    # subtasks are included so their parent references never dangle.
+    def remove(task_id):
+        for row_id in descendants(db, task_id) + [task_id]:
+            db.execute("DELETE FROM tasks WHERE id = ?", (row_id,))
+
+    print(f"Removed {modify(db, tasks, remove)} tasks.")
+
+
+def on_disk_case(path):
+    """Spell each component of an absolute path as stored on disk.
+
+    Case-insensitive file systems (macOS by default) accept a mistyped case,
+    but Bob compares workspaces with the on-disk spelling of its cwd.
+    """
+    result = os.sep
+    for part in Path(path).parts[1:]:
+        try:
+            names = os.listdir(result)
+        except OSError:
+            names = []
+        if part not in names:
+            matches = [name for name in names if name.casefold() == part.casefold()]
+            part = matches[0] if len(matches) == 1 else part
+        result = os.path.join(result, part)
+    return result
+
+
+def command_mv(args):
+    target = os.path.realpath(args.directory)
+    if not os.path.isdir(target):
+        fail(f"directory not found: {args.directory}")
+    target = on_disk_case(target)
+    db = connect(readonly=False)
+    tasks = pick_tasks(db, args, multi=True)
+    if not tasks:
+        return
+    confirm(tasks, f"Move these {len(tasks)} tasks to {target}?")
+
+    # Mirror Bob's task import: project_id becomes the new workspace URI and the
+    # task environment's workspace fields are replaced; message history is kept.
+    def move(task_id):
+        for row_id in [task_id] + descendants(db, task_id):
+            env = db.execute("SELECT env FROM tasks WHERE id = ?", (row_id,)).fetchone()["env"]
+            if env:
+                data = json.loads(env)
+                data.pop("query", None)
+                data.update(workspace=target, scheme="file")
+                env = json.dumps(data, ensure_ascii=False)
+            db.execute("UPDATE tasks SET project_id = ?, directory = '', env = ? WHERE id = ?",
+                       (f"file:{target}", env, row_id))
+
+    print(f"Moved {modify(db, tasks, move)} tasks to {target}.")
+
+
+def command_resume(args):
+    db = connect(readonly=True)
+    chosen = pick_tasks(db, args, multi=False)
+    if not chosen:
+        return
+    task = chosen[0]
+    directory = workspace_path(task["directory"] or task["project_id"])
+    if not os.path.isdir(directory):
+        fail(f"directory not found: {directory}")
+    if shutil.which("bob") is None:
+        fail("bob is required")
+    os.chdir(directory)
+    os.execvp("bob", ["bob", "chat", "--resume", task["id"], "--auto-approve"])
+
+
+def message_text(message):
+    role = message.get("role", "?")
+    if role == "user":
+        return "user", message.get("_meta", {}).get("mask") or message.get("content", "")
+    if role == "assistant":
+        parts = [message.get("content") or ""]
+        for call in message.get("toolCalls") or []:
+            parts.append(f"[tool call] {call.get('name')} {json.dumps(call.get('arguments', {}), ensure_ascii=False)}")
+        return "assistant", "\n".join(part for part in parts if part)
+    if role == "tool":
+        signature = (message.get("toolUsage") or {}).get("signature") or {}
+        status = " (failed)" if signature.get("isError") else ""
+        return f"tool: {signature.get('name', '?')}{status}", message.get("content", "")
+    return role, message.get("content", "")
+
+
+def command_dump(args):
+    db = connect(readonly=True)
+    tasks = pick_tasks(db, args, multi=True)
+    for index, task in enumerate(tasks):
+        messages = db.execute("SELECT role, data, created_at FROM messages WHERE task_id = ? ORDER BY created_at ASC",
+                              (task["id"],)).fetchall()
+        if args.json:
+            print(json.dumps({
+                "task": {key: task[key] for key in task.keys()},
+                "messages": [{"role": m["role"], "createdAt": m["created_at"], "data": json.loads(m["data"])}
+                             for m in messages],
+            }, ensure_ascii=False))
+            continue
+        if index:
+            print()
+        print(f"# {task['title'] or task['first_message'] or '(no title)'}")
+        print(f"ID: {task['id']}")
+        print(f"Workspace: {task['project_id']}")
+        print(f"Updated: {format_time(task['updated_at'])}")
+        for message in messages:
+            data = json.loads(message["data"])
+            if data.get("role", message["role"]) == "system":
+                continue
+            heading, text = message_text(data)
+            print(f"\n## {heading} ({format_time(message['created_at'])})\n")
+            print(text.rstrip())
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="bobtask", description="Manage Bob Shell tasks.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    scope = argparse.ArgumentParser(add_help=False)
+    scope.add_argument("-c", "--current", action="store_true",
+                       help="only tasks of the current Git repository (else directory)")
+    commands.add_parser("list", aliases=["ls"], parents=[scope], help="print tasks").set_defaults(run=command_list)
+    commands.add_parser("rm", parents=[scope], help="delete tasks").set_defaults(run=command_rm)
+    mv = commands.add_parser("mv", parents=[scope], help="move tasks to DIRECTORY")
+    mv.add_argument("directory")
+    mv.set_defaults(run=command_mv)
+    commands.add_parser("resume", parents=[scope], help="resume a task in its directory").set_defaults(run=command_resume)
+    dump = commands.add_parser("dump", parents=[scope], help="print task transcripts as text")
+    dump.add_argument("--json", action="store_true", help="print raw task and message data as JSON lines")
+    dump.set_defaults(run=command_dump)
+    args = parser.parse_args()
+    args.run(args)
+
+
+if __name__ == "__main__":
+    main()

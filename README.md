@@ -98,7 +98,7 @@ Aliases take precedence however nvm, Nix or other startup files reorder `PATH` l
 
 | Tool | Current directory, latest | Current directory, picker | All directories |
 | --- | --- | --- | --- |
-| Bob | `bob` | `bobl` (all-task API) | `bobla` |
+| Bob | `bob` | `bobl` | `bobtask resume` |
 | Claude Code | `claude` | `claudel` | In `claudel` picker, press `Ctrl+A` |
 | Codex | `codex` | `codexl` | `codexla` |
 
@@ -123,11 +123,26 @@ transcript and that session's `projects/<project>/<session-id>/`,
 `file-history/<session-id>` and `session-env/<session-id>` data. Project memory
 is never touched.
 
-To delete Bob tasks, run `bobrm` (requires Python 3 and fzf). It lists the
-resumable tasks of the current Git repository (or, outside Git, the current
-directory) with the same rules as `clauderm`, matching Bob's stored workspace
-(`project_id`, such as `file:/path/to/dir`). Rows show the update time, the raw
-`project_id`, title and task ID. After confirmation it deletes the selected tasks from
-`~/.bob/db/bob.db` as Bob does: subtasks first, then the task, with messages
-removed by cascade. Tasks locked by a running Bob are neither listed nor
-deleted. The database schema is internal to Bob Shell (observed in 2.0.6).
+`bobtask` manages Bob tasks (requires Python 3 and fzf). Pickers show the
+update time, the stored workspace (`project_id`, such as `file:/path/to/dir`),
+title and task ID of resumable tasks from every directory. With `-c`
+(`--current`), they list only the tasks of the current Git repository (or,
+outside Git, the current directory) with the same rules as `clauderm`. Tasks
+locked by a running Bob are neither listed nor changed.
+
+| Command | Action |
+| --- | --- |
+| `bobtask list [-c]` (`ls`) | Print the same table without a picker |
+| `bobtask resume [-c]` | Resume a task in its workspace directory |
+| `bobtask rm [-c]` | Delete tasks; subtasks first, messages by cascade |
+| `bobtask mv [-c] <dir>` | Move tasks and their subtasks to another workspace, keeping IDs |
+| `bobtask dump [-c] [--json]` | Print transcripts as text (system prompts omitted), or raw JSON lines |
+
+`bobl` and `bobrm` are shortcuts for `bobtask resume -c` and `bobtask rm -c`.
+
+In the `rm`, `mv` and `dump` pickers, `Tab` toggles a task, `Ctrl-A` selects
+all listed tasks and `Ctrl-D` clears the selection. `rm` and `mv` ask for
+confirmation. `mv` rewrites `project_id` and the task
+environment's workspace as Bob's own import does; paths quoted in past messages
+stay unchanged. The database schema is internal to Bob Shell (observed in
+2.0.6).
