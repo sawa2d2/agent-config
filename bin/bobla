@@ -11,8 +11,25 @@ done
 db="$HOME/.bob/db/bob.db"
 [[ -f "$db" ]] || { printf 'bobla: database not found: %s\n' "$db" >&2; exit 1; }
 
-# Internal Bob database schema: read-only access; never modify task records.
+# Internal Bob database schema (observed in Bob Shell 2.0.6): read-only access;
+# never modify task records. Resumable tasks are top-level rows with a user
+# message, and project_id holds the launch directory as "file:<path>[?query]"
+# (directory is stored empty).
 rows=$(sqlite3 -readonly -separator $'\t' "$db" "
+  WITH workspaces AS (
+    SELECT id, updated_at, title,
+           CASE WHEN directory GLOB '/*' THEN directory
+                WHEN project_id LIKE 'file:/%' THEN substr(project_id, 6)
+           END AS path
+    FROM tasks
+    WHERE parent_id IS NULL
+      AND EXISTS (SELECT 1 FROM messages WHERE messages.task_id = tasks.id AND messages.role = 'user')
+  ), dirs AS (
+    SELECT id, updated_at, title,
+           CASE WHEN instr(path, '?') > 0 THEN substr(path, 1, instr(path, '?') - 1) ELSE path END AS directory
+    FROM workspaces
+    WHERE path IS NOT NULL
+  )
   SELECT id,
          directory,
          datetime(
@@ -21,12 +38,11 @@ rows=$(sqlite3 -readonly -separator $'\t' "$db" "
            'unixepoch', 'localtime'
          ),
          printf('%-20s', CASE
-           WHEN directory = '' THEN '(none)'
            WHEN length(directory) > 20 THEN '…' || substr(directory, -19)
            ELSE directory
          END),
          replace(replace(replace(title, char(9), ' '), char(10), ' '), char(13), ' ')
-  FROM tasks
+  FROM dirs
   ORDER BY updated_at DESC;
 ")
 
