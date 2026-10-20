@@ -16,6 +16,6 @@ real_bob=$(command -v bob || true)
 [[ -n "$real_bob" ]] || { echo 'bob: original Bob Shell executable not found' >&2; exit 127; }
 
 if (( $# == 0 )); then
-  exec "$real_bob" chat --resume latest --yolo
+  exec "$real_bob" chat --resume latest --auto-approve
 fi
 exec "$real_bob" "$@"

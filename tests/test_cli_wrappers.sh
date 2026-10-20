@@ -7,7 +7,7 @@ trap 'rm -rf -- "$tmp"' EXIT
 mkdir -p "$tmp/real"
 
 # Fake CLIs record their argv and the PATH they were launched with.
-for cli in claude codex; do
+for cli in bob claude codex; do
   cat > "$tmp/real/$cli" <<'CLI'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "$TEST_ROOT/args"
@@ -31,10 +31,12 @@ expect() {
 }
 
 # Without arguments, resume the latest session in the current directory.
+expect $'chat\n--resume\nlatest\n--auto-approve' bob
 expect '--continue' claude
 expect $'resume\n--last' codex
 
 # Explicit arguments are passed through unchanged.
+expect $'chat\n--auto-approve' bob chat --auto-approve
 expect $'--resume\ntwo words\n-p' claude --resume 'two words' -p
 expect $'exec\ntwo words' codex exec 'two words'
 
@@ -45,10 +47,10 @@ expect $'resume\n--all' codexla
 
 # Without the original CLI, fail instead of recursing.
 export PATH="$root/bin:/usr/bin:/bin"
-for cli in claude codex; do
+for cli in bob claude codex; do
   status=0
   "$cli" 2> /dev/null || status=$?
   [[ $status -eq 127 ]] || fail "$cli: expected exit 127, got $status"
 done
 
-echo 'PASS: Claude and Codex wrappers resume by default and pass arguments through'
+echo 'PASS: Bob, Claude and Codex wrappers resume by default and pass arguments through'

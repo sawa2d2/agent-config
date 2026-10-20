@@ -41,4 +41,4 @@ IFS=$'\t' read -r task_id directory _ <<< "$selected"
 [[ -d "$directory" ]] || { printf 'bobla: directory not found: %s\n' "$directory" >&2; exit 1; }
 
 cd -- "$directory"
-exec bob chat --resume "$task_id" --yolo
+exec bob chat --resume "$task_id" --auto-approve
