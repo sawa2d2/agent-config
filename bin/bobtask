@@ -16,6 +16,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 import unicodedata
 from datetime import datetime
@@ -291,13 +292,32 @@ def message_text(message):
     return role, message.get("content", "")
 
 
+def print_transcript(db, task, out=sys.stdout, tool_limit=None):
+    """Write a task transcript as text; tool output is cut to tool_limit characters."""
+    print(f"# {task['title'] or task['first_message'] or '(no title)'}", file=out)
+    print(f"ID: {task['id']}", file=out)
+    print(f"Workspace: {task['project_id']}", file=out)
+    print(f"Updated: {format_time(task['updated_at'])}", file=out)
+    for message in db.execute("SELECT role, data, created_at FROM messages WHERE task_id = ? ORDER BY created_at ASC",
+                              (task["id"],)):
+        data = json.loads(message["data"])
+        if data.get("role", message["role"]) == "system":
+            continue
+        heading, text = message_text(data)
+        text = text.rstrip()
+        if tool_limit is not None and heading.startswith("tool:") and len(text) > tool_limit:
+            text = f"{text[:tool_limit]}\n[... {len(text) - tool_limit} more characters omitted]"
+        print(f"\n## {heading} ({format_time(message['created_at'])})\n", file=out)
+        print(text, file=out)
+
+
 def command_dump(args):
     db = connect(readonly=True)
     tasks = pick_tasks(db, args, multi=True)
     for index, task in enumerate(tasks):
-        messages = db.execute("SELECT role, data, created_at FROM messages WHERE task_id = ? ORDER BY created_at ASC",
-                              (task["id"],)).fetchall()
         if args.json:
+            messages = db.execute("SELECT role, data, created_at FROM messages WHERE task_id = ? ORDER BY created_at ASC",
+                                  (task["id"],)).fetchall()
             print(json.dumps({
                 "task": {key: task[key] for key in task.keys()},
                 "messages": [{"role": m["role"], "createdAt": m["created_at"], "data": json.loads(m["data"])}
@@ -306,17 +326,43 @@ def command_dump(args):
             continue
         if index:
             print()
-        print(f"# {task['title'] or task['first_message'] or '(no title)'}")
-        print(f"ID: {task['id']}")
-        print(f"Workspace: {task['project_id']}")
-        print(f"Updated: {format_time(task['updated_at'])}")
-        for message in messages:
-            data = json.loads(message["data"])
-            if data.get("role", message["role"]) == "system":
-                continue
-            heading, text = message_text(data)
-            print(f"\n## {heading} ({format_time(message['created_at'])})\n")
-            print(text.rstrip())
+        print_transcript(db, task)
+
+
+def copy_to_clipboard(text):
+    """Copy text with the first available clipboard tool; returns whether it worked."""
+    for command in (["pbcopy"], ["wl-copy"], ["xclip", "-selection", "clipboard"]):
+        if shutil.which(command[0]) is not None:
+            return subprocess.run(command, input=text, text=True).returncode == 0
+    return False
+
+
+def command_handoff(args):
+    db = connect(readonly=True)
+    chosen = pick_tasks(db, args, multi=False)
+    if not chosen:
+        return
+    task = chosen[0]
+    directory = workspace_path(task["directory"] or task["project_id"])
+    if not os.path.isdir(directory):
+        fail(f"directory not found: {directory}")
+    if shutil.which("bob") is None:
+        fail("bob is required")
+
+    # Bob's interactive chat takes no initial prompt, so the prompt that points
+    # the new task at the transcript goes to the clipboard to paste first.
+    handoff_dir = Path(tempfile.gettempdir()) / "bob-handoff"
+    handoff_dir.mkdir(mode=0o700, exist_ok=True)
+    path = handoff_dir / f"{task['id']}.md"
+    with path.open("w", encoding="utf-8") as out:
+        print_transcript(db, task, out, tool_limit=args.tool_limit)
+    prompt = (f"Read {path}. It is the transcript of an earlier Bob task in this workspace. "
+              "Summarize its goal and current state, then continue the work from where it stopped.")
+    copied = copy_to_clipboard(prompt)
+    print(f"Transcript: {path}", file=sys.stderr)
+    print(f"{'Copied to the clipboard' if copied else 'Paste this'} as the first message:\n{prompt}", file=sys.stderr)
+    os.chdir(directory)
+    os.execvp("bob", ["bob", "chat", "--auto-approve"])
 
 
 def main():
@@ -334,6 +380,11 @@ def main():
     dump = commands.add_parser("dump", parents=[scope], help="print task transcripts as text")
     dump.add_argument("--json", action="store_true", help="print raw task and message data as JSON lines")
     dump.set_defaults(run=command_dump)
+    handoff = commands.add_parser("handoff", parents=[scope],
+                                  help="start a new task in a task's workspace from its transcript")
+    handoff.add_argument("--tool-limit", type=int, default=2000, metavar="N",
+                         help="characters kept from each tool output (default: 2000)")
+    handoff.set_defaults(run=command_handoff)
     args = parser.parse_args()
     args.run(args)
 

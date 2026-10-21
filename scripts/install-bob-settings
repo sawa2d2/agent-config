@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Add agent-config defaults to Bob Shell settings without overriding any value
+# the user has set: a higher turn limit, and a warning five turns before it so
+# the agent wraps up before Bob stops the task (keys observed in Bob Shell 2.0.6).
+command -v python3 >/dev/null 2>&1 || {
+  echo 'python3 is required to merge Bob settings safely' >&2
+  exit 1
+}
+
+python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+import tempfile
+
+settings_file = Path.home() / ".bob/settings/settings.json"
+defaults = {"session": {"maxTurns": 300, "limitWarnings": True}}
+
+if settings_file.is_symlink():
+    raise SystemExit(f"Refusing to overwrite symlink: {settings_file}")
+settings = {}
+if settings_file.exists():
+    with settings_file.open(encoding="utf-8") as stream:
+        settings = json.load(stream)
+if not isinstance(settings, dict) or not isinstance(settings.get("session", {}), dict):
+    raise SystemExit(f"Expected JSON object settings: {settings_file}")
+
+changed = False
+for section, values in defaults.items():
+    current = settings.setdefault(section, {})
+    for key, value in values.items():
+        if key not in current:
+            current[key] = value
+            changed = True
+if not changed:
+    raise SystemExit(0)
+
+settings_file.parent.mkdir(parents=True, exist_ok=True)
+fd, temporary = tempfile.mkstemp(prefix=f".{settings_file.name}.", dir=settings_file.parent)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        json.dump(settings, stream, ensure_ascii=False, indent=2)
+        stream.write("\n")
+    if settings_file.exists():
+        os.chmod(temporary, settings_file.stat().st_mode & 0o777)
+    os.replace(temporary, settings_file)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+print(f"Updated {settings_file}")
+PY

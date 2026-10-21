@@ -113,6 +113,25 @@ import json, sys
 data = json.loads(sys.stdin.read())
 assert data["task"]["id"] == "titled" and len(data["messages"]) == 5, data'
 
+# handoff: writes the transcript with cut tool output, copies the prompt and starts a new Bob in the workspace.
+cat > "$tmp/bin/pbcopy" <<'COPY'
+#!/usr/bin/env bash
+cat > "$TEST_ROOT/clipboard"
+COPY
+chmod +x "$tmp/bin/pbcopy"
+mkdir -p "$tmp/tmpdir"
+(cd "$tmp" && PICK=$'^titled\t' TMPDIR="$tmp/tmpdir" bobtask handoff --tool-limit 4 2> "$tmp/handoff-err")
+note="$tmp/tmpdir/bob-handoff/titled.md"
+grep -q -- --multi "$tmp/picker-args" && fail 'handoff picker is multi-select'
+[[ $(cat "$tmp/bob-args") == $'chat\n--auto-approve' ]] || fail "handoff args: $(cat "$tmp/bob-args")"
+[[ $(cat "$tmp/bob-cwd") == "$work/a" ]] || fail "handoff cwd: $(cat "$tmp/bob-cwd")"
+out=$(cat "$note")
+[[ $out == *'hello titled'* && $out == *'Done.'* && $out != *'SYSTEM PROMPT'* ]] || fail "handoff transcript: $out"
+[[ $out == *$'file\n[... 5 more characters omitted]'* ]] || fail "handoff tool output not cut: $out"
+[[ $(cat "$tmp/clipboard") == "Read $note."* ]] || fail "clipboard: $(cat "$tmp/clipboard")"
+grep -q 'Copied to the clipboard' "$tmp/handoff-err" || fail "handoff message: $(cat "$tmp/handoff-err")"
+rm "$tmp/bin/pbcopy"
+
 # resume: every directory by default, -c for the current project; Bob starts in the task workspace.
 cd "$work/a"
 PICK=$'^insub\t' bobtask resume -c
@@ -177,4 +196,4 @@ PICK=$'^other\t' bash "$root/bin/bobl"
 [[ $(cat "$tmp/bob-args") == $'chat\n--resume\nother\n--auto-approve' ]] || fail "bobl args: $(cat "$tmp/bob-args")"
 [[ $(cat "$tmp/bob-cwd") == "$work/b" ]] || fail "bobl cwd: $(cat "$tmp/bob-cwd")"
 
-echo 'PASS: bobtask list, rm, mv, resume and dump'
+echo 'PASS: bobtask list, rm, mv, resume, dump and handoff'

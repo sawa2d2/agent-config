@@ -54,6 +54,19 @@ bash scripts/install-bob-theme
 The background applies only in true-color terminals; Bob uses fixed ANSI
 colors for user messages in 256- and 16-color terminals.
 
+## Bob Shell settings
+
+`./install` and the `bin/bob` wrapper add these defaults to
+`~/.bob/settings/settings.json` only when the key is missing, so values you set
+yourself are kept:
+
+| Key | Value | Effect |
+| --- | --- | --- |
+| `session.maxTurns` | `300` | Turn limit per task (Bob's default is 100) |
+| `session.limitWarnings` | `true` | Tell the agent to wrap up five turns before the limit |
+
+To continue a stopped task in a fresh context, see `bobtask handoff`.
+
 ## Neovim chat (optional)
 
 Requires Neovim 0.11+, Nix on Linux x86_64, and authenticated Claude Code or IBM Bob Shell.
@@ -139,6 +152,7 @@ locked by a running Bob are neither listed nor changed.
 | `bobtask rm [-c]` | Delete tasks; subtasks first, messages by cascade |
 | `bobtask mv [-c] <dir>` | Move tasks and their subtasks to another workspace, keeping IDs |
 | `bobtask dump [-c] [--json]` | Print transcripts as text (system prompts omitted), or raw JSON lines |
+| `bobtask handoff [-c] [--tool-limit N]` | Start a new task in a task's workspace from its transcript |
 
 `bobl` and `bobrm` are shortcuts for `bobtask resume -c` and `bobtask rm -c`.
 
@@ -148,3 +162,12 @@ confirmation. `mv` rewrites `project_id` and the task
 environment's workspace as Bob's own import does; paths quoted in past messages
 stay unchanged. The database schema is internal to Bob Shell (observed in
 2.0.6).
+
+`handoff` continues a task that Bob stopped, for example at its turn limit,
+in a fresh context. It writes the transcript to
+`$TMPDIR/bob-handoff/<task-id>.md`, keeping the first `N` (default 2000)
+characters of each tool output, then starts `bob chat` in the task's
+workspace. Bob's interactive chat takes no initial prompt, so the first
+message that points it at the transcript is copied to the clipboard
+(`pbcopy`, `wl-copy` or `xclip`) and printed; paste it to start. Exit the
+stopped Bob first: tasks locked by a running Bob are not listed.

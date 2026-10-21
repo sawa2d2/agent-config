@@ -37,6 +37,7 @@ expect() {
 expect $'chat\n--resume\nlatest\n--auto-approve' bob
 expect '--continue' claude
 [[ -f "$HOME/.bob/theme.json" ]] || fail 'bob: theme was not refreshed'
+[[ -f "$HOME/.bob/settings/settings.json" ]] || fail 'bob: settings were not added'
 expect $'resume\n--last' codex
 
 # Explicit arguments are passed through unchanged.

@@ -15,8 +15,9 @@ export PATH
 real_bob=$(command -v bob || true)
 [[ -n "$real_bob" ]] || { echo 'bob: original Bob Shell executable not found' >&2; exit 127; }
 
-# Refresh the selected theme before starting Bob.
+# Refresh the selected theme and add missing default settings before starting Bob.
 bash "$wrapper_dir/../scripts/install-bob-theme" >/dev/null
+bash "$wrapper_dir/../scripts/install-bob-settings" >/dev/null
 
 if (( $# == 0 )); then
   exec "$real_bob" chat --resume latest --auto-approve
