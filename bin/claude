@@ -24,6 +24,10 @@ real_cli=$(command -v claude || true)
 # Preserve RGB colors inside tmux; otherwise Claude may quantize them to 256 colors.
 export CLAUDE_CODE_TMUX_TRUECOLOR=1
 
+# Leave mouse events to the terminal (text selection, tmux scrolling); an
+# explicit value from the caller wins.
+export CLAUDE_CODE_DISABLE_MOUSE=${CLAUDE_CODE_DISABLE_MOUSE:-1}
+
 # Over SSH, Claude Code copies only via OSC 52, which some terminals (e.g. GNOME
 # Terminal) ignore. With X11 forwarding and xclip, hide the SSH markers so it
 # uses xclip, which reaches the local clipboard through DISPLAY.
