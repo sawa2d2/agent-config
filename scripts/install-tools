@@ -11,24 +11,7 @@ fetch() {
 }
 
 install_skill() {
-  local source="$1" name="$2" target dest stage
-  [[ -f "$source/SKILL.md" ]] || { echo "Missing SKILL.md: $source" >&2; return 1; }
-
-  for target in "$HOME/.bob/skills" "$HOME/.claude/skills" "$HOME/.codex/skills"; do
-    mkdir -p -- "$target"
-    dest="$target/$name"
-    # Do not modify skills installed or edited outside agent-config.
-    if [[ -e "$dest" || -L "$dest" ]] && [[ ! -f "$dest/.agent-config-managed" ]]; then
-      echo "Refusing to overwrite unmanaged skill: $dest" >&2
-      return 1
-    fi
-    stage="$(mktemp -d "$target/.agent-config.XXXXXX")"
-    cp -R -- "$source/." "$stage/"
-    : > "$stage/.agent-config-managed"
-    if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi
-    mv -- "$stage" "$dest"
-    echo "Installed: $dest"
-  done
+  bash "$(dirname -- "${BASH_SOURCE[0]}")/install-skill" "$@"
 }
 
 fetch joshuawheelock/grill-me grill-me
@@ -51,21 +34,7 @@ done
 # Claude uses the official plugin to retain Superpowers hooks and other features.
 for source in "$tmp/superpowers/skills/"*; do
   [[ -f "$source/SKILL.md" ]] || continue
-  name="${source##*/}"
-  for target in "$HOME/.bob/skills" "$HOME/.codex/skills"; do
-    mkdir -p -- "$target"
-    dest="$target/$name"
-    if [[ -e "$dest" || -L "$dest" ]] && [[ ! -f "$dest/.agent-config-managed" ]]; then
-      echo "Refusing to overwrite unmanaged skill: $dest" >&2
-      exit 1
-    fi
-    stage="$(mktemp -d "$target/.agent-config.XXXXXX")"
-    cp -R -- "$source/." "$stage/"
-    : > "$stage/.agent-config-managed"
-    if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi
-    mv -- "$stage" "$dest"
-    echo "Installed: $dest"
-  done
+  install_skill "$source" "${source##*/}" "$HOME/.bob/skills" "$HOME/.codex/skills"
 done
 
 if command -v claude >/dev/null; then

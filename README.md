@@ -14,6 +14,14 @@ Clones into `~/agent-config` (override with `AGENT_CONFIG_DIR`) and runs the exi
 
 Installs global instructions, agent skills, Spec Kit, Claude Code CLI and its ACP adapter (via Nix when available). Existing unmanaged instructions are protected.
 
+## Skills
+
+Skills in `deploy/skills/` are copied to `~/.bob/skills`, `~/.claude/skills` and `~/.codex/skills` by `./install`, alongside upstream skills from `scripts/install-tools`. Copies carry a `.agent-config-managed` marker; a skill of the same name installed some other way is never overwritten.
+
+| Skill | Use |
+| --- | --- |
+| `autonomous-development` | Carry a multi-unit objective to completion: plan, independent and stacked branches, approval boundaries, a progress file in the Git directory, and batched checks for the user |
+
 ## Claude Code theme
 
 `./install` enables `custom:agent-config-selected`. User message backgrounds

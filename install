@@ -18,6 +18,13 @@ for target in "$HOME/.bob/rules" "$HOME/.claude/rules"; do
   done
 done
 
+# Skills authored in this repository; install-tools adds upstream skills.
+for source in "$repo_dir/deploy/skills"/*/; do
+  [[ -f "$source/SKILL.md" ]] || continue
+  source=${source%/}
+  bash "$repo_dir/scripts/install-skill" "$source" "${source##*/}"
+done
+
 # Link shared global instructions so repository updates take effect immediately.
 # Bob Shell reliably loads global instructions from ~/.bob/rules/.
 for dest in "$HOME/.bob/rules/agent-config.md" "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md"; do

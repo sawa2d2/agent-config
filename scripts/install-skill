@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Usage: install-skill <source-dir> <name> [target-dir...]
+# Copy a skill into each target (default: Bob, Claude Code and Codex skill
+# directories), marking it as managed by agent-config.
+(( $# >= 2 )) || { echo 'Usage: install-skill <source-dir> <name> [target-dir...]' >&2; exit 2; }
+source=$1 name=$2
+shift 2
+(( $# > 0 )) || set -- "$HOME/.bob/skills" "$HOME/.claude/skills" "$HOME/.codex/skills"
+[[ -f "$source/SKILL.md" ]] || { echo "Missing SKILL.md: $source" >&2; exit 1; }
+
+for target in "$@"; do
+  mkdir -p -- "$target"
+  dest="$target/$name"
+  # Do not modify skills installed or edited outside agent-config.
+  if [[ -e "$dest" || -L "$dest" ]] && [[ ! -f "$dest/.agent-config-managed" ]]; then
+    echo "Refusing to overwrite unmanaged skill: $dest" >&2
+    exit 1
+  fi
+  stage="$(mktemp -d "$target/.agent-config.XXXXXX")"
+  cp -R -- "$source/." "$stage/"
+  : > "$stage/.agent-config-managed"
+  if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi
+  mv -- "$stage" "$dest"
+  echo "Installed: $dest"
+done
