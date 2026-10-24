@@ -35,7 +35,16 @@ expect() {
 
 # Without arguments, resume the latest session in the current directory.
 expect $'chat\n--resume\nlatest\n--auto-approve' bob
+# Claude continues only when this directory has a session; otherwise it starts a new one.
+mkdir -p "$tmp/work.dir"
+cd "$tmp/work.dir"
+expect '' claude
+project="$HOME/.claude/projects/$(pwd -P | sed 's/[^A-Za-z0-9]/-/g')"
+mkdir -p "$project"
+expect '' claude
+touch "$project/session.jsonl"
 expect '--continue' claude
+cd "$root"
 [[ -f "$HOME/.bob/theme.json" ]] || fail 'bob: theme was not refreshed'
 [[ -f "$HOME/.bob/settings/settings.json" ]] || fail 'bob: settings were not added'
 expect $'resume\n--last' codex

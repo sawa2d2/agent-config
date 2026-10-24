@@ -125,7 +125,7 @@ To start a new session, pass any argument so the launcher dispatches to the orig
 | Claude Code | `claude "<prompt>"` | `\claude` |
 | Codex | `codex "<prompt>"` | `\codex` |
 
-Claude Code and Codex have no `chat` subcommand; `claude chat` starts a new session with `chat` as the first prompt. A leading backslash skips the alias and runs the original CLI. Bob reads auto-approval only from command-line arguments (`--yolo` is a deprecated alias of `--auto-approve`).
+When the current directory has no Claude Code session yet, `claude` starts a new one instead of failing with "No conversation found to continue". Claude Code and Codex have no `chat` subcommand; `claude chat` starts a new session with `chat` as the first prompt. A leading backslash skips the alias and runs the original CLI. Bob reads auto-approval only from command-line arguments (`--yolo` is a deprecated alias of `--auto-approve`).
 
 The native resume pickers are used rather than custom fzf/database parsing.
 
