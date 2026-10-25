@@ -7,10 +7,21 @@ if ! command -v nix >/dev/null 2>&1; then
 fi
 
 # The ACP adapter depends on Claude Code, but does not expose the claude CLI.
+# nix profile list bolds names with ANSI escapes even when piped; strip them.
+profile=$(nix profile list | sed $'s/\e\\[[0-9;]*m//g')
 for pkg in claude-code claude-agent-acp codex; do
-  if nix profile list | grep -Eq "^Name:[[:space:]]+$pkg$"; then
+  if grep -Eq "^Name:[[:space:]]+$pkg$" <<< "$profile"; then
     printf 'Already managed by Nix: %s\n' "$pkg"
   else
     NIXPKGS_ALLOW_UNFREE=1 nix profile add --impure "nixpkgs#$pkg"
   fi
 done
+
+# The pyright-lsp Claude Code plugin runs pyright-langserver from PATH. Reuse
+# any existing install (for example from home-manager): adding a second copy
+# to the profile would conflict with it.
+if command -v pyright-langserver >/dev/null 2>&1; then
+  printf 'Already installed: pyright-langserver (%s)\n' "$(command -v pyright-langserver)"
+else
+  nix profile add "nixpkgs#pyright"
+fi

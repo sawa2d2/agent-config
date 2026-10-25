@@ -63,3 +63,5 @@ fi
 
 bash "$repo_dir/scripts/install-tools"
 bash "$repo_dir/scripts/install-nix-tools"
+# After install-nix-tools, which may provide the claude CLI on a new machine.
+bash "$repo_dir/scripts/install-claude-plugins"

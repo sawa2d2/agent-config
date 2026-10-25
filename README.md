@@ -12,7 +12,7 @@ curl -fsSL https://raw.githubusercontent.com/sawa2d2/agent-config/main/bootstrap
 
 Clones into `~/agent-config` (override with `AGENT_CONFIG_DIR`) and runs the existing installer. An existing Git checkout is reused without pulling; other existing destinations are not overwritten.
 
-Installs global instructions, agent skills, Spec Kit, Claude Code CLI and its ACP adapter (via Nix when available). Existing unmanaged instructions are protected.
+Installs global instructions, agent skills, Spec Kit, Claude Code CLI and its ACP adapter (via Nix when available), and the Claude Code plugins `superpowers`, `ralph-loop` and `pyright-lsp` from the official marketplace (`scripts/install-claude-plugins`). `pyright-lsp` needs `pyright-langserver` on `PATH`; an existing one is reused, otherwise Nix adds `pyright`. Re-running skips what is already installed. Existing unmanaged instructions are protected.
 
 ## Skills
 
