@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Register scripts/agent-tmux-status as Bob Shell and Claude Code hooks, so
+# the tmux window of a running agent shows whether it works, waits or is done.
+# Entries whose command runs an agent-tmux-status (any checkout path) are
+# replaced; every other hook and setting is kept. Re-running changes nothing.
+command -v python3 >/dev/null 2>&1 || {
+  echo 'python3 is required to merge agent hooks safely' >&2
+  exit 1
+}
+
+repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+AGENT_TMUX_STATUS="$repo_dir/scripts/agent-tmux-status" python3 - <<'PY'
+import json
+import os
+import shlex
+from pathlib import Path
+import tempfile
+
+command = shlex.quote(os.environ["AGENT_TMUX_STATUS"])
+home = Path.home()
+# Event -> (matcher or None, state). Bob has no Notification or SessionEnd
+# event (observed in Bob Shell 2.0.6); a new session clears the old mark.
+targets = {
+    home / ".bob/settings/settings.json": {
+        "SessionStart": (None, "clear"),
+        "UserPromptSubmit": (None, "working"),
+        "PreToolUse": (None, "working"),
+        "PostToolUse": (None, "working"),
+        "Stop": (None, "done"),
+    },
+    home / ".claude/settings.json": {
+        "UserPromptSubmit": (None, "working"),
+        "PreToolUse": (None, "working"),
+        "PostToolUse": (None, "working"),
+        "Notification": ("permission_prompt", "waiting"),
+        "Stop": (None, "done"),
+        "SessionEnd": (None, "clear"),
+    },
+}
+
+
+def managed(group):
+    return any("agent-tmux-status" in hook.get("command", "")
+               for hook in group.get("hooks", []) if isinstance(hook, dict))
+
+
+for path, events in targets.items():
+    if path.is_symlink():
+        raise SystemExit(f"Refusing to overwrite symlink: {path}")
+    settings = {}
+    if path.exists():
+        with path.open(encoding="utf-8") as stream:
+            settings = json.load(stream)
+    hooks = settings.get("hooks", {}) if isinstance(settings, dict) else None
+    if not isinstance(hooks, dict) or not all(isinstance(v, list) for v in hooks.values()):
+        raise SystemExit(f"Expected JSON object settings with hook lists: {path}")
+
+    updated = {event: [group for group in groups if not (isinstance(group, dict) and managed(group))]
+               for event, groups in hooks.items()}
+    for event, (matcher, state) in events.items():
+        group = {"matcher": matcher} if matcher else {}
+        group["hooks"] = [{"type": "command", "command": f"{command} {state}"}]
+        updated.setdefault(event, []).append(group)
+    updated = {event: groups for event, groups in updated.items() if groups}
+    if updated == hooks:
+        continue
+
+    settings["hooks"] = updated
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(settings, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+        if path.exists():
+            os.chmod(temporary, path.stat().st_mode & 0o777)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    print(f"Updated hooks: {path}")
+PY

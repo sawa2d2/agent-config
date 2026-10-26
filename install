@@ -57,8 +57,9 @@ if command -v python3 >/dev/null 2>&1; then
   bash "$repo_dir/scripts/install-claude-settings"
   bash "$repo_dir/scripts/install-bob-theme"
   bash "$repo_dir/scripts/install-bob-settings"
+  bash "$repo_dir/scripts/install-agent-hooks"
 else
-  echo 'WARNING: Claude and Bob themes and settings skipped (python3 is required)' >&2
+  echo 'WARNING: Claude and Bob themes, settings and hooks skipped (python3 is required)' >&2
 fi
 
 bash "$repo_dir/scripts/install-tools"

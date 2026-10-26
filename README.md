@@ -75,6 +75,38 @@ yourself are kept:
 
 To continue a stopped task in a fresh context, see `bobtask handoff`.
 
+## tmux agent status
+
+`./install` and the `bin/bob` and `bin/claude` wrappers register
+`scripts/agent-tmux-status` as Bob Shell and Claude Code hooks (in
+`~/.bob/settings/settings.json` and `~/.claude/settings.json`; other hooks are
+kept). Inside tmux, it marks the window the agent runs in. `@agent_attention`
+is `1` once the agent needed you, and stays through resumed work until the
+window is seen; `@agent_status` keeps the detail:
+
+| State | Attention | Set when |
+| --- | --- | --- |
+| `working` | (kept) | A prompt is sent or a tool runs |
+| `waiting` | `1` | Claude Code asks for a permission |
+| `done` | `1` | The agent finished its reply |
+| `stale` | `1` | `working` without updates for `@agent_status_stale_after` seconds (default 300): a hang, an error, or Bob waiting for approval (Bob has no event for it) |
+
+A window in view (the current window of an attached session) is not flagged,
+and a tmux configuration may unset `@agent_attention` once a window is seen.
+A new Bob session or the end of a Claude Code session clears the mark. The
+window options `@agent_status`, `@agent_attention` and `@agent_status_at` are
+the interface; this repository does not change the tmux status line. To
+highlight windows that need you:
+
+```tmux
+set -g window-status-format '#{?@agent_attention,#[fg=magenta bold],} #I:#W '
+set -g window-status-current-format '#{?@agent_attention,#[fg=magenta bold],} #I:#W '
+```
+
+A status line drawn by a script can set `@agent_status_hook` to a command
+that `agent-tmux-status` runs (with `tmux run-shell -b`) after each change.
+A long-running tool call without other output can also turn a window stale.
+
 ## Neovim chat (optional)
 
 Requires Neovim 0.11+, Nix on Linux x86_64, and authenticated Claude Code or IBM Bob Shell.

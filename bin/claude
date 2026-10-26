@@ -35,8 +35,9 @@ if [[ $(uname -s) == Linux && -n ${DISPLAY:-} ]] && command -v xclip >/dev/null 
   unset SSH_CONNECTION SSH_TTY SSH_CLIENT
 fi
 
-# Refresh the managed Claude settings (theme and renderer) before starting.
+# Refresh the managed Claude settings (theme, renderer, tmux status hooks).
 bash "$repo_dir/scripts/install-claude-settings" >/dev/null
+bash "$repo_dir/scripts/install-agent-hooks" >/dev/null
 
 # Resume the latest session of this directory when no arguments are supplied.
 # Claude Code keeps it under projects/<cwd with non-alphanumerics as "-">;

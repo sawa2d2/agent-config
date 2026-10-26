@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Usage: agent-tmux-status <working|waiting|done|clear>
+#
+# Hook command for Bob Shell and Claude Code: marks the tmux window the agent
+# runs in. Window options form the interface for tmux configurations:
+#   @agent_status       working, waiting, done or stale
+#   @agent_attention    1 once the agent needed the user (waiting, done,
+#                       stale) while the window was not in view, for status
+#                       formats; it stays until a tmux configuration unsets
+#                       it when the window is seen
+#   @agent_status_at    epoch seconds of the last update
+# A working window without updates for @agent_status_stale_after seconds
+# (global option, default 300) becomes stale: the agent may hang or wait for
+# input. After each change, the global option @agent_status_hook, if set, runs
+# as a tmux run-shell command, for example to redraw a custom status line.
+#
+# Outside tmux it does nothing. It always exits 0 so that it never blocks the
+# agent (exit status 2 would block a tool call).
+
+state=${1:-}
+self="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/${BASH_SOURCE[0]##*/}"
+
+[[ -n ${TMUX:-} ]] && command -v tmux >/dev/null 2>&1 || exit 0
+
+notify() {
+  local hook
+  hook=$(tmux show-options -gqv @agent_status_hook 2>/dev/null)
+  [[ -z $hook ]] || tmux run-shell -b "$hook" 2>/dev/null
+}
+
+# A window shown to an attached client needs no notification.
+in_view() {
+  [[ $(tmux display-message -p -t "$1" '#{&&:#{window_active},#{session_attached}}' 2>/dev/null) == 1 ]]
+}
+
+stale_after() {
+  local value
+  value=$(tmux show-options -gqv @agent_status_stale_after 2>/dev/null)
+  [[ $value =~ ^[0-9]+$ ]] && printf '%s' "$value" || printf 300
+}
+
+# Internal: started through tmux run-shell, so it outlives the hook process.
+# Sleeps until the working window would turn stale, then marks it unless an
+# update arrived meanwhile.
+if [[ $state == __watch ]]; then
+  window=${2:-}
+  while true; do
+    IFS=$'\t' read -r status at < <(tmux display-message -p -t "$window" '#{@agent_status}	#{@agent_status_at}' 2>/dev/null) || exit 0
+    [[ $status == working && $at =~ ^[0-9]+$ ]] || exit 0
+    remaining=$((at + $(stale_after) - $(date +%s)))
+    if ((remaining > 0)); then
+      sleep "$remaining"
+      continue
+    fi
+    tmux set-option -wq -t "$window" @agent_status stale 2>/dev/null
+    in_view "$window" || tmux set-option -wq -t "$window" @agent_attention 1 2>/dev/null
+    notify
+    exit 0
+  done
+fi
+
+case $state in
+  working | waiting | done | clear) ;;
+  *) echo 'Usage: agent-tmux-status <working|waiting|done|clear>' >&2; exit 0 ;;
+esac
+
+# Hooks may not inherit TMUX_PANE; then use the pane whose process is an ancestor.
+pane=${TMUX_PANE:-}
+if [[ -z $pane ]]; then
+  panes=$(tmux list-panes -a -F '#{pane_pid} #{pane_id}' 2>/dev/null) || exit 0
+  pid=$$
+  while [[ -z $pane && $pid =~ ^[0-9]+$ && $pid -gt 1 ]]; do
+    pane=$(awk -v pid="$pid" '$1 == pid { print $2 }' <<< "$panes")
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+  done
+fi
+[[ -n $pane ]] || exit 0
+window=$(tmux display-message -p -t "$pane" '#{window_id}' 2>/dev/null) || exit 0
+
+if [[ $state == clear ]]; then
+  tmux set-option -wqu -t "$window" @agent_status \; \
+    set-option -wqu -t "$window" @agent_attention \; \
+    set-option -wqu -t "$window" @agent_status_at 2>/dev/null
+  notify
+  exit 0
+fi
+
+# "|" rather than a tab: read would collapse an empty leading field.
+IFS='|' read -r previous previous_attention < <(tmux display-message -p -t "$window" '#{@agent_status}|#{@agent_attention}' 2>/dev/null)
+# Viewers only need to know whether the agent needed them; @agent_status
+# keeps the detail. Resumed work keeps an unseen notification.
+attention=$previous_attention
+if [[ $state != working ]]; then
+  attention=1
+  in_view "$window" && attention=
+fi
+tmux set-option -wq -t "$window" @agent_status "$state" \; \
+  set-option -wq -t "$window" @agent_status_at "$(date +%s)" 2>/dev/null
+if [[ -n $attention ]]; then
+  tmux set-option -wq -t "$window" @agent_attention 1 2>/dev/null
+else
+  tmux set-option -wqu -t "$window" @agent_attention 2>/dev/null
+fi
+# Tool hooks refresh a working window often; redraw only on changes.
+[[ $previous == "$state" && $previous_attention == "$attention" ]] || notify
+# One watcher per working period: a new one starts when work (re)starts.
+if [[ $state == working && $previous != working ]]; then
+  tmux run-shell -b "$(printf '%q' "$self") __watch $window" 2>/dev/null
+fi
+exit 0
