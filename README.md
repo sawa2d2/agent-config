@@ -20,7 +20,7 @@ Skills in `deploy/skills/` are copied to `~/.bob/skills`, `~/.claude/skills` and
 
 | Skill | Use |
 | --- | --- |
-| `autonomous-development` | Carry a multi-unit objective to completion: plan, independent and stacked branches, approval boundaries, a progress file in the Git directory, and batched checks for the user |
+| `autonomous-development` | Invoked by name only (`/autonomous-development`): route an objective to superpowers, Spec Kit or ralph-loop, and run long work with stacked branches, a progress file in the Git directory and batched user checks |
 
 ## Claude Code theme
 
