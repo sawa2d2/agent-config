@@ -25,13 +25,13 @@ home = Path.home()
 targets = {
     home / ".bob/settings/settings.json": {
         "SessionStart": (None, "clear"),
-        "UserPromptSubmit": (None, "working"),
+        "UserPromptSubmit": (None, "prompt"),
         "PreToolUse": (None, "working"),
         "PostToolUse": (None, "working"),
         "Stop": (None, "done"),
     },
     home / ".claude/settings.json": {
-        "UserPromptSubmit": (None, "working"),
+        "UserPromptSubmit": (None, "prompt"),
         "PreToolUse": (None, "working"),
         "PostToolUse": (None, "working"),
         "Notification": ("permission_prompt", "waiting"),

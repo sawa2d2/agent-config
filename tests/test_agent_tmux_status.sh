@@ -75,21 +75,23 @@ bash "$status" waiting
 sleep 0.3
 [[ $(opt @agent_attention) == 1 && $(hooks) -gt $count ]] || fail "re-mark: $(opt @agent_attention) $(hooks)"
 
-# A window shown to an attached client needs no notification; others still do.
+# A window in view is marked too: the user may keep the agent's window open.
 mkfifo "$tmp/client"
 t -C attach -t test:0 < "$tmp/client" > /dev/null &
 exec 3> "$tmp/client"
 for _ in 1 2 3 4 5 6 7 8 9 10; do [[ $(t list-clients | wc -l) -gt 0 ]] && break; sleep 0.2; done
 t select-window -t test:0
+bash "$status" prompt
 bash "$status" 'done'
-[[ $(opt @agent_status) == 'done' && -z $(opt @agent_attention) ]] || fail "in view: $(opt @agent_attention)"
-t select-window -t test:1
-bash "$status" 'done'
-[[ $(opt @agent_attention) == 1 ]] || fail 'out of view not marked'
+[[ $(opt @agent_status) == 'done' && $(opt @agent_attention) == 1 ]] || fail "in view: $(opt @agent_attention)"
 exec 3>&-
 
 # Resumed work keeps a notification that was not seen yet.
 bash "$status" working
 [[ $(opt @agent_status) == working && $(opt @agent_attention) == 1 ]] || fail 'working dropped the notification'
+
+# A submitted prompt means the window was seen: work resumes without the mark.
+bash "$status" prompt
+[[ $(opt @agent_status) == working && -z $(opt @agent_attention) ]] || fail "prompt kept the notification: $(opt @agent_attention)"
 
 echo 'PASS: agent-tmux-status'

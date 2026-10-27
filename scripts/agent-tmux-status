@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Usage: agent-tmux-status <working|waiting|done|clear>
+# Usage: agent-tmux-status <prompt|working|waiting|done|clear>
 #
 # Hook command for Bob Shell and Claude Code: marks the tmux window the agent
 # runs in. Window options form the interface for tmux configurations:
 #   @agent_status       working, waiting, done or stale
 #   @agent_attention    1 once the agent needed the user (waiting, done,
-#                       stale) while the window was not in view, for status
-#                       formats; it stays until a tmux configuration unsets
-#                       it when the window is seen
+#                       stale), for status formats; it stays through resumed
+#                       work until the user submits a prompt (state prompt:
+#                       working, and seen) or a tmux configuration unsets it
 #   @agent_status_at    epoch seconds of the last update
 # A working window without updates for @agent_status_stale_after seconds
 # (global option, default 300) becomes stale: the agent may hang or wait for
@@ -26,11 +26,6 @@ notify() {
   local hook
   hook=$(tmux show-options -gqv @agent_status_hook 2>/dev/null)
   [[ -z $hook ]] || tmux run-shell -b "$hook" 2>/dev/null
-}
-
-# A window shown to an attached client needs no notification.
-in_view() {
-  [[ $(tmux display-message -p -t "$1" '#{&&:#{window_active},#{session_attached}}' 2>/dev/null) == 1 ]]
 }
 
 stale_after() {
@@ -52,17 +47,23 @@ if [[ $state == __watch ]]; then
       sleep "$remaining"
       continue
     fi
-    tmux set-option -wq -t "$window" @agent_status stale 2>/dev/null
-    in_view "$window" || tmux set-option -wq -t "$window" @agent_attention 1 2>/dev/null
+    tmux set-option -wq -t "$window" @agent_status stale \; \
+      set-option -wq -t "$window" @agent_attention 1 2>/dev/null
     notify
     exit 0
   done
 fi
 
 case $state in
-  working | waiting | done | clear) ;;
-  *) echo 'Usage: agent-tmux-status <working|waiting|done|clear>' >&2; exit 0 ;;
+  prompt | working | waiting | done | clear) ;;
+  *) echo 'Usage: agent-tmux-status <prompt|working|waiting|done|clear>' >&2; exit 0 ;;
 esac
+# A submitted prompt means the user has seen the window.
+seen=
+if [[ $state == prompt ]]; then
+  state=working
+  seen=1
+fi
 
 # Hooks may not inherit TMUX_PANE; then use the pane whose process is an ancestor.
 pane=${TMUX_PANE:-}
@@ -90,10 +91,8 @@ IFS='|' read -r previous previous_attention < <(tmux display-message -p -t "$win
 # Viewers only need to know whether the agent needed them; @agent_status
 # keeps the detail. Resumed work keeps an unseen notification.
 attention=$previous_attention
-if [[ $state != working ]]; then
-  attention=1
-  in_view "$window" && attention=
-fi
+[[ -n $seen ]] && attention=
+[[ $state == working ]] || attention=1
 tmux set-option -wq -t "$window" @agent_status "$state" \; \
   set-option -wq -t "$window" @agent_status_at "$(date +%s)" 2>/dev/null
 if [[ -n $attention ]]; then

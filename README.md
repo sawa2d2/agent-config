@@ -81,18 +81,19 @@ To continue a stopped task in a fresh context, see `bobtask handoff`.
 `scripts/agent-tmux-status` as Bob Shell and Claude Code hooks (in
 `~/.bob/settings/settings.json` and `~/.claude/settings.json`; other hooks are
 kept). Inside tmux, it marks the window the agent runs in. `@agent_attention`
-is `1` once the agent needed you, and stays through resumed work until the
-window is seen; `@agent_status` keeps the detail:
+is `1` once the agent needed you, also in the window you are looking at, and
+stays through resumed work until you submit a prompt there; `@agent_status`
+keeps the detail:
 
 | State | Attention | Set when |
 | --- | --- | --- |
-| `working` | (kept) | A prompt is sent or a tool runs |
+| `working` | cleared by a prompt, otherwise kept | A prompt is sent or a tool runs |
 | `waiting` | `1` | Claude Code asks for a permission |
 | `done` | `1` | The agent finished its reply |
 | `stale` | `1` | `working` without updates for `@agent_status_stale_after` seconds (default 300): a hang, an error, or Bob waiting for approval (Bob has no event for it) |
 
-A window in view (the current window of an attached session) is not flagged,
-and a tmux configuration may unset `@agent_attention` once a window is seen.
+A tmux configuration may also unset `@agent_attention` when a window is
+selected.
 A new Bob session or the end of a Claude Code session clears the mark. The
 window options `@agent_status`, `@agent_attention` and `@agent_status_at` are
 the interface; this repository does not change the tmux status line. To

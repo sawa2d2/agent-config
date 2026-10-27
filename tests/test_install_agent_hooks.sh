@@ -26,7 +26,8 @@ check "states(bob, 'Stop') == [(None, status + ' done')] and states(bob, 'Sessio
 check "sorted(bob['hooks']) == ['PostToolUse', 'PreToolUse', 'SessionStart', 'Stop', 'UserPromptSubmit']"
 check "states(claude, 'Notification') == [('permission_prompt', status + ' waiting')]"
 check "sorted(claude['hooks']) == ['Notification', 'PostToolUse', 'PreToolUse', 'SessionEnd', 'Stop', 'UserPromptSubmit']"
-check "all(cmd.endswith((' working', ' done', ' waiting', ' clear')) for s in (bob, claude) for e in s['hooks'] for _, cmd in states(s, e))"
+check "states(bob, 'UserPromptSubmit') == [(None, status + ' prompt')] and states(claude, 'UserPromptSubmit') == [(None, status + ' prompt')]"
+check "all(cmd.endswith((' prompt', ' working', ' done', ' waiting', ' clear')) for s in (bob, claude) for e in s['hooks'] for _, cmd in states(s, e))"
 
 # Re-running leaves the files untouched.
 before=$(cat "$bob" "$claude")
