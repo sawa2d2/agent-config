@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Codex has no setting for its user message background (it blends the
+# terminal background, observed in Codex 0.160). Its syntax theme does supply
+# the colors of inline code, of type names (which also color table headers and
+# the model in a colored status line) and of a few controls (scope
+# codex.accent), so this writes Codex's default dark theme, Catppuccin Mocha,
+# with those set to the selected dotfiles color, and selects it unless another
+# theme is chosen.
+# Palette shared with install-claude-settings and install-bob-theme; keep the
+# three in sync. Re-run after changing the global dotfiles theme.
+state_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/theme"
+variant=${AGENT_CONFIG_THEME_VARIANT:-}
+if [[ -z $variant && -f $state_file ]]; then
+  IFS= read -r variant < "$state_file" || true
+fi
+variant=${variant:-teal}
+
+case "$variant" in
+  teal) selected='#79bfc0' ;;
+  violet) selected='#b1a5e5' ;;
+  orange) selected='#e9b888' ;;
+  blue) selected='#75b8ed' ;;
+  red) selected='#ed9298' ;;
+  green) selected='#82cfaa' ;;
+  *) printf 'Unknown theme variant: %s\n' "$variant" >&2; exit 2 ;;
+esac
+
+command -v python3 >/dev/null 2>&1 || {
+  echo 'python3 is required to write the Codex theme safely' >&2
+  exit 1
+}
+
+repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+CODEX_SELECTED_COLOR="$selected" CODEX_BASE_THEME="$repo_dir/deploy/codex/themes/catppuccin-mocha.tmTheme" python3 - <<'PY'
+import os
+from pathlib import Path
+import plistlib
+import re
+import tempfile
+
+name = "agent-config-selected"
+display_name = "Agent Config (Selected)"
+codex_home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+theme_file = codex_home / "themes" / f"{name}.tmTheme"
+config_file = codex_home / "config.toml"
+selected = os.environ["CODEX_SELECTED_COLOR"]
+
+
+def write_atomically(path, data):
+    if path.is_symlink():
+        raise SystemExit(f"Refusing to overwrite symlink: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+        if path.exists():
+            os.chmod(temporary, path.stat().st_mode & 0o777)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+with open(os.environ["CODEX_BASE_THEME"], "rb") as stream:
+    theme = plistlib.load(stream)
+if theme_file.exists():
+    with theme_file.open("rb") as stream:
+        existing = plistlib.load(stream)
+    if existing.get("name") != display_name:
+        raise SystemExit(f"Refusing to replace unmanaged theme: {theme_file}")
+theme["name"] = display_name
+# Mocha's type rules (all yellow), recolored in place to keep their precedence.
+type_scopes = {
+    "entity.name.class, entity.other.inherited-class, support.class, meta.function-call.constructor, entity.name.struct",
+    "entity.name.enum",
+    "meta.type, meta.type-alias, support.type, entity.name.type",
+    "entity.name.impl.rust",
+    "entity.name.trait.rust",
+    "entity.name.union.rust",
+    "storage.type.source.rust",
+}
+recolored = 0
+for rule in theme["settings"]:
+    if rule.get("scope") in type_scopes:
+        rule["name"] = f"{rule.get('name', 'Type')} (agent-config selected color)"
+        rule["settings"]["foreground"] = selected
+        recolored += 1
+if recolored != len(type_scopes):
+    raise SystemExit("Base theme type rules changed; update type_scopes")
+# Appended last, so they override Mocha's rules for the same scopes.
+theme["settings"] += [
+    {
+        "name": "Inline code (agent-config selected color)",
+        "scope": "markup.inline.raw.string.markdown, markup.raw.inline.markdown",
+        "settings": {"foreground": selected},
+    },
+    {
+        "name": "Codex accent (agent-config selected color)",
+        "scope": "codex.accent",
+        "settings": {"foreground": selected},
+    },
+]
+data = plistlib.dumps(theme)
+if not theme_file.exists() or theme_file.read_bytes() != data:
+    write_atomically(theme_file, data)
+
+# Select the theme only when none is configured, so a /theme choice is kept.
+# Plain text edits: Python 3.9 has no TOML parser.
+text = config_file.read_text(encoding="utf-8") if config_file.exists() else ""
+lines = text.splitlines(keepends=True)
+section = None
+configured = None
+tui_header = None
+for index, line in enumerate(lines):
+    header = re.match(r"\s*\[\s*([^\]]+?)\s*\]\s*(#.*)?$", line)
+    if header:
+        section = header.group(1)
+        if section == "tui":
+            tui_header = index
+        continue
+    key = re.match(r"\s*(tui\s*\.\s*)?theme\s*=\s*(.*)$", line)
+    if key and (section == "tui" or (section is None and key.group(1))):
+        configured = key.group(2).strip()
+if configured is None:
+    entry = f'theme = "{name}"\n'
+    if tui_header is None:
+        if text and not text.endswith("\n"):
+            text += "\n"
+        text += ("\n" if text else "") + "[tui]\n" + entry
+    else:
+        lines.insert(tui_header + 1, entry)
+        text = "".join(lines)
+    write_atomically(config_file, text.encode("utf-8"))
+    print(f"Enabled: {name} in {config_file}")
+elif configured.strip("\"'") != name:
+    print(f"Kept Codex theme {configured} (select {name} with /theme)")
+print(f"Codex theme: inline code, types and accent {selected} ({theme_file})")
+PY

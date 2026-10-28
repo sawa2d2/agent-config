@@ -15,6 +15,9 @@ export PATH
 real_cli=$(command -v codex || true)
 [[ -n "$real_cli" ]] || { echo 'codex: original codex CLI not found' >&2; exit 127; }
 
+# Refresh the selected theme accent.
+bash "$wrapper_dir/../scripts/install-codex-theme" >/dev/null
+
 if (( $# == 0 )); then
   exec "$real_cli" resume --last
 fi

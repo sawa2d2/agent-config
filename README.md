@@ -62,6 +62,26 @@ bash scripts/install-bob-theme
 The background applies only in true-color terminals; Bob uses fixed ANSI
 colors for user messages in 256- and 16-color terminals.
 
+## Codex theme
+
+Codex has no setting for its user message background: it lightens the
+terminal background (observed in Codex 0.160). Its syntax theme does supply
+the colors of inline code, of type names (which also color table headers and
+the model in a colored status line) and of a few controls (scope
+`codex.accent`), so `./install` writes `~/.codex/themes/agent-config-selected.tmTheme`:
+Codex's default dark theme, Catppuccin Mocha (`deploy/codex/themes/`, MIT
+license), with those colors set to the selected dotfiles color. It also sets
+`[tui] theme = "agent-config-selected"` in `~/.codex/config.toml` unless a
+theme is already configured, so a `/theme` choice is kept. A user-managed theme
+file of the same name is never overwritten. The `bin/codex` wrapper refreshes
+it on each launch, and `CODEX_HOME` is honored. To refresh manually:
+
+```bash
+bash scripts/install-codex-theme
+```
+
+The theme is dark; on a light terminal select another one with `/theme`.
+
 ## Bob Shell settings
 
 `./install` and the `bin/bob` wrapper add these defaults to
