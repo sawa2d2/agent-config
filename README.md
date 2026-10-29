@@ -178,15 +178,15 @@ Aliases take precedence however nvm, Nix or other startup files reorder `PATH` l
 | Claude Code | `claude` | `claudel` | In `claudel` picker, press `Ctrl+A` |
 | Codex | `codex` | `codexl` | `codexla` |
 
-To start a new session, pass any argument so the launcher dispatches to the original CLI:
+To start a new session, run `<tool> new`; arguments after `new` are passed to the original CLI. Any other argument also dispatches to the original CLI unchanged:
 
-| Tool | New session | Empty new session |
+| Tool | New session | New session with arguments |
 | --- | --- | --- |
-| Bob | `bob chat --auto-approve` | Same |
-| Claude Code | `claude "<prompt>"` | `\claude` |
-| Codex | `codex "<prompt>"` | `\codex` |
+| Bob | `bob new` (`bob chat --auto-approve`) | `bob new --mode <mode>` |
+| Claude Code | `claude new` | `claude new "<prompt>"` |
+| Codex | `codex new` | `codex new "<prompt>"` |
 
-When the current directory has no Claude Code session yet, `claude` starts a new one instead of failing with "No conversation found to continue". Claude Code and Codex have no `chat` subcommand; `claude chat` starts a new session with `chat` as the first prompt. A leading backslash skips the alias and runs the original CLI. Bob reads auto-approval only from command-line arguments (`--yolo` is a deprecated alias of `--auto-approve`).
+None of the original CLIs has a `new` subcommand, so the launchers reserve it; to send `new` as the first prompt, run the original CLI (`\claude new`). When the current directory has no Claude Code session yet, `claude` starts a new one instead of failing with "No conversation found to continue". Claude Code and Codex have no `chat` subcommand; `claude chat` starts a new session with `chat` as the first prompt. A leading backslash skips the alias and runs the original CLI. Bob reads auto-approval only from command-line arguments (`--yolo` is a deprecated alias of `--auto-approve`).
 
 The native resume pickers are used rather than custom fzf/database parsing.
 

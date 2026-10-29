@@ -23,4 +23,8 @@ bash "$wrapper_dir/../scripts/install-agent-hooks" >/dev/null
 if (( $# == 0 )); then
   exec "$real_bob" chat --resume latest --auto-approve
 fi
+# "new" starts a new auto-approved chat; Bob has no such subcommand.
+if [[ $1 == new ]]; then
+  exec "$real_bob" chat --auto-approve "${@:2}"
+fi
 exec "$real_bob" "$@"

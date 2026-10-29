@@ -21,4 +21,8 @@ bash "$wrapper_dir/../scripts/install-codex-theme" >/dev/null
 if (( $# == 0 )); then
   exec "$real_cli" resume --last
 fi
+# "new" starts a new session; Codex has no such subcommand.
+if [[ $1 == new ]]; then
+  exec "$real_cli" "${@:2}"
+fi
 exec "$real_cli" "$@"

@@ -49,6 +49,14 @@ cd "$root"
 [[ -f "$HOME/.bob/settings/settings.json" ]] || fail 'bob: settings were not added'
 expect $'resume\n--last' codex
 
+# "new" starts a new session and passes the remaining arguments on.
+expect $'chat\n--auto-approve' bob new
+expect $'chat\n--auto-approve\n--mode\nx' bob new --mode x
+expect '' claude new
+expect 'two words' claude new 'two words'
+expect '' codex new
+expect 'two words' codex new 'two words'
+
 # Explicit arguments are passed through unchanged.
 expect $'chat\n--auto-approve' bob chat --auto-approve
 expect $'--resume\ntwo words\n-p' claude --resume 'two words' -p

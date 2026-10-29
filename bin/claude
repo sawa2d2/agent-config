@@ -49,5 +49,9 @@ if (( $# == 0 )); then
   fi
   exec "$real_cli"
 fi
+# "new" starts a new session instead of sending "new" as the first prompt.
+if [[ $1 == new ]]; then
+  exec "$real_cli" "${@:2}"
+fi
 
 exec "$real_cli" "$@"
