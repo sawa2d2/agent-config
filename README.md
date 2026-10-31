@@ -92,7 +92,8 @@ yourself are kept:
 | --- | --- | --- |
 | `session.maxTurns` | `300` | Turn limit per task (Bob's default is 100) |
 | `session.limitWarnings` | `true` | Tell the agent to wrap up five turns before the limit |
-| `session.respectGitIgnore` | `true` | Keep ignored files (dependencies, build output) out of file tools, saving tokens |
+| `session.respectGitIgnore` | `true` | Apply each `.gitignore` like a `.bobignore`: ignored files are hidden from listings and search and cannot be read or written |
+| `session.compactionThresholdPercent` | `80` | Compact the context at 80% instead of 90%, keeping each turn smaller; instructions given only in chat may be summarized away |
 
 To continue a stopped task in a fresh context, see `bobtask handoff`.
 
