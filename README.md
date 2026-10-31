@@ -92,8 +92,19 @@ yourself are kept:
 | --- | --- | --- |
 | `session.maxTurns` | `300` | Turn limit per task (Bob's default is 100) |
 | `session.limitWarnings` | `true` | Tell the agent to wrap up five turns before the limit |
+| `session.respectGitIgnore` | `true` | Keep ignored files (dependencies, build output) out of file tools, saving tokens |
 
 To continue a stopped task in a fresh context, see `bobtask handoff`.
+
+## Agent handoff notes
+
+The shared instructions (`deploy/AGENTS.md`) tell Bob, Claude Code and Codex
+to write a short handoff note before stopping with work unfinished, to the
+path `git rev-parse --path-format=absolute --git-path agent-handoff.md` prints
+(`.git/agent-handoff.md`, never committed), and to read it when continuing.
+Any of the three agents can pick up from it without the earlier transcript.
+`bobtask handoff` points the new Bob task at the note when the workspace has
+one, keeping the transcript only for details the note lacks.
 
 ## tmux agent status
 
@@ -229,6 +240,8 @@ in a fresh context. It writes the transcript to
 `$TMPDIR/bob-handoff/<task-id>.md`, keeping the first `N` (default 2000)
 characters of each tool output, then starts `bob chat` in the task's
 workspace. Bob's interactive chat takes no initial prompt, so the first
-message that points it at the transcript is copied to the clipboard
-(`pbcopy`, `wl-copy` or `xclip`) and printed; paste it to start. Exit the
+message that points it at the transcript, or at the workspace's handoff note
+when there is one (see [Agent handoff notes](#agent-handoff-notes)), is copied
+to the clipboard (`pbcopy`, `wl-copy` or `xclip`) and printed; paste it to
+start. Exit the
 stopped Bob first: tasks locked by a running Bob are not listed.

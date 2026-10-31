@@ -337,6 +337,19 @@ def copy_to_clipboard(text):
     return False
 
 
+def handoff_note(directory):
+    """Path of the agent handoff note in directory's Git directory, or None."""
+    try:
+        result = subprocess.run(["git", "-C", directory, "rev-parse", "--git-path", "agent-handoff.md"],
+                                capture_output=True, text=True)
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    path = os.path.normpath(os.path.join(directory, result.stdout.strip()))
+    return path if os.path.isfile(path) else None
+
+
 def command_handoff(args):
     db = connect(readonly=True)
     chosen = pick_tasks(db, args, multi=False)
@@ -356,8 +369,17 @@ def command_handoff(args):
     path = handoff_dir / f"{task['id']}.md"
     with path.open("w", encoding="utf-8") as out:
         print_transcript(db, task, out, tool_limit=args.tool_limit)
-    prompt = (f"Read {path}. It is the transcript of an earlier Bob task in this workspace. "
-              "Summarize its goal and current state, then continue the work from where it stopped.")
+    # A handoff note written by the agent (see deploy/AGENTS.md) is far shorter
+    # than the transcript, so the new task starts from it when present.
+    note = handoff_note(directory)
+    if note:
+        prompt = (f"Read {note}, the handoff note of earlier work in this workspace, and continue the work "
+                  f"from where it stopped. If it lacks a detail you need, search {path} (the transcript of "
+                  "the earlier Bob task) for it instead of reading the whole transcript.")
+        print(f"Handoff note: {note} (updated {format_time(os.path.getmtime(note))})", file=sys.stderr)
+    else:
+        prompt = (f"Read {path}. It is the transcript of an earlier Bob task in this workspace. "
+                  "Summarize its goal and current state, then continue the work from where it stopped.")
     copied = copy_to_clipboard(prompt)
     print(f"Transcript: {path}", file=sys.stderr)
     print(f"{'Copied to the clipboard' if copied else 'Paste this'} as the first message:\n{prompt}", file=sys.stderr)

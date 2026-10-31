@@ -11,13 +11,13 @@ check() { python3 -c "import json, sys; d = json.load(open(sys.argv[1])); assert
 
 # Creates the file with the defaults when missing.
 bash "$root/scripts/install-bob-settings" > /dev/null
-check 'd == {"session": {"maxTurns": 300, "limitWarnings": True}}'
+check 'd == {"session": {"maxTurns": 300, "limitWarnings": True, "respectGitIgnore": True}}'
 
 # Keeps unrelated settings and values the user set; adds only missing keys.
-printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50}}' > "$settings"
+printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": false}}' > "$settings"
 chmod 600 "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null
-check 'd == {"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "limitWarnings": True}}'
+check 'd == {"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": False, "limitWarnings": True}}'
 [[ $(stat -c %a "$settings" 2>/dev/null || stat -f %Lp "$settings") == 600 ]] || fail 'mode not kept'
 
 # Leaves a complete file untouched.

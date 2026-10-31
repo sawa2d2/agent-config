@@ -130,6 +130,15 @@ out=$(cat "$note")
 [[ $out == *$'file\n[... 5 more characters omitted]'* ]] || fail "handoff tool output not cut: $out"
 [[ $(cat "$tmp/clipboard") == "Read $note."* ]] || fail "clipboard: $(cat "$tmp/clipboard")"
 grep -q 'Copied to the clipboard' "$tmp/handoff-err" || fail "handoff message: $(cat "$tmp/handoff-err")"
+
+# handoff: a handoff note in the workspace's Git directory is preferred over the transcript.
+printf '%s\n' 'Goal: test' > "$work/a/.git/agent-handoff.md"
+(cd "$tmp" && PICK=$'^insub\t' TMPDIR="$tmp/tmpdir" bobtask handoff 2> "$tmp/handoff-err")
+[[ $(cat "$tmp/clipboard") == "Read $work/a/.git/agent-handoff.md, "*"search $tmp/tmpdir/bob-handoff/insub.md "* ]] \
+  || fail "note clipboard: $(cat "$tmp/clipboard")"
+grep -q "Handoff note: $work/a/.git/agent-handoff.md" "$tmp/handoff-err" || fail "note message: $(cat "$tmp/handoff-err")"
+[[ $(cat "$tmp/bob-cwd") == "$work/a/sub" ]] || fail "note handoff cwd: $(cat "$tmp/bob-cwd")"
+rm "$work/a/.git/agent-handoff.md"
 rm "$tmp/bin/pbcopy"
 
 # resume: every directory by default, -c for the current project; Bob starts in the task workspace.
