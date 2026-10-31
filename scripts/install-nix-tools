@@ -7,9 +7,10 @@ if ! command -v nix >/dev/null 2>&1; then
 fi
 
 # The ACP adapter depends on Claude Code, but does not expose the claude CLI.
+# rtk condenses shell command output for the agents (see install-agent-hooks).
 # nix profile list bolds names with ANSI escapes even when piped; strip them.
 profile=$(nix profile list | sed $'s/\e\\[[0-9;]*m//g')
-for pkg in claude-code claude-agent-acp codex; do
+for pkg in claude-code claude-agent-acp codex rtk; do
   if grep -Eq "^Name:[[:space:]]+$pkg$" <<< "$profile"; then
     printf 'Already managed by Nix: %s\n' "$pkg"
   else

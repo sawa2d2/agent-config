@@ -12,7 +12,7 @@ curl -fsSL https://raw.githubusercontent.com/sawa2d2/agent-config/main/bootstrap
 
 Clones into `~/agent-config` (override with `AGENT_CONFIG_DIR`) and runs the existing installer. An existing Git checkout is reused without pulling; other existing destinations are not overwritten.
 
-Installs global instructions, agent skills, Spec Kit, Claude Code CLI and its ACP adapter (via Nix when available), and the Claude Code plugins `superpowers`, `ralph-loop` and `pyright-lsp` from the official marketplace (`scripts/install-claude-plugins`). `pyright-lsp` needs `pyright-langserver` on `PATH`; an existing one is reused, otherwise Nix adds `pyright`. Re-running skips what is already installed. Existing unmanaged instructions are protected.
+Installs global instructions, agent skills, Spec Kit, Claude Code CLI and its ACP adapter and rtk (via Nix when available), and the Claude Code plugins `superpowers`, `ralph-loop` and `pyright-lsp` from the official marketplace (`scripts/install-claude-plugins`). `pyright-lsp` needs `pyright-langserver` on `PATH`; an existing one is reused, otherwise Nix adds `pyright`. Re-running skips what is already installed. Existing unmanaged instructions are protected.
 
 ## Skills
 
@@ -138,6 +138,27 @@ set -g window-status-current-format '#{?@agent_attention,#[fg=magenta bold],} #I
 A status line drawn by a script can set `@agent_status_hook` to a command
 that `agent-tmux-status` runs (with `tmux run-shell -b`) after each change.
 A long-running tool call without other output can also turn a window stale.
+
+## rtk command output compression
+
+Nix adds [rtk](https://github.com/rtk-ai/rtk) (`scripts/install-nix-tools`).
+While it is on `PATH`, `./install` and the `bin/bob` and `bin/claude` wrappers
+register `rtk hook claude` as a `PreToolUse` hook for Claude Code's `Bash`
+tool and Bob's `execute_command` tool (and a filtered hook for Codex, below),
+and remove them once rtk is gone. The
+hook rewrites supported commands (`git`, `ls`, `grep`, test runners, ...) to
+`rtk` equivalents that condense their output, saving tokens; other commands
+run unchanged, and each agent's normal approval still applies. Condensed
+output can omit detail (`rtk git log` drops commit bodies); an agent can run
+`rtk proxy <command>` for the full output. `rtk gain` shows the savings.
+
+Codex applies a rewritten command only when the hook also approves it, so
+`$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`) gets
+`scripts/codex-rtk-hook` instead: it passes only single read-only commands
+(`git status|log|diff|show`, `ls`, `find`, `grep`, `rg`, `cat`, `head`, `tail`,
+`wc`, without chaining, redirection or options that run programs) to
+`rtk hook codex`; everything else keeps Codex's approval. Codex runs a new or
+changed hook only after you trust it in the TUI (`/hooks`).
 
 ## Neovim chat (optional)
 

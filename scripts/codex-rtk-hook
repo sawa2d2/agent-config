@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Codex PreToolUse hook: rewrite read-only shell commands with rtk.
+
+Codex applies updatedInput only together with permissionDecision "allow"
+(observed in Codex 0.160.0), so every rtk rewrite also skips Codex's
+approval. Pass only single read-only commands to "rtk hook codex"; anything
+else produces no output and keeps Codex's normal approval.
+"""
+
+import json
+import re
+import shlex
+import subprocess
+import sys
+
+READ_ONLY = {"ls", "find", "grep", "rg", "cat", "head", "tail", "wc"}
+READ_ONLY_GIT = {"status", "log", "diff", "show"}
+# Chaining, pipes, redirection, substitution, background jobs and newlines.
+SHELL_SYNTAX = re.compile(r"[;&|<>`$()\n\\]")
+# Options that make otherwise read-only commands run or write something.
+UNSAFE_OPTIONS = re.compile(r"^-(exec|execdir|ok|okdir|delete|fprint|fprintf|fls)$|^--(output|ext-diff|pre)\b")
+
+
+def read_only(command):
+    if SHELL_SYNTAX.search(command):
+        return False
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return False
+    if not words or any(UNSAFE_OPTIONS.search(word) for word in words):
+        return False
+    if words[0] == "git":
+        return len(words) > 1 and words[1] in READ_ONLY_GIT
+    return words[0] in READ_ONLY
+
+
+def main():
+    payload = sys.stdin.read()
+    try:
+        command = json.loads(payload)["tool_input"]["command"]
+    except (ValueError, KeyError, TypeError):
+        return
+    if isinstance(command, str) and read_only(command):
+        result = subprocess.run(["rtk", "hook", "codex"], input=payload, capture_output=True, text=True)
+        sys.stdout.write(result.stdout)
+
+
+if __name__ == "__main__":
+    main()

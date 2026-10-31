@@ -4,7 +4,9 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
-mkdir -p "$tmp/real" "$tmp/cwd"
+# bin/bob updates agent settings under HOME on each launch; keep the real ones intact.
+export HOME="$tmp/home"
+mkdir -p "$tmp/real" "$tmp/cwd" "$HOME"
 
 # Fake CLI placed before agent-config on PATH, as nvm or Nix would.
 cat > "$tmp/real/bob" <<'BOB'

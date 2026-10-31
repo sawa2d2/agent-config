@@ -23,7 +23,7 @@ run() { PATH="$tmp/bin:$1:/usr/bin:/bin" bash "$root/scripts/install-nix-tools";
 # New machine: adds the CLIs and pyright.
 : > "$TEST_PROFILE"
 run "$tmp/other" > /dev/null
-[[ $(paste -sd, "$TEST_LOG") == 'nixpkgs#claude-code,nixpkgs#claude-agent-acp,nixpkgs#codex,nixpkgs#pyright' ]] || fail "first run: $(cat "$TEST_LOG")"
+[[ $(paste -sd, "$TEST_LOG") == 'nixpkgs#claude-code,nixpkgs#claude-agent-acp,nixpkgs#codex,nixpkgs#rtk,nixpkgs#pyright' ]] || fail "first run: $(cat "$TEST_LOG")"
 
 # Re-running with pyright-langserver on PATH adds nothing, despite the escape codes.
 : > "$TEST_LOG"
@@ -33,7 +33,7 @@ out=$(run "$tmp/other")
 [[ $out == *"Already installed: pyright-langserver ($tmp/other/pyright-langserver)"* ]] || fail "second run output: $out"
 
 # pyright from elsewhere (e.g. home-manager) is reused instead of a conflicting profile entry.
-printf '%s\n' claude-code claude-agent-acp codex > "$TEST_PROFILE"
+printf '%s\n' claude-code claude-agent-acp codex rtk > "$TEST_PROFILE"
 run "$tmp/other" > /dev/null
 [[ ! -s "$TEST_LOG" ]] || fail "existing pyright duplicated: $(cat "$TEST_LOG")"
 
