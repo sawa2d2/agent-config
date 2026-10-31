@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Install rtk (https://github.com/rtk-ai/rtk), which install-agent-hooks hooks
+# into the agents to condense shell command output. The Apache-2.0 "rtk-oss"
+# edition has the same PreToolUse rewrite hook and command filters as the full
+# edition. The release and each archive's SHA-256 are pinned; to update, take
+# both from the release's checksums.txt. An rtk already on PATH (from Nix,
+# Homebrew or an earlier run) is kept.
+version=1.1.0
+install_dir="$HOME/.local/bin"
+
+if command -v rtk >/dev/null 2>&1; then
+  printf 'Already installed: %s\n' "$(command -v rtk)"
+  exit 0
+fi
+
+case "$(uname -s) $(uname -m)" in
+  'Linux x86_64') target=x86_64-unknown-linux-musl sha256=4dec94a64035e08189ae82fd5408fe4ae9ae27a665fc07e3e3ec3c4c2d8e8a3e ;;
+  'Linux aarch64' | 'Linux arm64') target=aarch64-unknown-linux-gnu sha256=57a4fac13d18da77f0577ea8b68def7934b934bf76d0a6e161f0bfd06b1e1078 ;;
+  'Darwin x86_64') target=x86_64-apple-darwin sha256=559156238dd3e148c84c88c3a62a7594b874f68793208994e1b02e77a9d9abf9 ;;
+  'Darwin arm64') target=aarch64-apple-darwin sha256=1623590dd8d65374f61589c599c764c08ba9ce993ebe6b601312a89a3c874558 ;;
+  *)
+    printf 'WARNING: no rtk build for %s; skipping rtk.\n' "$(uname -s) $(uname -m)" >&2
+    exit 0
+    ;;
+esac
+
+command -v curl >/dev/null 2>&1 || { echo 'curl is required to install rtk' >&2; exit 1; }
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256() { sha256sum "$1" | cut -d ' ' -f 1; }
+else
+  sha256() { shasum -a 256 "$1" | cut -d ' ' -f 1; }
+fi
+
+tmp=$(mktemp -d)
+trap 'rm -rf -- "$tmp"' EXIT
+archive="$tmp/rtk.tar.gz"
+curl -fsSL -o "$archive" "https://github.com/rtk-ai/rtk/releases/download/v$version/rtk-oss-$target.tar.gz"
+actual=$(sha256 "$archive")
+if [[ $actual != "$sha256" ]]; then
+  printf 'rtk archive checksum mismatch: expected %s, got %s\n' "$sha256" "$actual" >&2
+  exit 1
+fi
+tar -xzf "$archive" -C "$tmp" rtk
+mkdir -p -- "$install_dir"
+install -m 755 "$tmp/rtk" "$install_dir/rtk"
+printf 'Installed: %s (rtk-oss %s)\n' "$install_dir/rtk" "$version"
+case ":$PATH:" in
+  *":$install_dir:"*) ;;
+  *) printf 'NOTICE: add %s to PATH; the agent hooks are registered only while rtk is on PATH.\n' "$install_dir" >&2 ;;
+esac

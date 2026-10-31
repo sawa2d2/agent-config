@@ -51,6 +51,9 @@ if [[ -e "$HOME/.bob/AGENTS.md" || -L "$HOME/.bob/AGENTS.md" ]]; then
   printf 'NOTICE: legacy ~/.bob/AGENTS.md remains in place; review it manually.\n' >&2
 fi
 
+# Before install-agent-hooks, which registers the rtk hooks only while rtk is on PATH.
+bash "$repo_dir/scripts/install-rtk"
+
 # Claude, Bob and Codex colors follow the saved dotfiles theme, if present.
 # The palette is embedded, so agent-config remains independently installable.
 if command -v python3 >/dev/null 2>&1; then
