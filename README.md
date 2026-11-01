@@ -100,10 +100,13 @@ To continue a stopped task in a fresh context, see `bobtask handoff`.
 ## Agent handoff notes
 
 The shared instructions (`deploy/AGENTS.md`) tell Bob, Claude Code and Codex
-to write a short handoff note before stopping with work unfinished, to the
-path `git rev-parse --path-format=absolute --git-path agent-handoff.md` prints
-(`.git/agent-handoff.md`, never committed), and to read it when continuing.
-Any of the three agents can pick up from it without the earlier transcript.
+to write a short handoff note before stopping with work unfinished, to
+`.agent-handoff.md` at the root of the working tree, and to read it when
+continuing. Any of the three agents can pick up from it without the earlier
+transcript. The note stays inside the working tree because Codex's sandbox
+keeps `.git` read-only. Git ignores it through the global gitignore of the
+dotfiles; a repository's `.gitignore` must not list it, since Bob with
+`respectGitIgnore` refuses to read or write the files listed there.
 `bobtask handoff` points the new Bob task at the note when the workspace has
 one, keeping the transcript only for details the note lacks.
 

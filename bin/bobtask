@@ -338,15 +338,15 @@ def copy_to_clipboard(text):
 
 
 def handoff_note(directory):
-    """Path of the agent handoff note in directory's Git directory, or None."""
+    """Path of the agent handoff note at the root of directory's working tree, or None."""
     try:
-        result = subprocess.run(["git", "-C", directory, "rev-parse", "--git-path", "agent-handoff.md"],
+        result = subprocess.run(["git", "-C", directory, "rev-parse", "--show-toplevel"],
                                 capture_output=True, text=True)
     except OSError:
         return None
     if result.returncode != 0:
         return None
-    path = os.path.normpath(os.path.join(directory, result.stdout.strip()))
+    path = os.path.join(result.stdout.strip(), ".agent-handoff.md")
     return path if os.path.isfile(path) else None
 
 
