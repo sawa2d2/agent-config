@@ -19,7 +19,8 @@
 ## Verification
 - Use the repository's existing verification commands.
 - Iterate through implementation, testing, diagnosis, and fixes while making meaningful progress, until relevant tests pass.
-- Do not delegate executable checks to the user when the agent can run them.
+- Run only the checks relevant to the change, in a quiet mode that shows failures rather than full logs.
+- Do not delegate executable checks to the user when the agent can run them, except slow or costly ones; hand those over as copy-paste commands with the expected results.
 - Stop and consult the user when permissions, credentials, environment restrictions, or external dependencies prevent further progress.
 - Do not retry an unchanged failing operation without a concrete reason to expect a different result.
 - Investigate reasonable alternatives without bypassing security controls or exceeding granted permissions.
@@ -34,6 +35,7 @@ These apply to coding and maintenance tasks.
 - For ambiguous requirements with meaningful consequences, clarify the assumption; otherwise state it briefly and proceed.
 - Prefer the smallest change that fully solves the requested problem. Avoid speculative abstractions, broad refactoring, unnecessary dependencies, and premature generalization.
 - Reuse existing patterns and utilities where appropriate, without forcing reuse when it makes the code harder to understand.
+- When the same multi-step command sequence recurs, propose a script for it, so later runs cost one call instead of rebuilding the steps.
 - Do not add compatibility paths, fallbacks, or configuration options without a concrete need.
 - Handle errors at the correct boundary; do not silently swallow failures.
 - Preserve existing behavior outside the requested scope.

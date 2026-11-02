@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# Usage: tests/run [test-file...]
+# Run the given tests (default: every tests/*.sh) and print only the failures,
+# each with the end of its output, and a one-line summary, so a run costs
+# little to read. Exits 1 if any test fails.
+dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+(( $# > 0 )) || set -- "$dir"/*.sh
+
+failed=0
+for test in "$@"; do
+  if ! output=$(bash "$test" 2>&1); then
+    failed=$((failed + 1))
+    printf 'FAIL %s\n' "${test#"$dir"/}"
+    tail -n 20 <<< "$output" | sed 's/^/  /'
+  fi
+done
+printf '%d passed, %d failed\n' "$(($# - failed))" "$failed"
+(( failed == 0 ))

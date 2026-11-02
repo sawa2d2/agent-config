@@ -289,3 +289,9 @@ when there is one (see [Agent handoff notes](#agent-handoff-notes)), is copied
 to the clipboard (`pbcopy`, `wl-copy` or `xclip`) and printed; paste it to
 start. Exit the
 stopped Bob first: tasks locked by a running Bob are not listed.
+
+## Tests
+
+`tests/run` runs every `tests/*.sh` (or the files given) and prints only the
+failures, each with the end of its output, and a one-line summary; it exits 1
+if any test fails.
