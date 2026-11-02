@@ -17,10 +17,10 @@ printf '#!/bin/sh\n' > "$tmp/rtk-bin/rtk" && chmod +x "$tmp/rtk-bin/rtk"
 install_hooks() { PATH="$tmp/bin:/usr/bin:/bin" bash "$root/scripts/install-agent-hooks"; }
 install_hooks_rtk() { PATH="$tmp/rtk-bin:$tmp/bin:/usr/bin:/bin" bash "$root/scripts/install-agent-hooks"; }
 check() {
-  BOB="$bob" CLAUDE="$claude" STATUS="$root/scripts/agent-tmux-status" python3 -c "
+  BOB="$bob" CLAUDE="$claude" STATUS="$root/scripts/agent-tmux-status" SUGGEST="$root/scripts/bob-handoff-suggest" python3 -c "
 import json, os
 bob, claude = (json.load(open(os.environ[k])) for k in ('BOB', 'CLAUDE'))
-status = os.environ['STATUS']
+status, suggest = os.environ['STATUS'], os.environ['SUGGEST']
 def states(settings, event):
     return [(g.get('matcher'), h['command']) for g in settings['hooks'].get(event, []) for h in g['hooks']]
 assert $1, (bob, claude)
@@ -34,8 +34,9 @@ check "states(bob, 'Stop') == [(None, status + ' done')] and states(bob, 'Sessio
 check "sorted(bob['hooks']) == ['PostToolUse', 'PreToolUse', 'SessionStart', 'Stop', 'UserPromptSubmit']"
 check "states(claude, 'Notification') == [('permission_prompt', status + ' waiting')]"
 check "sorted(claude['hooks']) == ['Notification', 'PostToolUse', 'PreToolUse', 'SessionEnd', 'Stop', 'UserPromptSubmit']"
-check "states(bob, 'UserPromptSubmit') == [(None, status + ' prompt')] and states(claude, 'UserPromptSubmit') == [(None, status + ' prompt')]"
-check "all(cmd.endswith((' prompt', ' working', ' done', ' waiting', ' clear')) for s in (bob, claude) for e in s['hooks'] for _, cmd in states(s, e))"
+check "states(bob, 'UserPromptSubmit') == [(None, status + ' prompt'), (None, suggest)]"
+check "states(claude, 'UserPromptSubmit') == [(None, status + ' prompt')]"
+check "all(cmd.endswith((' prompt', ' working', ' done', ' waiting', ' clear')) for s in (bob, claude) for e in s['hooks'] for _, cmd in states(s, e) if cmd != suggest)"
 
 # Re-running leaves the files untouched.
 before=$(cat "$bob" "$claude")

@@ -20,6 +20,7 @@ Skills in `deploy/skills/` are copied to `~/.bob/skills`, `~/.claude/skills` and
 
 | Skill | Use |
 | --- | --- |
+| `handoff` | Write `.agent-handoff.md` (see [Agent handoff notes](#agent-handoff-notes)) when asked, when a suggested handoff is accepted, or before stopping with work unfinished |
 | `autonomous-development` | Invoked by name only (`/autonomous-development`): route an objective to superpowers, Spec Kit or ralph-loop, and run long work with stacked branches, a progress file at the working-tree root and batched user checks |
 
 ## Claude Code theme
@@ -105,13 +106,21 @@ To continue a stopped task in a fresh context, see `bobtask handoff`.
 ## Agent handoff notes
 
 The shared instructions (`deploy/AGENTS.md`) tell Bob, Claude Code and Codex
-to write a short handoff note before stopping with work unfinished, to
-`.agent-handoff.md` at the root of the working tree, and to read it when
-continuing. Any of the three agents can pick up from it without the earlier
+to write a short handoff note with the `handoff` skill (`/handoff`) when asked,
+when they accept a suggested handoff, before stopping with work unfinished, and
+first thing on a Bob turn or cost limit warning. The note goes to
+`.agent-handoff.md` at the root of the working tree, and the agents read it
+when continuing. Any of the three agents can pick up from it without the earlier
 transcript. The note stays inside the working tree because Codex's sandbox
 keeps `.git` read-only. Git ignores it through the global gitignore of the
 dotfiles; a repository's `.gitignore` must not list it, since Bob with
 `respectGitIgnore` refuses to read or write the files listed there.
+For Bob, `./install` also registers `scripts/bob-handoff-suggest` as a
+`UserPromptSubmit` hook. Once a task has spent half of `session.maxCost`, read
+from Bob's database without using the model, it adds one line of context, once
+per task, so the agent suggests a handoff; answering yes writes the note. It
+relies on Bob's internal `tasks.costs` column (Bob Shell 2.0.6) and adds
+nothing when that is missing or no cost limit is set.
 `bobtask handoff` points the new Bob task at the note when the workspace has
 one, keeping the transcript only for details the note lacks.
 The `autonomous-development` skill keeps its progress file,

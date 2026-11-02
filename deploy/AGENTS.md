@@ -43,9 +43,8 @@ These apply to coding and maintenance tasks.
 
 ## Handoff
 - Keep work state in the repository (commits, plan files), not only in the conversation, so another agent or session can continue without the transcript.
-- Before stopping with work unfinished (a turn or cost limit warning, a nearly full context, or the user ending the session), write a handoff note to `.agent-handoff.md` at the root of the working tree (`git rev-parse --show-toplevel`), replacing any earlier note. It stays inside the workspace, where every agent can read and write it; never commit it or add it to the repository's `.gitignore`.
-- Keep the note under about 60 lines: the goal, the current state (branch, last commit, what is done and verified), decisions with their reasons, open problems, and the next steps. Point to commits and files instead of copying their content.
-- When continuing earlier work in a repository, read the handoff note first if it exists. Delete it once the work it describes is complete.
+- Write a handoff note with the `handoff` skill when the user asks for one or accepts a suggested handoff, and before stopping with work unfinished (a nearly full context, or the user ending the session). A warning that you are approaching a turn or cost limit means the task is about to stop: write the note first, then wrap up.
+- When continuing earlier work in a repository, read `.agent-handoff.md` at the root of the working tree first if it exists. Delete it once the work it describes is complete.
 
 ## Communication
 - Be direct and technically precise; avoid unnecessary explanations and verbosity.

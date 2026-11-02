@@ -5,9 +5,10 @@ set -euo pipefail
 # the tmux window of a running agent shows whether it works, waits or is done.
 # When rtk is on PATH, also register its PreToolUse hook (for Codex, through
 # scripts/codex-rtk-hook), which rewrites shell commands to rtk equivalents
-# that condense their output to save tokens. Entries whose command runs an
-# agent-tmux-status or codex-rtk-hook (any checkout path) or the rtk hook are
-# replaced; every other hook and setting is kept. Re-running changes
+# that condense their output to save tokens. For Bob, also register
+# scripts/bob-handoff-suggest, which suggests a handoff once a task has spent
+# half of its cost limit. Entries whose command runs one of these scripts (any
+# checkout path) or the rtk hook are replaced; every other hook and setting is kept. Re-running changes
 # nothing, and the rtk entries go away once rtk is no longer installed.
 command -v python3 >/dev/null 2>&1 || {
   echo 'python3 is required to merge agent hooks safely' >&2
@@ -18,7 +19,7 @@ repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 rtk=0
 command -v rtk >/dev/null 2>&1 && rtk=1
 AGENT_TMUX_STATUS="$repo_dir/scripts/agent-tmux-status" CODEX_RTK_HOOK="$repo_dir/scripts/codex-rtk-hook" \
-  RTK="$rtk" python3 - <<'PY'
+  BOB_HANDOFF_SUGGEST="$repo_dir/scripts/bob-handoff-suggest" RTK="$rtk" python3 - <<'PY'
 import json
 import os
 import shlex
@@ -61,8 +62,16 @@ rtk_targets = {
 }
 
 
+# Event -> (matcher, command) registered whether or not rtk is installed.
+extra_targets = {
+    home / ".bob/settings/settings.json": {
+        "UserPromptSubmit": (None, shlex.quote(os.environ["BOB_HANDOFF_SUGGEST"]))},
+}
+
+
 def managed_command(command):
-    return "agent-tmux-status" in command or "codex-rtk-hook" in command or command == RTK_HOOK
+    return (any(script in command for script in ("agent-tmux-status", "codex-rtk-hook", "bob-handoff-suggest"))
+            or command == RTK_HOOK)
 
 
 def managed(group):
@@ -86,6 +95,7 @@ for path in dict.fromkeys([*targets, *rtk_targets]):
     updated = {event: [group for group in groups if not (isinstance(group, dict) and managed(group))]
                for event, groups in hooks.items()}
     entries = [(event, matcher, f"{command} {state}") for event, (matcher, state) in events.items()]
+    entries += [(event, matcher, hook) for event, (matcher, hook) in extra_targets.get(path, {}).items()]
     if os.environ["RTK"] == "1":
         entries += [(event, matcher, hook) for event, (matcher, hook) in rtk_targets.get(path, {}).items()]
     for event, matcher, hook in entries:
