@@ -5,8 +5,10 @@ set -euo pipefail
 # the user has set: a higher turn limit, a warning five turns before it so the
 # agent wraps up before Bob stops the task, file tools that skip ignored files
 # such as dependencies and build output, and compaction before the context is
-# nearly full, which keeps each turn smaller (keys observed in Bob Shell 2.0.6;
-# Bob compacts at 90% by default).
+# nearly full, which keeps each turn smaller, and a cost limit per task so a
+# runaway task cannot spend a day's share of a monthly Bobcoin budget (keys
+# observed in Bob Shell 2.0.6; Bob compacts at 90% and has no cost limit by
+# default).
 command -v python3 >/dev/null 2>&1 || {
   echo 'python3 is required to merge Bob settings safely' >&2
   exit 1
@@ -20,7 +22,7 @@ import tempfile
 
 settings_file = Path.home() / ".bob/settings/settings.json"
 defaults = {"session": {"maxTurns": 300, "limitWarnings": True, "respectGitIgnore": True,
-                        "compactionThresholdPercent": 80}}
+                        "compactionThresholdPercent": 80, "maxCost": 20}}
 
 # Write through a symlink (settings kept in a dotfiles checkout, say) so the link survives.
 settings_file = Path(os.path.realpath(settings_file))

@@ -97,6 +97,7 @@ yourself are kept:
 | `session.limitWarnings` | `true` | Tell the agent to wrap up five turns before the limit |
 | `session.respectGitIgnore` | `true` | Apply each `.gitignore` like a `.bobignore`: ignored files are hidden from listings and search and cannot be read or written |
 | `session.compactionThresholdPercent` | `80` | Compact the context at 80% instead of 90%, keeping each turn smaller; instructions given only in chat may be summarized away |
+| `session.maxCost` | `20` | Stop a task once it has spent 20 Bobcoins (no limit by default); with `limitWarnings` the agent is told to wrap up at 80%, and continuing doubles the limit for that task |
 
 To continue a stopped task in a fresh context, see `bobtask handoff`.
 
