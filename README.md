@@ -93,11 +93,12 @@ yourself are kept:
 
 | Key | Value | Effect |
 | --- | --- | --- |
-| `session.maxTurns` | `300` | Turn limit per task (Bob's default is 100) |
-| `session.limitWarnings` | `true` | Tell the agent to wrap up five turns before the limit |
+| `session.limitWarnings` | `true` | Tell the agent to wrap up five turns before the turn limit (Bob's default of 100 model calls per task) and at 80% of `maxCost`; the shared instructions then have it write a handoff note |
 | `session.respectGitIgnore` | `true` | Apply each `.gitignore` like a `.bobignore`: ignored files are hidden from listings and search and cannot be read or written |
 | `session.compactionThresholdPercent` | `80` | Compact the context at 80% instead of 90%, keeping each turn smaller; instructions given only in chat may be summarized away |
 | `session.maxCost` | `20` | Stop a task once it has spent 20 Bobcoins (no limit by default); with `limitWarnings` the agent is told to wrap up at 80%, and continuing doubles the limit for that task |
+
+Earlier installs set `session.maxTurns` to `300`; that exact value is removed so Bob's default applies, and any other value is kept.
 
 To continue a stopped task in a fresh context, see `bobtask handoff`.
 

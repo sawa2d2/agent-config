@@ -11,7 +11,7 @@ check() { python3 -c "import json, sys; d = json.load(open(sys.argv[1])); assert
 
 # Creates the file with the defaults when missing.
 bash "$root/scripts/install-bob-settings" > /dev/null
-check 'd == {"session": {"maxTurns": 300, "limitWarnings": True, "respectGitIgnore": True, "compactionThresholdPercent": 80, "maxCost": 20}}'
+check 'd == {"session": {"limitWarnings": True, "respectGitIgnore": True, "compactionThresholdPercent": 80, "maxCost": 20}}'
 
 # Keeps unrelated settings and values the user set; adds only missing keys.
 printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": false, "compactionThresholdPercent": 90}}' > "$settings"
@@ -19,6 +19,13 @@ chmod 600 "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null
 check 'd == {"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": False, "compactionThresholdPercent": 90, "limitWarnings": True, "maxCost": 20}}'
 [[ $(stat -c %a "$settings" 2>/dev/null || stat -f %Lp "$settings") == 600 ]] || fail 'mode not kept'
+
+# The 300-turn limit of earlier installs goes back to Bob's default.
+printf '%s\n' '{"session": {"maxTurns": 300}}' > "$settings"
+bash "$root/scripts/install-bob-settings" > /dev/null
+check '"maxTurns" not in d["session"] and d["session"]["maxCost"] == 20'
+printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": false, "compactionThresholdPercent": 90}}' > "$settings"
+bash "$root/scripts/install-bob-settings" > /dev/null
 
 # Leaves a complete file untouched.
 before=$(cat "$settings")
@@ -39,6 +46,6 @@ rm "$settings" && ln -s "$tmp/target.json" "$settings"
 # A symlinked settings file (kept in a dotfiles checkout, say) is updated through the link.
 bash "$root/scripts/install-bob-settings" > /dev/null || fail 'symlink refused'
 [[ -L $settings ]] || fail 'symlink replaced'
-grep -q '"maxTurns": 300' "$tmp/target.json" || fail "symlink target not updated: $(cat "$tmp/target.json")"
+grep -q '"maxCost": 20' "$tmp/target.json" || fail "symlink target not updated: $(cat "$tmp/target.json")"
 
 echo 'PASS: install-bob-settings'
