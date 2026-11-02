@@ -5,13 +5,19 @@ set -euo pipefail
 # into the agents to condense shell command output. The Apache-2.0 "rtk-oss"
 # edition has the same PreToolUse rewrite hook and command filters as the full
 # edition. The release and each archive's SHA-256 are pinned; to update, take
-# both from the release's checksums.txt. An rtk already on PATH (from Nix,
-# Homebrew or an earlier run) is kept.
+# both from the release's checksums.txt. On macOS with Homebrew, rtk's
+# recommended install, the tap's rtk-oss formula is used instead. An rtk
+# already on PATH (from Nix, Homebrew or an earlier run) is kept.
 version=1.1.0
 install_dir="$HOME/.local/bin"
 
 if command -v rtk >/dev/null 2>&1; then
   printf 'Already installed: %s\n' "$(command -v rtk)"
+  exit 0
+fi
+
+if [[ $(uname -s) == Darwin ]] && command -v brew >/dev/null 2>&1; then
+  brew install rtk-ai/tap/rtk-oss
   exit 0
 fi
 

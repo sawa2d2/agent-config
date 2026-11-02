@@ -8,7 +8,7 @@ export HOME="$tmp/home"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # Fake curl serves a local archive and logs the URL; fake uname reports $TEST_UNAME.
-mkdir -p "$tmp/bin" "$tmp/pkg" "$tmp/other"
+mkdir -p "$tmp/bin" "$tmp/pkg" "$tmp/other" "$tmp/brew-bin"
 printf '#!/bin/sh\necho fake rtk\n' > "$tmp/pkg/rtk" && chmod +x "$tmp/pkg/rtk"
 tar -czf "$tmp/rtk.tar.gz" -C "$tmp/pkg" rtk
 cat > "$tmp/bin/curl" <<'CURL'
@@ -40,6 +40,20 @@ grep -q 'checksum mismatch' "$tmp/err" || fail "mismatch message: $(cat "$tmp/er
 : > "$TEST_LOG"
 TEST_UNAME='Darwin arm64' run "$tmp/empty" > /dev/null 2>&1 && fail 'checksum mismatch accepted'
 [[ $(cat "$TEST_LOG") == */rtk-oss-aarch64-apple-darwin.tar.gz ]] || fail "macOS download URL: $(cat "$TEST_LOG")"
+
+# On macOS, Homebrew installs the tap's rtk-oss formula instead of the release.
+: > "$TEST_LOG"
+cat > "$tmp/brew-bin/brew" <<'BREW'
+#!/usr/bin/env bash
+echo "brew $*" >> "$TEST_LOG"
+BREW
+chmod +x "$tmp/brew-bin/brew"
+TEST_UNAME='Darwin arm64' run "$tmp/brew-bin" > /dev/null || fail 'brew install failed'
+[[ $(cat "$TEST_LOG") == 'brew install rtk-ai/tap/rtk-oss' ]] || fail "brew: $(cat "$TEST_LOG")"
+# Linux ignores Homebrew and keeps the release download.
+: > "$TEST_LOG"
+TEST_UNAME='Linux x86_64' run "$tmp/brew-bin" > /dev/null 2>&1 && fail 'checksum mismatch accepted'
+[[ $(cat "$TEST_LOG") == https://github.com/* ]] || fail "Linux with brew: $(cat "$TEST_LOG")"
 
 # Platforms without a build are skipped with a warning.
 : > "$TEST_LOG"

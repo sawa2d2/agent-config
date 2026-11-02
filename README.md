@@ -147,8 +147,9 @@ A long-running tool call without other output can also turn a window stale.
 
 `./install` adds [rtk](https://github.com/rtk-ai/rtk) (`scripts/install-rtk`):
 the Apache-2.0 `rtk-oss` edition from a pinned GitHub release, checked against
-its SHA-256 and installed to `~/.local/bin`, unless an `rtk` (from Nix or
-Homebrew, for example) is already on `PATH`. While it is on `PATH`, `./install` and the `bin/bob` and `bin/claude` wrappers
+its SHA-256 and installed to `~/.local/bin`, or on macOS with Homebrew the
+`rtk-ai/tap/rtk-oss` formula, unless an `rtk` (from Nix, for example) is
+already on `PATH`. While it is on `PATH`, `./install` and the `bin/bob` and `bin/claude` wrappers
 register `rtk hook claude` as a `PreToolUse` hook for Claude Code's `Bash`
 tool and Bob's `execute_command` tool (and a filtered hook for Codex, below),
 and remove them once rtk is gone. The
