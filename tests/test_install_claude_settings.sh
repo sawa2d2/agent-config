@@ -23,19 +23,22 @@ assert "text" not in theme["overrides"]
 assert settings["theme"] == "custom:agent-config-selected"
 assert settings["permissions"]["allow"] == ["Read"]
 assert settings["tui"] == "default"
+assert settings["autoCompactWindow"] == 200000
 PY
 
-# An explicit renderer choice (for example via /tui fullscreen) is preserved.
+# An explicit renderer choice (for example via /tui fullscreen) and compact window are preserved.
 python3 - <<'PY'
 import json
 from pathlib import Path
 path = Path.home() / ".claude/settings.json"
 settings = json.loads(path.read_text())
 settings["tui"] = "fullscreen"
+settings["autoCompactWindow"] = "auto"
 path.write_text(json.dumps(settings))
 PY
 bash "$root/scripts/install-claude-settings" > /dev/null
 python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["tui"] == "fullscreen"'
+python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["autoCompactWindow"] == "auto"'
 
 # Idempotence and theme change.
 bash "$root/scripts/install-claude-settings" > /dev/null
@@ -80,4 +83,4 @@ if bash "$root/scripts/install-claude-settings" > /dev/null 2>&1; then
 fi
 grep -q Personal "$HOME/.claude/themes/agent-config-selected.json"
 
-echo 'PASS: Claude theme palette, contrast, default renderer, settings preservation, and safety'
+echo 'PASS: Claude theme palette, contrast, default renderer, compact window, settings preservation, and safety'

@@ -28,7 +28,10 @@ Skills in `deploy/skills/` are copied to `~/.bob/skills`, `~/.claude/skills` and
 follow the saved dotfiles theme variant (default: teal), with a darker shade
 for contrast against Claude Code's light text. It also sets `"tui": "default"`
 when no renderer is configured, so output stays in terminal and tmux scrollback;
-an explicit `/tui fullscreen` choice is kept. Other settings in
+an explicit `/tui fullscreen` choice is kept. Unless set already,
+`"autoCompactWindow": 200000` compacts the context at about 200k tokens rather
+than near the 1M window, since every request resends the whole context;
+`/autocompact` or an explicit value overrides it. Other settings in
 `~/.claude/settings.json` are preserved. Python 3 is required.
 
 To refresh these settings on every new Claude CLI session, ensure `~/agent-config/bin` precedes the original Claude executable in `PATH`. The `bin/claude` wrapper refreshes them and then executes the real CLI with its original arguments. It sets `CLAUDE_CODE_DISABLE_MOUSE=1` unless already set, so mouse selection and scrolling stay with the terminal and tmux. On Linux with X11 forwarding (`ssh -X`, `DISPLAY` set) and `xclip` installed, it also unsets `SSH_CONNECTION`, `SSH_TTY` and `SSH_CLIENT`, because Claude Code otherwise copies only via OSC 52, which terminals such as GNOME Terminal ignore. To refresh manually instead, run:

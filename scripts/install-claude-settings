@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Merge agent-config managed Claude Code settings: theme and default renderer.
+# Merge agent-config managed Claude Code settings: theme, default renderer and
+# auto-compact window.
 # Standalone palette: no dependency on the dotfiles checkout.
 # Re-run after changing the global dotfiles theme.
 state_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/theme"
@@ -86,6 +87,10 @@ settings["theme"] = "custom:agent-config-selected"
 # Inline rendering keeps output in terminal/tmux scrollback for copy mode.
 # setdefault preserves an explicit choice such as /tui fullscreen.
 settings.setdefault("tui", "default")
+# Every request resends the whole context, so a 1M-context session that grows
+# to several hundred thousand tokens costs that much on each turn. Compact at
+# about 200k instead; setdefault keeps an explicit choice.
+settings.setdefault("autoCompactWindow", 200000)
 write_json(settings_file, settings)
 print(f"Claude theme: {selected} -> {background} (readable light text)")
 print(f"Enabled: {settings_file}")
