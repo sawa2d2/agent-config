@@ -44,9 +44,11 @@ execute, verify.
 
 ## Progress file
 
-- Keep the state in `$(git rev-parse --git-path agent-progress.md)`: inside
-  the Git directory, so it is never committed, and outside chat history, so a
-  new session can resume.
+- Keep the state in `.agent-progress.md` at the root of the working tree,
+  outside chat history, so a new session can resume. Like the handoff note it
+  stays inside the workspace, where every agent can write it (Codex cannot
+  write the Git directory); never commit it or add it to the repository's
+  `.gitignore`.
 - Record the objective, each unit's status and branch, stacked parents and
   recorded commits, decisions, blockers, and checks waiting for the user.
   Update it after every unit and before the session may end or be compacted.

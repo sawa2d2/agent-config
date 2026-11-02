@@ -16,6 +16,7 @@ case "$1 $2 ${3:-}" in
   'plugin marketplace add') echo "$4" >> "$state/marketplaces"; echo "marketplace add $4" >> "$state/log" ;;
   'plugin list '*) touch "$state/plugins"; sed 's/^/  ❯ /' "$state/plugins" ;;
   'plugin install '*) echo "$3" >> "$state/plugins"; echo "install $3 $4 $5" >> "$state/log" ;;
+  'plugin uninstall '*) sed -i.bak "/^$3\$/d" "$state/plugins"; echo "uninstall $3 $4 $5" >> "$state/log" ;;
   *) echo "unexpected: $*" >&2; exit 1 ;;
 esac
 CLAUDE
@@ -27,7 +28,6 @@ run() { PATH="$tmp/bin:/usr/bin:/bin" bash "$root/scripts/install-claude-plugins
 # New machine: adds the marketplace and every plugin at user scope.
 run > /dev/null
 [[ $(cat "$tmp/state/log") == "marketplace add anthropics/claude-plugins-official
-install superpowers@claude-plugins-official --scope user
 install ralph-loop@claude-plugins-official --scope user
 install pyright-lsp@claude-plugins-official --scope user" ]] || fail "first run: $(cat "$tmp/state/log")"
 
@@ -42,6 +42,13 @@ printf '%s\n' 'pyright-lsp@claude-plugins-official' > "$tmp/state/plugins"
 run > /dev/null
 [[ $(grep -c pyright-lsp "$tmp/state/plugins") -eq 1 ]] || fail 'pyright-lsp installed twice'
 [[ $(tail -1 "$tmp/state/log") == 'install ralph-loop@claude-plugins-official --scope user' ]] || fail "partial run: $(cat "$tmp/state/log")"
+
+# The superpowers plugin from earlier installs is removed; its skills are standalone now.
+echo 'superpowers@claude-plugins-official' >> "$tmp/state/plugins"
+: > "$tmp/state/log"
+run > /dev/null
+[[ $(cat "$tmp/state/log") == 'uninstall superpowers@claude-plugins-official --scope user' ]] || fail "superpowers: $(cat "$tmp/state/log")"
+grep -q superpowers "$tmp/state/plugins" && fail 'superpowers still installed'
 
 # Missing language server: still installs, with a warning.
 rm "$tmp/bin/pyright-langserver"

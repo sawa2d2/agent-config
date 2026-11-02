@@ -30,11 +30,24 @@ for name in grill-with-docs grilling domain-modeling; do
   fi
 done
 
-# Bob and Codex use standalone skills; Claude uses the official plugin.
-# Claude uses the official plugin to retain Superpowers hooks and other features.
+# Every agent gets the Superpowers skills as standalone skills, without the
+# Claude plugin's SessionStart hook, which injects using-superpowers into every
+# session. using-superpowers (that injected text) and diagnosing-superpowers
+# (troubleshooting for the plugin) only add always-on tokens, so they are
+# skipped and earlier copies removed.
+meta_skills=(using-superpowers diagnosing-superpowers)
 for source in "$tmp/superpowers/skills/"*; do
   [[ -f "$source/SKILL.md" ]] || continue
-  install_skill "$source" "${source##*/}" "$HOME/.bob/skills" "$HOME/.codex/skills"
+  [[ " ${meta_skills[*]} " == *" ${source##*/} "* ]] && continue
+  install_skill "$source" "${source##*/}"
+done
+for name in "${meta_skills[@]}"; do
+  for stale in "$HOME/.bob/skills/$name" "$HOME/.claude/skills/$name" "$HOME/.codex/skills/$name"; do
+    if [[ -f "$stale/.agent-config-managed" ]]; then
+      rm -rf -- "$stale"
+      printf 'Removed: %s\n' "$stale"
+    fi
+  done
 done
 
 # uv can download Python 3.11 without changing the system Python.
