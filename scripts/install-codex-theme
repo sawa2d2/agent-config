@@ -49,8 +49,8 @@ selected = os.environ["CODEX_SELECTED_COLOR"]
 
 
 def write_atomically(path, data):
-    if path.is_symlink():
-        raise SystemExit(f"Refusing to overwrite symlink: {path}")
+    # Write through a symlink (settings kept in a dotfiles checkout, say) so the link survives.
+    path = Path(os.path.realpath(path))
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:

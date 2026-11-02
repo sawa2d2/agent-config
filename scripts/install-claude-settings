@@ -48,8 +48,6 @@ dark = colorsys.hsv_to_rgb(hue, 0.38, 0.53)
 background = "#" + "".join(f"{round(channel * 255):02x}" for channel in dark)
 
 def read_json(path):
-    if path.is_symlink():
-        raise RuntimeError(f"Refusing to overwrite symlink: {path}")
     if not path.exists():
         return {}
     with path.open(encoding="utf-8") as stream:
@@ -59,6 +57,8 @@ def read_json(path):
     return result
 
 def write_json(path, data):
+    # Write through a symlink (settings kept in a dotfiles checkout, say) so the link survives.
+    path = Path(os.path.realpath(path))
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:

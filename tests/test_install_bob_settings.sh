@@ -27,7 +27,7 @@ bash "$root/scripts/install-bob-settings" > /dev/null
 [[ $(cat "$settings") == "$before" ]] || fail 'complete file rewritten'
 [[ $(find "$settings" -newermt '2001-01-01' 2>/dev/null) == '' ]] || fail 'complete file touched'
 
-# Refuses invalid JSON, non-object sections and symlinks without changing them.
+# Refuses invalid JSON and non-object sections without changing them.
 printf '%s\n' '{"session": 1}' > "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null 2>&1 && fail 'non-object session accepted'
 [[ $(cat "$settings") == '{"session": 1}' ]] || fail 'non-object session changed'
@@ -36,7 +36,9 @@ bash "$root/scripts/install-bob-settings" > /dev/null 2>&1 && fail 'invalid JSON
 [[ $(cat "$settings") == '{' ]] || fail 'invalid JSON changed'
 printf '%s\n' '{}' > "$tmp/target.json"
 rm "$settings" && ln -s "$tmp/target.json" "$settings"
-bash "$root/scripts/install-bob-settings" > /dev/null 2>&1 && fail 'symlink accepted'
-[[ $(cat "$tmp/target.json") == '{}' ]] || fail 'symlink target changed'
+# A symlinked settings file (kept in a dotfiles checkout, say) is updated through the link.
+bash "$root/scripts/install-bob-settings" > /dev/null || fail 'symlink refused'
+[[ -L $settings ]] || fail 'symlink replaced'
+grep -q '"maxTurns": 300' "$tmp/target.json" || fail "symlink target not updated: $(cat "$tmp/target.json")"
 
 echo 'PASS: install-bob-settings'

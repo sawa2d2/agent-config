@@ -65,8 +65,8 @@ theme = {
     "gradientAccentEnd": "#BE95FF",
 }
 
-if theme_file.is_symlink():
-    raise RuntimeError(f"Refusing to overwrite symlink: {theme_file}")
+# Write through a symlink (settings kept in a dotfiles checkout, say) so the link survives.
+theme_file = Path(os.path.realpath(theme_file))
 if theme_file.exists():
     with theme_file.open(encoding="utf-8") as stream:
         existing = json.load(stream)

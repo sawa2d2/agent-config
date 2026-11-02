@@ -85,7 +85,10 @@ check "states(bob, 'Stop') == [(None, \"'$tmp/with space/scripts/agent-tmux-stat
 printf '%s\n' '{"hooks": {"Stop": {}}}' > "$bob"
 install_hooks > /dev/null 2>&1 && fail 'invalid hooks accepted'
 [[ $(cat "$bob") == '{"hooks": {"Stop": {}}}' ]] || fail 'invalid hooks changed'
-rm "$bob" && ln -s "$tmp/target.json" "$bob"
-install_hooks > /dev/null 2>&1 && fail 'symlink accepted'
+# A symlinked settings file is updated through the link; a dangling link gets a new target.
+rm "$bob" && ln -s "$tmp/links/target.json" "$bob"
+install_hooks > /dev/null || fail 'symlink refused'
+[[ -L $bob ]] || fail 'symlink replaced'
+grep -q agent-tmux-status "$tmp/links/target.json" || fail 'symlink target not updated'
 
 echo 'PASS: install-agent-hooks'
