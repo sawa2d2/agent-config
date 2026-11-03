@@ -24,6 +24,15 @@ fi
 dir=$(gwt-path -b "$branch")
 # Move rather than copy, so this working tree does not keep a stale note.
 [[ -f $note ]] && mv -- "$note" "$dir/.agent-handoff.md"
+# The user chose to skip Bob's trust dialog for worktrees made here; it would
+# otherwise hide the input box and swallow the typed prompt. Write to a
+# temporary file and rename, so a running bob never reads a partial file.
+trusted="$HOME/.bob/trustedFolders.json"
+mkdir -p -- "$(dirname -- "$trusted")"
+[[ -f $trusted ]] || echo '{"version":1,"folders":{}}' > "$trusted"
+jq --arg dir "$(cd -- "$dir" && pwd -P)" \
+  '.folders[$dir] = "TRUST_FOLDER"' "$trusted" > "$trusted.bob-delegate.tmp"
+mv -- "$trusted.bob-delegate.tmp" "$trusted"
 session=$(tmux display-message -p -t "${TMUX_PANE:-}" '#{session_id}')
 pane=$(tmux new-window -d -t "$session" -n "$branch" -c "$dir" -P -F '#{pane_id}')
 # Bob's chat takes no initial prompt argument; type the message once the input

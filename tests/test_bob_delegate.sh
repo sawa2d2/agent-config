@@ -30,6 +30,10 @@ exit 0
 SH
 chmod +x "$tmp/fake/gwt-path" "$tmp/fake/tmux"
 export TEST_ROOT="$tmp" PATH="$tmp/fake:$PATH" TMUX=/tmp/fake,1,0 TMUX_PANE=%1
+# A fake home keeps the trust entry out of the real ~/.bob/trustedFolders.json.
+mkdir -p "$tmp/home/.bob"
+echo '{"version":1,"folders":{"/other":"TRUST_FOLDER"}}' > "$tmp/home/.bob/trustedFolders.json"
+export HOME="$tmp/home"
 git init -q "$tmp/repo"
 cd "$tmp/repo"
 
@@ -49,6 +53,18 @@ grep -qx 'send-keys -t %9 -l bob new' "$tmp/tmux.log" || fail "bob new: $(cat "$
 grep -qx 'send-keys -t %9 Enter' "$tmp/tmux.log" || fail 'Enter was not sent'
 # The handoff prompt is typed after the input box appears.
 grep -qx 'send-keys -t %9 -l Read .agent-handoff.md and continue the work it describes.' "$tmp/tmux.log" || fail "prompt: $(cat "$tmp/tmux.log")"
+
+# The new worktree is trusted; the existing entries are kept.
+jq -e --arg dir "$tmp/worktrees/feat/x" \
+  '.version == 1 and .folders[$dir] == "TRUST_FOLDER" and .folders["/other"] == "TRUST_FOLDER"' \
+  "$HOME/.bob/trustedFolders.json" > /dev/null || fail "trust: $(cat "$HOME/.bob/trustedFolders.json")"
+
+# A missing trust file is created.
+rm "$HOME/.bob/trustedFolders.json"
+"$root/bin/bob-delegate" feat/w "x" > /dev/null
+jq -e --arg dir "$tmp/worktrees/feat/w" \
+  '.version == 1 and .folders[$dir] == "TRUST_FOLDER"' \
+  "$HOME/.bob/trustedFolders.json" > /dev/null || fail "created trust file: $(cat "$HOME/.bob/trustedFolders.json")"
 
 # An explicit prompt works without a note.
 : > "$tmp/tmux.log"
