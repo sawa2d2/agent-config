@@ -35,7 +35,12 @@ than near the 1M window, since every request resends the whole context;
 `/autocompact` or an explicit value overrides it. Unless set already,
 `env.CLAUDE_CODE_SUBAGENT_MODEL` is `sonnet`, so subagents without a model of
 their own search and read on Sonnet instead of inheriting the main model
-(often Opus). Other settings in
+(often Opus). Office and browser skills (`docx`, `pptx`, `xlsx`, `pdf`,
+`google-workspace`, `computer-use`, `built-in-browser`, `chrome-browser`,
+`claude-in-chrome`, `morning`, `import-memory`) are set to
+`user-invocable-only` in `skillOverrides`, so their descriptions stay out of
+every request while `/name` still works; an explicit override is kept. Other
+settings in
 `~/.claude/settings.json` are preserved. Python 3 is required.
 
 To refresh these settings on every new Claude CLI session, ensure `~/agent-config/bin` precedes the original Claude executable in `PATH`. The `bin/claude` wrapper refreshes them and then executes the real CLI with its original arguments. It sets `CLAUDE_CODE_DISABLE_MOUSE=1` unless already set, so mouse selection and scrolling stay with the terminal and tmux. On Linux with X11 forwarding (`ssh -X`, `DISPLAY` set) and `xclip` installed, it also unsets `SSH_CONNECTION`, `SSH_TTY` and `SSH_CLIENT`, because Claude Code otherwise copies only via OSC 52, which terminals such as GNOME Terminal ignore. To refresh manually instead, run:

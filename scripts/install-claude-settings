@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Merge agent-config managed Claude Code settings: theme, default renderer and
-# auto-compact window and subagent model.
+# auto-compact window, subagent model and hidden skills.
 # Standalone palette: no dependency on the dotfiles checkout.
 # Re-run after changing the global dotfiles theme.
 state_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/theme"
@@ -97,6 +97,16 @@ env = settings.setdefault("env", {})
 if not isinstance(env, dict):
     raise ValueError(f"Expected a JSON object in env: {settings_file}")
 env.setdefault("CLAUDE_CODE_SUBAGENT_MODEL", "sonnet")
+# Office and browser skills (claude.ai sync and built-in) put their
+# descriptions in every request but rarely apply to coding. Hide them from the
+# model and keep /name; an explicit override is kept.
+overrides = settings.setdefault("skillOverrides", {})
+if not isinstance(overrides, dict):
+    raise ValueError(f"Expected a JSON object in skillOverrides: {settings_file}")
+for skill in ("docx", "pptx", "xlsx", "pdf", "google-workspace", "computer-use",
+              "built-in-browser", "chrome-browser", "claude-in-chrome", "morning",
+              "import-memory"):
+    overrides.setdefault(skill, "user-invocable-only")
 write_json(settings_file, settings)
 print(f"Claude theme: {selected} -> {background} (readable light text)")
 print(f"Enabled: {settings_file}")

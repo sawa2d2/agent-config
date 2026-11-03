@@ -25,6 +25,7 @@ assert settings["permissions"]["allow"] == ["Read"]
 assert settings["tui"] == "default"
 assert settings["autoCompactWindow"] == 200000
 assert settings["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] == "sonnet"
+assert settings["skillOverrides"]["docx"] == "user-invocable-only"
 PY
 
 # An explicit renderer choice (for example via /tui fullscreen) and compact window are preserved.
@@ -36,12 +37,14 @@ settings = json.loads(path.read_text())
 settings["tui"] = "fullscreen"
 settings["autoCompactWindow"] = "auto"
 settings["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] = "haiku"
+settings["skillOverrides"]["docx"] = "on"
 path.write_text(json.dumps(settings))
 PY
 bash "$root/scripts/install-claude-settings" > /dev/null
 python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["tui"] == "fullscreen"'
 python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["autoCompactWindow"] == "auto"'
 python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] == "haiku"'
+python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["skillOverrides"]["docx"] == "on"'
 
 # Idempotence and theme change.
 bash "$root/scripts/install-claude-settings" > /dev/null
@@ -86,4 +89,4 @@ if bash "$root/scripts/install-claude-settings" > /dev/null 2>&1; then
 fi
 grep -q Personal "$HOME/.claude/themes/agent-config-selected.json"
 
-echo 'PASS: Claude theme palette, contrast, default renderer, compact window, subagent model, settings preservation, and safety'
+echo 'PASS: Claude theme palette, contrast, default renderer, compact window, subagent model, skill overrides, settings preservation, and safety'
