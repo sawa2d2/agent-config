@@ -39,6 +39,7 @@ Launchers (`bin/`):
 - `agent-delegate`, `bob-delegate`, `codex-delegate`: start a new branch in a new worktree and tmux window with the same agent.
 - `bobtask`: list, resume, delete, move, dump or hand off Bob tasks (`bobrm` = `bobtask rm -c`).
 - `clauderm`: delete Claude Code sessions of the current repository.
+- `codexrm`: delete Codex sessions of the current repository (with their subagent threads).
 - `claude-stats`, `codex-stats`, `bob-stats`: token/cost usage per week or per fixed window (`--window`).
 - `codex-ralph`: bounded loop of fresh `codex exec` runs until a check passes.
 

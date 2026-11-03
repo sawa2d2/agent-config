@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (( $# != 0 )); then
+  echo 'Usage: codexrm' >&2
+  exit 2
+fi
+
+for cmd in python3 fzf codex; do
+  command -v "$cmd" >/dev/null 2>&1 || {
+    printf 'codexrm: %s is required\n' "$cmd" >&2
+    exit 1
+  }
+done
+
+codex_home="${CODEX_HOME:-$HOME/.codex}"
+# Sessions belong to the Git repository they were started in (else the directory).
+project_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)
+
+# Internal Codex layout (observed in 0.160.0): each thread is a rollout
+# sessions/YYYY/MM/DD/rollout-<time>-<uuid>.jsonl (or archived_sessions/) whose
+# first record is session_meta; subagent threads name their parent_thread_id.
+# Read-only listing of top-level sessions, newest first.
+rows=$(CODEX_HOME="$codex_home" PROJECT_ROOT="$project_root" python3 - <<'PY'
+import functools
+import json
+import os
+import subprocess
+from datetime import datetime
+from pathlib import Path
+import unicodedata
+
+def width(text):
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
+
+def clean(text, limit=60):
+    text = " ".join(str(text).split())
+    if width(text) <= limit:
+        return text
+    while width(text) > limit - 1:
+        text = text[:-1]
+    return text + "…"
+
+def pad(text, size):
+    return text + " " * (size - width(text))
+
+def first_prompt(content):
+    parts = [part.get("text", "") for part in content or []
+             if isinstance(part, dict) and part.get("type") == "input_text"]
+    # Skip injected AGENTS.md and context blocks.
+    return next((p for p in parts if p.strip() and not p.lstrip().startswith(("<", "# AGENTS.md"))), "")
+
+project_root = os.environ["PROJECT_ROOT"]
+codex_home = Path(os.environ["CODEX_HOME"])
+
+@functools.lru_cache(maxsize=None)
+def root_of(cwd):
+    try:
+        result = subprocess.run(["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+                                capture_output=True, text=True)
+    except OSError:
+        result = None
+    if result is not None and result.returncode == 0:
+        return result.stdout.strip()
+    return os.path.realpath(cwd)
+
+# Names set with /rename; the last entry per thread wins.
+names = {}
+try:
+    with (codex_home / "session_index.jsonl").open(encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(entry, dict) and entry.get("id") and entry.get("thread_name"):
+                names[entry["id"]] = entry["thread_name"]
+except FileNotFoundError:
+    pass
+
+threads = {}  # id -> (path, cwd, parent, prompt)
+for path in [*codex_home.glob("sessions/*/*/*/rollout-*.jsonl"),
+             *codex_home.glob("archived_sessions/rollout-*.jsonl")]:
+    meta = None
+    prompt = ""
+    with path.open(encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            payload = record.get("payload") if isinstance(record, dict) else None
+            if not isinstance(payload, dict):
+                continue
+            if meta is None and record.get("type") == "session_meta":
+                meta = payload
+            elif (record.get("type") == "response_item" and payload.get("type") == "message"
+                  and payload.get("role") == "user"):
+                prompt = first_prompt(payload.get("content"))
+                if prompt:
+                    break
+    if meta and meta.get("id"):
+        threads[meta["id"]] = (path, meta.get("cwd") or "", meta.get("parent_thread_id"), prompt)
+
+children = {}
+for thread_id, (_, _, parent, _) in threads.items():
+    if parent:
+        children.setdefault(parent, []).append(thread_id)
+
+def with_descendants(thread_id):
+    """Descendants first, so no thread outlives its parent if a deletion fails."""
+    ids = []
+    for child in children.get(thread_id, []):
+        ids += with_descendants(child)
+    return ids + [thread_id]
+
+sessions = []
+for thread_id, (path, cwd, parent, prompt) in threads.items():
+    if parent in threads or not cwd or root_of(cwd) != project_root:
+        continue
+    mtime = path.stat().st_mtime
+    updated = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+    sessions.append((mtime, [thread_id, " ".join(with_descendants(thread_id)), updated,
+                             clean(names.get(thread_id) or prompt or "(no prompt)"), str(path)]))
+
+# Hidden fields (id, thread ids to delete) precede a display line padded to
+# terminal width with three-space separators; the first line is the header.
+if sessions:
+    rows = [row for _, row in sorted(sessions, key=lambda item: item[0], reverse=True)]
+    columns = [["UPDATED", "TITLE", "PATH"]] + [row[2:] for row in rows]
+    sizes = [max(width(column[i]) for column in columns) for i in (0, 1)]
+    for hidden, (updated, title, rollout) in zip([["", ""]] + [r[:2] for r in rows], columns):
+        line = "   ".join([pad(updated, sizes[0]), pad(title, sizes[1]), rollout])
+        print("\t".join(hidden + [line]))
+PY
+)
+
+[[ -n "$rows" ]] || { printf 'codexrm: no sessions found for %s\n' "$project_root" >&2; exit 0; }
+
+selected=$(printf '%s\n' "$rows" |
+  fzf --multi --delimiter=$'\t' --with-nth=3 --no-sort \
+      --header-lines=1 --header='TAB: select') || exit 0
+
+uuid='^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
+ids=()
+while IFS=$'\t' read -r session_id thread_ids _; do
+  read -r -a row_ids <<< "$thread_ids"
+  for id in "${row_ids[@]}"; do
+    [[ $id =~ $uuid ]] || {
+      printf 'codexrm: unexpected session row: %s\n' "$session_id" >&2
+      exit 1
+    }
+  done
+  ids+=("${row_ids[@]}")
+done <<< "$selected"
+
+for id in "${ids[@]}"; do
+  find "$codex_home/sessions" "$codex_home/archived_sessions" -name "rollout-*-$id.jsonl" 2>/dev/null || true
+done
+read -r -p "Delete these ${#ids[@]} Codex threads? [y/N] " answer || answer=
+[[ $answer == [yY] ]] || { echo 'Aborted.' >&2; exit 1; }
+
+# Delete through the native CLI (non-interactive with --force and a UUID), which
+# also updates Codex's own state; it does not delete subagent threads, hence
+# the explicit descendant ids.
+for id in "${ids[@]}"; do
+  codex delete --force "$id"
+done
+echo "Deleted ${#ids[@]} threads."

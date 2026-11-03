@@ -13,10 +13,10 @@ Use a session UUID when possible to avoid ambiguous names.
 | Existing workflow | Codex equivalent or limitation |
 | --- | --- |
 | `bobtask resume`, session selection | `codexl` / `codexla` already call native `resume` / `resume --all`; `codex resume <UUID>` selects directly. Native filtering is by working directory, unlike the repository scope of `bobtask -c` and `clauderm`. |
-| `clauderm`, `bobtask rm` | `codex delete <UUID>` permanently deletes a session, with native confirmation. No extra deletion script is needed. |
+| `clauderm`, `bobtask rm` | `codexrm` multi-selects the current repository's sessions with fzf and, after confirmation, runs `codex delete --force <UUID>` for each and its subagent threads, which native delete leaves behind (verified with 0.160.0). `codex delete <UUID>` alone deletes one session with native confirmation. |
 | Hide without deleting history | `codex archive <UUID>`; restore with `codex unarchive <UUID>`. |
 | Continue a separate history | `codex fork <UUID>`; this retains prior context and is different from a fresh-context handoff. |
-| `bobtask list`, multi-select cleanup | Existing native pickers cover interactive discovery. No equivalent to Bob's exact tabular, repository-scoped batch workflow was established; no private database parser is added. |
+| `bobtask list`, multi-select cleanup | Existing native pickers cover interactive discovery; `codexrm` covers multi-select cleanup. No equivalent to Bob's exact tabular, repository-scoped batch workflow was established; no private database parser is added. |
 | `bobtask mv` | No supported in-place history/workspace migration command was established. `--cd` selects a working root; it is not evidence of rewriting saved history or quoted paths. |
 
 For transcript and fresh-context workflows, the
