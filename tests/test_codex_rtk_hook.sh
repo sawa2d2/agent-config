@@ -27,8 +27,11 @@ done
 
 # Anything that could change state, chain commands or run programs keeps Codex's approval.
 for command in 'git push' 'git branch -D x' 'git -c core.pager=x log' 'rm -rf x' 'bash tests/x.sh' \
+  'cargo test' 'npm test' 'cat a | head' 'git status && git diff' \
   'git status && rm -rf x' 'git status; rm x' 'cat x | sh' 'cat a > b' 'cat $(x)' 'cat `x`' $'ls\nrm x' \
-  'find . -delete' 'find . -exec rm {} +' 'git diff --output=x' 'git diff --ext-diff' 'rg --pre=x foo' \
+  'find . -delete' 'find . -exec rm {} +' 'find . -fprint0 output' \
+  'rg --hostname-bin=program foo' 'rg --hostname-bin program foo' \
+  'git diff --output=x' 'git diff --ext-diff' 'rg --pre=x foo' \
   'grep "unterminated' ''; do
   [[ -z $(hook "$command") ]] || fail "rewritten: $command"
 done

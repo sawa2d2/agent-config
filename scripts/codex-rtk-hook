@@ -18,7 +18,7 @@ READ_ONLY_GIT = {"status", "log", "diff", "show"}
 # Chaining, pipes, redirection, substitution, background jobs and newlines.
 SHELL_SYNTAX = re.compile(r"[;&|<>`$()\n\\]")
 # Options that make otherwise read-only commands run or write something.
-UNSAFE_OPTIONS = re.compile(r"^-(exec|execdir|ok|okdir|delete|fprint|fprintf|fls)$|^--(output|ext-diff|pre)\b")
+UNSAFE_OPTIONS = re.compile(r"^-(exec|execdir|ok|okdir|delete|fprint0?|fprintf|fls)$|^--(output|ext-diff|pre|hostname-bin)\b")
 
 
 def read_only(command):

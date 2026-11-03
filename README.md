@@ -246,6 +246,8 @@ Codex applies a rewritten command only when the hook also approves it, so
 `wc`, without chaining, redirection or options that run programs) to
 `rtk hook codex`; everything else keeps Codex's approval. Codex runs a new or
 changed hook only after you trust it in the TUI (`/hooks`).
+The [coverage review](docs/codex-rtk-coverage.md) records the installed versions,
+fixture results and remaining runtime verification needed before expanding it.
 
 ## Neovim chat (optional)
 
