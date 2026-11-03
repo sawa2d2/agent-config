@@ -102,6 +102,24 @@ bash scripts/install-codex-theme
 
 The theme is dark; on a light terminal select another one with `/theme`.
 
+## Codex compaction
+
+`./install` and `bin/codex` add `model_auto_compact_token_limit = 200000`
+to `$CODEX_HOME/config.toml` (default: `~/.codex/config.toml`) when absent.
+This token threshold follows this repository's Claude `autoCompactWindow=200000`
+policy; it is not equivalent to Bob's `session.compactionThresholdPercent=80`
+and is not an OpenAI recommended value. It targets earlier compaction for large
+contexts without overriding the model's context window. Existing explicit values,
+including quoted keys and profile settings, are kept; if a profile in this file
+sets the threshold, no global default is added. CLI `-c` overrides still apply.
+Refresh manually with `bash scripts/install-codex-compaction`.
+
+The [official configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+documents this setting as a token threshold; unset uses model defaults.
+Support was checked against Codex CLI 0.160.0's generated app-server schema and
+configuration loading in a temporary HOME. Actual compaction timing depends on
+the model and runtime; runtime compaction and token savings have not been measured.
+
 ## Bob Shell settings
 
 `./install` and the `bin/bob` wrapper add these defaults to

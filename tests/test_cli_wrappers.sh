@@ -9,6 +9,7 @@ mkdir -p "$tmp/real"
 export HOME="$tmp/home"
 export CODEX_HOME="$tmp/codex-home"
 export XDG_CONFIG_HOME="$HOME/.config"
+unset CODEX_HOME
 
 # Fake CLIs record their argv and the PATH they were launched with.
 for cli in bob claude codex; do
@@ -62,6 +63,7 @@ cd "$root"
 [[ -f "$HOME/.bob/theme.json" ]] || fail 'bob: theme was not refreshed'
 [[ -f "$HOME/.bob/settings/settings.json" ]] || fail 'bob: settings were not added'
 expect $'--approve-for-me\nresume\n--last' codex
+grep -q '^model_auto_compact_token_limit = 200000$' "$HOME/.codex/config.toml" || fail 'codex: compaction default missing'
 
 # "new" starts a new session and passes the remaining arguments on.
 expect $'chat\n--auto-approve' bob new
@@ -107,6 +109,7 @@ done
 expect $'--profile\ncustom' codex new --profile custom
 expect $'--approve-for-me\n-m\ntest\nhello' codex new -m test hello
 expect $'--approve-for-me\n-c\nmodel="test"' codex new -c 'model="test"'
+expect $'--approve-for-me\n-c\nmodel_auto_compact_token_limit=64000' codex new -c model_auto_compact_token_limit=64000
 # Option-looking prompts after -- are literal, and values are not options.
 expect $'--approve-for-me\n--\n--sandbox=read-only' codex new -- --sandbox=read-only
 expect $'--approve-for-me\n-m\n--sandbox=read-only' codex new -m --sandbox=read-only

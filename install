@@ -67,6 +67,7 @@ if command -v python3 >/dev/null 2>&1; then
   bash "$repo_dir/scripts/install-claude-settings"
   bash "$repo_dir/scripts/install-bob-theme"
   bash "$repo_dir/scripts/install-codex-theme"
+  bash "$repo_dir/scripts/install-codex-compaction"
   bash "$repo_dir/scripts/install-bob-settings"
   bash "$repo_dir/scripts/install-agent-hooks"
 else
