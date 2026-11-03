@@ -404,6 +404,11 @@ An explicit `--approve-for-me` is passed through once.
 
 The native resume pickers are used rather than custom fzf/database parsing.
 
+For Codex session cleanup, transcript export, handoff, and Python tooling, see
+[the native workflow comparison](docs/codex-session-language.md). It records
+verified commands and the remaining differences from `clauderm`, `bobtask`,
+and Claude's `pyright-lsp`; no additional picker or language server is installed.
+
 To delete Claude Code sessions, run `clauderm` (requires Python 3 and fzf).
 It lists the sessions of the current Git repository (or, outside Git, the
 current directory), newest first, with their title and transcript path
