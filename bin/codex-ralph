@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""Bounded fresh-session Codex execution with a user-owned completion check."""
+import argparse
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import tempfile
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--prompt-file', required=True, type=Path)
+    parser.add_argument('--max-iterations', required=True, type=int)
+    parser.add_argument('--check', required=True, type=Path,
+                        help='trusted executable; exit 0 means complete, 1 means continue')
+    args = parser.parse_args()
+    if args.max_iterations < 1:
+        parser.error('--max-iterations must be positive')
+    check = args.check.resolve()
+    if not check.is_file() or not os.access(check, os.X_OK):
+        parser.error('--check must name an executable file')
+    try:
+        prompt = args.prompt_file.read_text()
+    except OSError as error:
+        parser.error(str(error))
+    if not prompt.strip():
+        parser.error('--prompt-file must not be empty')
+
+    child = None
+
+    def cancel(signum, _frame):
+        # A separate process group includes CLI/check descendants. Stop all of
+        # them before exiting; repeated signals must not interrupt cleanup.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGINT, cancel)
+    signal.signal(signal.SIGTERM, cancel)
+
+    def run(command, **kwargs):
+        nonlocal child
+        child = subprocess.Popen(command, start_new_session=True, **kwargs)
+        try:
+            child.communicate()
+        except BaseException:
+            # Cleanup runs after communicate unwinds, outside Popen's wait lock.
+            try:
+                os.killpg(child.pid, signal.SIGTERM)
+                child.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                pass
+            except ProcessLookupError:
+                pass
+            finally:
+                try:
+                    os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                child.wait()
+            raise
+        status = child.returncode
+        child = None
+        return status if status >= 0 else 128 - status
+
+    for iteration in range(1, args.max_iterations + 1):
+        print(f'Codex Ralph: iteration {iteration}/{args.max_iterations}', file=sys.stderr)
+        # Use a temporary stdin file to avoid a pipe write deadlock and keep the
+        # prompt identical across fresh sessions. Files in the workspace carry progress.
+        with tempfile.TemporaryFile() as source:
+            source.write((prompt + '\n\nWork from the current files. Record remaining work '
+                          'in the workspace for the next fresh session.\n').encode())
+            source.seek(0)
+            status = run(['codex', 'exec', '-'], stdin=source)
+        if status:
+            return status
+        status = run([str(check)])
+        if status == 0:
+            return 0
+        if status != 1:
+            print(f'Completion check failed with exit {status}; stopping.', file=sys.stderr)
+            return status
+    print('Iteration limit reached without verified completion.', file=sys.stderr)
+    return 1
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except OSError as error:
+        print(f'codex-ralph: {error}', file=sys.stderr)
+        sys.exit(2)

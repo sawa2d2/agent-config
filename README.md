@@ -303,6 +303,35 @@ bash scripts/install-bob-ralph
 
 Installs the experimental Ralph runner and Bob skills without running the loop. Test it only in a disposable repository.
 
+## Codex Ralph (optional)
+
+`codex-ralph` (Python 3, linked by `install`) runs bounded fresh `codex exec`
+sessions in the current working directory. No external Ralph checkout is needed.
+
+```bash
+codex-ralph --prompt-file task.md --max-iterations 5 --check ./verify-task
+```
+
+Supply an executable completion check: exit **0** means complete, **1** requests
+another iteration, and any other status stops with an error. Make the check
+specific to the requested outcome; a generic passing test suite may not prove
+that the task is implemented. The check runs directly as your user, outside the
+Codex sandbox: use only a trusted script. Each successful Codex invocation is
+followed by the check. CLI errors stop immediately; exhausting the limit exits 1.
+Ctrl+C or SIGTERM stops the active process group and exits 130 or 143.
+Changes already made remain on disk. Keep progress in workspace files because
+conversation history is not resumed between iterations.
+
+Unlike Claude's `ralph-loop` stop hook or the experimental Bob upstream adapter,
+this runner uses the documented [non-interactive CLI](https://developers.openai.com/codex/noninteractive).
+Checked against Codex CLI 0.160.0 (`exec --help`); no native Ralph command was
+identified in that interface. It adds no approval, sandbox, trust-bypass, or
+retry flags. Existing CLI configuration and any launcher on PATH apply; configure
+appropriate permissions beforehand. Non-interactive approval failures stop the
+run rather than triggering a permissions bypass. The iteration limit bounds
+invocations, not wall time or token usage. No model-backed end-to-end run or
+token savings are claimed.
+
 ## CLI session resume
 
 Launchers live in `bin/` and dispatch to the original CLI. Enable them in interactive Bash or Zsh with one line anywhere in your startup file:
