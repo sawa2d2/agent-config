@@ -18,6 +18,7 @@ install_skill() {
 fetch joshuawheelock/grill-me grill-me
 fetch mattpocock/skills matt-skills
 fetch obra/superpowers superpowers
+fetch jgraph/drawio-mcp drawio-mcp
 
 # These skills serve explicit requests ("grill me", a glossary or ADR), so
 # they are invoked by name only: their descriptions would otherwise sit in
@@ -33,6 +34,13 @@ for name in grill-with-docs grilling domain-modeling; do
   bash "$scripts_dir/disable-model-invocation" "$source/SKILL.md"
   install_skill "$source" "$name"
 done
+
+# Only the draw.io skill, not its plugin: the plugin's .mcp.json adds the
+# hosted MCP server, which in terminal agents only returns a link and sends
+# diagram content to a third party. The Claude Code and Codex plugin copies of
+# the skill are identical, so one source serves all agents.
+bash "$scripts_dir/disable-model-invocation" "$tmp/drawio-mcp/plugins/claude-code/skills/drawio/SKILL.md"
+install_skill "$tmp/drawio-mcp/plugins/claude-code/skills/drawio" drawio
 
 # Every agent gets the Superpowers skills as standalone skills, without the
 # Claude plugin's SessionStart hook, which injects using-superpowers into every

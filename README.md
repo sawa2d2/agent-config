@@ -34,7 +34,7 @@ and no runtime token or cost savings were measured.
 | `handoff` | Write `.agent-handoff.md` (see [Agent handoff notes](#agent-handoff-notes)) when asked, when a suggested handoff is accepted, or before stopping with work unfinished |
 | `autonomous-development` | Invoked by name only (`/autonomous-development`): route an objective to superpowers, Spec Kit or ralph-loop, and run long work with stacked branches, a progress file at the working-tree root and batched user checks |
 
-The upstream `grill-me`, `grilling` and `domain-modeling` skills, like
+The upstream `grill-me`, `grilling`, `domain-modeling` and `drawio` skills, like
 Superpowers, are installed with `disable-model-invocation: true`
 (`scripts/disable-model-invocation`), as are the Bob `prd` and `ralph` skills
 from `scripts/install-bob-ralph`: they serve explicit requests, and every skill
@@ -42,6 +42,18 @@ description in the list is resent with each request. Invoke them by name
 (`/grill-me`). `handoff` stays model-visible so the agent can offer it. Bob's
 built-in skills (`configure-hooks`, `office-insights` and others) have no
 setting to hide them in Bob Shell 2.0.9 and stay listed.
+
+`drawio` comes from [jgraph/drawio-mcp](https://github.com/jgraph/drawio-mcp)
+(Apache-2.0); invoke it as `/drawio` or `$drawio` in Codex. Only the skill is
+installed, from `plugins/claude-code/skills/drawio` (identical to the Codex
+plugin's copy), not the plugin or its hosted MCP server
+(`https://mcp.draw.io/mcp`): terminal agents cannot show its diagrams inline,
+and it would send diagram content to a third party. The skill writes `.drawio`
+XML without extra tools. It uses Node.js for its repair pass, `app.diagrams.net`
+URLs and `scripts/find-shapes.js` (Node.js 18+, fetches a shape index from
+jsDelivr and the draw.io icon service). The draw.io desktop CLI (`drawio` on
+`PATH`) is needed for Mermaid input, ELK layout and PNG/SVG/PDF export. Neither
+is installed by agent-config.
 
 ## Claude Code theme
 
