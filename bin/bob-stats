@@ -5,6 +5,12 @@ Reads ~/.bob/db/bob.db read-only. Bob stores, per model request, the cost and
 the context tokens sent in the assistant message's _meta.spend; it records no
 input/output/cache breakdown. Each task counts in the week (local time, from
 Monday) it was created.
+
+A subagent task spends from its parent's session.maxCost budget, and Bob adds
+its cost to the parent's tasks.costs, so it counts as part of the parent; a
+subtask has a limit of its own and counts as a task (observed in Bob Shell
+2.0.9). A task's cost is its tasks.costs.cost, the figure maxCost is compared
+with.
 """
 import argparse
 import json
@@ -19,6 +25,9 @@ cost     = sum of spend.cost over requests [as recorded by Bob]
 per req  = cost / requests
 ctx/req  = sum of spend.contextTokens / requests [tokens]
 vs prev  = this week / previous week * 100 [%] (-: no previous week, or it was 0)
+task p50, task p90, task max
+         = median, 90th percentile and maximum of the week's task costs; a task's
+           cost (subagents included) is what session.maxCost limits
 week     = Monday (local time) of the week each task was created
 """
 
@@ -33,6 +42,22 @@ def ratio(previous, current):
     return "-" if not previous else f"{current / previous * 100:.1f}%"
 
 
+def percentile(values, fraction):
+    """Linear interpolation between the closest ranks of the sorted values."""
+    position = (len(values) - 1) * fraction
+    low = int(position)
+    high = min(low + 1, len(values) - 1)
+    return values[low] + (values[high] - values[low]) * (position - low)
+
+
+def recorded_cost(costs):
+    try:
+        cost = json.loads(costs)["cost"]
+    except (TypeError, ValueError, KeyError):
+        return None
+    return cost if isinstance(cost, (int, float)) else None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("-w", "--weeks", type=int, default=10,
@@ -44,34 +69,49 @@ def main():
     today = date.today()
     first = today - timedelta(days=today.weekday(), weeks=args.weeks - 1)
     db = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    tasks = {task_id: (parent, task_type, created, costs) for task_id, parent, task_type, created, costs
+             in db.execute("SELECT id, parent_id, task_type, created_at, costs FROM tasks")}
+
+    def limited(task_id):
+        """The task whose maxCost budget task_id spends from."""
+        while tasks[task_id][1] == "subagent" and tasks[task_id][0] in tasks:
+            task_id = tasks[task_id][0]
+        return task_id
+
     weeks = {}
-    rows = db.execute("""SELECT tasks.id, tasks.created_at, messages.data FROM messages
-                         JOIN tasks ON tasks.id = messages.task_id
-                         WHERE messages.role = 'assistant'""")
-    for task_id, created, data in rows:
-        week = week_of(created)
+    rows = db.execute("SELECT task_id, data FROM messages WHERE role = 'assistant' AND task_id IN "
+                      "(SELECT id FROM tasks)")
+    for task_id, data in rows:
         try:
             spend = json.loads(data)["_meta"]["spend"]
         except (json.JSONDecodeError, KeyError, TypeError):
             continue
-        w = weeks.setdefault(week, {"tasks": set(), "requests": 0, "context": 0, "cost": 0.0})
-        w["tasks"].add(task_id)
+        task_id = limited(task_id)
+        w = weeks.setdefault(week_of(tasks[task_id][2]), {"tasks": {}, "requests": 0, "context": 0, "cost": 0.0})
+        cost = spend.get("cost", 0) or 0
+        w["tasks"][task_id] = w["tasks"].get(task_id, 0) + cost
         w["requests"] += 1
         w["context"] += spend.get("contextTokens", 0) or 0
-        w["cost"] += spend.get("cost", 0) or 0
+        w["cost"] += cost
+    for w in weeks.values():
+        # Summed message spend stands in when Bob recorded no task cost.
+        w["task costs"] = sorted(c if (c := recorded_cost(tasks[task_id][3])) is not None else summed
+                                 for task_id, summed in w["tasks"].items())
 
     print(LEGEND)
     print(f"{'week':<12}{'tasks':>8}{'requests':>10}{'ctx/req (tok)':>15}{'cost':>10}{'per req':>10}"
-          f"{'cost vs prev':>14}{'per req vs prev':>17}")
+          f"{'cost vs prev':>14}{'per req vs prev':>17}{'task p50':>10}{'task p90':>10}{'task max':>10}")
     for week, w in sorted(weeks.items()):
         if args.weeks and week < first:
             continue
         previous = weeks.get(week - timedelta(weeks=1))
         per_request = w["cost"] / w["requests"]
+        costs = w["task costs"]
         print(f"{week.isoformat():<12}{len(w['tasks']):>8}{w['requests']:>10,}"
               f"{w['context'] / w['requests']:>15,.0f}{w['cost']:>10.2f}{per_request:>10.3f}"
               f"{ratio(previous and previous['cost'], w['cost']):>14}"
-              f"{ratio(previous and previous['cost'] / previous['requests'], per_request):>17}")
+              f"{ratio(previous and previous['cost'] / previous['requests'], per_request):>17}"
+              f"{percentile(costs, 0.5):>10.2f}{percentile(costs, 0.9):>10.2f}{costs[-1]:>10.2f}")
 
 if __name__ == "__main__":
     main()

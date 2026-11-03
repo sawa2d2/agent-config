@@ -500,9 +500,16 @@ row per session.
 `bob-stats` (requires Python 3) prints the same weekly view for Bob tasks from
 `~/.bob/db/bob.db`, opened read-only, with `-w N` as above: tasks, requests,
 `ctx/req (tok)` (context tokens ÷ requests), cost, cost per request, and their
-ratios to the week before in %. The cost is shown in the unit Bob records. Bob
-records only the cost and context tokens of each request, without an input,
-cache or output breakdown.
+ratios to the week before in %, then the median (`task p50`), 90th percentile
+(`task p90`) and maximum (`task max`) of the week's task costs. The cost is
+shown in the unit Bob records. Bob records only the cost and context tokens of
+each request, without an input, cache or output breakdown. A task's cost is the
+one Bob compares with the per-task `session.maxCost` limit (`tasks.costs`):
+subagents spend from their parent's limit and count as part of it, while
+subtasks have their own limit and count as tasks. To pick `maxCost`, set it at
+or above the usual `task p90`, so that most tasks finish under it; weeks whose
+`task max` exceeds it show how often a task would have stopped at the limit,
+where Bob offers to double it.
 
 `codex-stats` (requires Python 3) prints the same weekly view as `claude-stats`
 for Codex from the rollouts under `~/.codex/sessions` and
