@@ -521,6 +521,13 @@ For example, `codex new --sandbox read-only` and
 `codex resume --ask-for-approval on-request` retain exactly those choices.
 An explicit `--approve-for-me` is passed through once.
 
+Codex launchers also add `--no-alt-screen` to preserve terminal scrollback and
+leave mouse handling to the terminal. An explicit flag is passed through once.
+This overrides `tui.alternate_screen` for the invocation without changing user
+settings; see the [official CLI reference](https://developers.openai.com/codex/cli/reference).
+Verified with Codex CLI 0.160.0: inline mode does not enable mouse capture,
+so no additional mouse setting is needed.
+
 The native resume pickers are used rather than custom fzf/database parsing.
 
 For Codex session cleanup, transcript export, handoff, and Python tooling, see

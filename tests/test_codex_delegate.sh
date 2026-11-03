@@ -57,7 +57,7 @@ SH
 chmod +x "$tmp/fake/codex"
 command_line=$(sed -n 's/^send-keys -t %9 -l //p' "$tmp/tmux.log")
 PATH="$root/bin:$PATH" bash -c "$command_line"
-[[ $(cat "$tmp/codex.args") == $'--approve-for-me\nfix the build; $(touch injected)' ]] || fail 'prompt arguments changed'
+[[ $(cat "$tmp/codex.args") == $'--no-alt-screen\n--approve-for-me\nfix the build; $(touch injected)' ]] || fail 'prompt arguments changed'
 [[ ! -e injected ]] || fail 'prompt executed as shell code'
 
 # Outside tmux it refuses.
@@ -69,7 +69,7 @@ if TMUX= "$root/bin/codex-delegate" feat/z "x" 2>/dev/null; then fail 'ran outsi
 command_line=$(sed -n 's/^send-keys -t %9 -l //p' "$tmp/tmux.log")
 [[ $command_line == 'codex new --model gpt-6-luna merge\ it' ]] || fail "model: $command_line"
 PATH="$root/bin:$PATH" bash -c "$command_line"
-[[ $(cat "$tmp/codex.args") == $'--approve-for-me\n--model\ngpt-6-luna\nmerge it' ]] || fail "model arguments: $(cat "$tmp/codex.args")"
+[[ $(cat "$tmp/codex.args") == $'--no-alt-screen\n--approve-for-me\n--model\ngpt-6-luna\nmerge it' ]] || fail "model arguments: $(cat "$tmp/codex.args")"
 if "$root/bin/codex-delegate" -m 2>/dev/null; then fail 'ran with -m and no model'; fi
 
 echo 'PASS: codex-delegate'

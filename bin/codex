@@ -34,17 +34,24 @@ fi
 # Automatic review keeps the workspace-write sandbox. Explicit permission
 # choices (including profiles and config overrides) must take precedence.
 auto_review=true
+no_alt_screen=true
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
   arg=${args[i]}
   case $arg in
     --) break ;;
+    --no-alt-screen)
+      no_alt_screen=false
+      continue ;;
     --approve-for-me|--full-auto|--yolo|--dangerously-bypass-approvals-and-sandbox|\
     -a*|--ask-for-approval|--ask-for-approval=*|\
     -s*|--sandbox|--sandbox=*|\
     -p*|--profile|--profile=*)
       auto_review=false
-      break ;;
+      case $arg in
+        -a|--ask-for-approval|-s|--sandbox|-p|--profile) i=$((i + 1)) ;;
+      esac
+      continue ;;
     -c|--config)
       i=$((i + 1))
       arg=${args[i]:-} ;;
@@ -59,10 +66,13 @@ for ((i = 0; i < ${#args[@]}; i++)); do
   esac
   if [[ $arg =~ ^[[:space:]]*(approval_policy|approvals_reviewer|sandbox_mode|sandbox_permissions|default_permissions)[[:space:]]*= ]]; then
     auto_review=false
-    break
   fi
 done
 if $auto_review; then
   set -- --approve-for-me "$@"
+fi
+# Inline mode preserves terminal scrollback and leaves mouse handling to the terminal.
+if $no_alt_screen; then
+  set -- --no-alt-screen "$@"
 fi
 exec "$real_cli" "$@"
