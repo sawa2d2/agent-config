@@ -9,17 +9,18 @@ if not ok then
   return
 end
 
--- Choose at launch: AGENT_CONFIG_ACP_AGENT=claude_code|bob
+-- Choose at launch: AGENT_CONFIG_ACP_AGENT=claude_code|bob|codex
 -- Default to an agent available on this machine, without hiding the other.
 local chosen = vim.env.AGENT_CONFIG_ACP_AGENT
-if chosen ~= "bob" and chosen ~= "claude_code" then
+if chosen ~= "bob" and chosen ~= "claude_code" and chosen ~= "codex" then
   chosen = vim.fn.executable("bob") == 1 and "bob" or "claude_code"
 end
 
 codecompanion.setup({
   adapters = {
     acp = {
-      -- Claude uses CodeCompanion's upstream claude_code preset.
+      -- Claude and Codex use CodeCompanion's upstream presets.
+      -- Codex requires codex-acp from @agentclientprotocol/codex-acp on PATH.
       bob = function()
         local helpers = require("codecompanion.adapters.acp.helpers")
         return {

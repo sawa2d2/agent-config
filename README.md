@@ -230,7 +230,7 @@ changed hook only after you trust it in the TUI (`/hooks`).
 
 ## Neovim chat (optional)
 
-Requires Neovim 0.11+, Nix on Linux x86_64, and authenticated Claude Code or IBM Bob Shell.
+Requires Neovim 0.11+, Nix on Linux x86_64, and authenticated Claude Code, IBM Bob Shell, or Codex.
 
 ```bash
 bash scripts/install-nvim-acp
@@ -242,9 +242,29 @@ Restart Neovim and press `<leader>a` to open or close CodeCompanion chat. Press 
 ```bash
 AGENT_CONFIG_ACP_AGENT=claude_code nvim .
 AGENT_CONFIG_ACP_AGENT=bob nvim .
+AGENT_CONFIG_ACP_AGENT=codex nvim .
 ```
 
 For Claude token authentication, run `claude setup-token` and export `CLAUDE_CODE_OAUTH_TOKEN` before launching Neovim. Never commit tokens.
+
+Codex uses [CodeCompanion's upstream `codex` ACP preset](https://github.com/olimorris/codecompanion.nvim/blob/main/lua/codecompanion/adapters/acp/codex.lua).
+Install the maintained [Codex ACP adapter](https://github.com/agentclientprotocol/codex-acp)
+separately and put its `codex-acp` executable on Neovim's `PATH`:
+
+```bash
+npm install -g @agentclientprotocol/codex-acp
+codex-acp --version
+```
+
+Use a CodeCompanion version that includes the `codex` preset. The old
+`@zed-industries/codex-acp` package has moved to the package above. The adapter
+speaks ACP over stdio and starts Codex app-server; it includes a compatible
+Codex dependency. `CODEX_PATH` can explicitly select another binary. It does
+not use this repository's terminal launcher. The upstream preset defaults to
+API-key authentication (`OPENAI_API_KEY`); for ChatGPT authentication, configure
+the preset's `defaults.auth_method = "chat-gpt"` in your CodeCompanion setup.
+See the adapter's README for authentication and runtime options. The default
+agent remains Bob when available, otherwise Claude; Codex is explicitly selected.
 
 ## Bob Shell (optional)
 
