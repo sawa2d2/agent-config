@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Merge agent-config managed Claude Code settings: theme, default renderer and
-# auto-compact window, subagent model and hidden skills.
+# auto-compact window, subagent model, hidden skills, and disabled claude.ai
+# connectors and Artifact tools.
 # Standalone palette: no dependency on the dotfiles checkout.
 # Re-run after changing the global dotfiles theme.
 state_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/theme"
@@ -97,15 +98,32 @@ env = settings.setdefault("env", {})
 if not isinstance(env, dict):
     raise ValueError(f"Expected a JSON object in env: {settings_file}")
 env.setdefault("CLAUDE_CODE_SUBAGENT_MODEL", "sonnet")
-# Office and browser skills (claude.ai sync and built-in) put their
-# descriptions in every request but rarely apply to coding. Hide them from the
-# model and keep /name; an explicit override is kept.
+# claude.ai connectors (such as Claude Docs) and the Artifact tools put their
+# schemas and instructions in every request but go unused in the CLI. The
+# documented setting turns off every claude.ai connector; an explicit false is
+# kept. The deny entries are merged into an existing list.
+settings.setdefault("disableClaudeAiConnectors", True)
+permissions = settings.setdefault("permissions", {})
+if not isinstance(permissions, dict):
+    raise ValueError(f"Expected a JSON object in permissions: {settings_file}")
+deny = permissions.setdefault("deny", [])
+if not isinstance(deny, list):
+    raise ValueError(f"Expected a JSON array in permissions.deny: {settings_file}")
+for tool in ("Artifact", "ArtifactComments", "ArtifactData"):
+    if tool not in deny:
+        deny.append(tool)
+# Office and browser skills (claude.ai sync and built-in), and the Artifact and
+# Claude Docs skills left useless above, put their descriptions in every
+# request but rarely apply to coding. Hide them from the model and keep /name;
+# an explicit override is kept.
 overrides = settings.setdefault("skillOverrides", {})
 if not isinstance(overrides, dict):
     raise ValueError(f"Expected a JSON object in skillOverrides: {settings_file}")
 for skill in ("docx", "pptx", "xlsx", "pdf", "google-workspace", "computer-use",
               "built-in-browser", "chrome-browser", "claude-in-chrome", "morning",
-              "import-memory"):
+              "import-memory", "artifact-design", "artifact-diagramming",
+              "artifact-capabilities", "dataviz", "anthropic-skills:docs",
+              "anthropic-skills:artifact-emulator"):
     overrides.setdefault(skill, "user-invocable-only")
 # The built-in plugin-authoring skill (Claude Code mods) is also rarely needed.
 overrides.setdefault("plugin-authoring", "user-invocable-only")

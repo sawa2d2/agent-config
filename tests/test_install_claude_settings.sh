@@ -8,7 +8,7 @@ export HOME="$tmp/home"
 export XDG_CONFIG_HOME="$HOME/.config"
 mkdir -p "$HOME/.claude" "$XDG_CONFIG_HOME/dotfiles"
 printf '%s\n' violet > "$XDG_CONFIG_HOME/dotfiles/theme"
-printf '%s\n' '{"permissions":{"allow":["Read"]},"theme":"dark"}' > "$HOME/.claude/settings.json"
+printf '%s\n' '{"permissions":{"allow":["Read"],"deny":["Bash(rm *)","Artifact"]},"theme":"dark"}' > "$HOME/.claude/settings.json"
 
 bash "$root/scripts/install-claude-settings"
 python3 - <<'PY'
@@ -26,6 +26,11 @@ assert settings["tui"] == "default"
 assert settings["autoCompactWindow"] == 200000
 assert settings["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] == "sonnet"
 assert settings["skillOverrides"]["docx"] == "user-invocable-only"
+assert settings["skillOverrides"]["artifact-design"] == "user-invocable-only"
+assert settings["skillOverrides"]["anthropic-skills:docs"] == "user-invocable-only"
+assert settings["disableClaudeAiConnectors"] is True
+# Existing deny rules are kept and Artifact is not duplicated.
+assert settings["permissions"]["deny"] == ["Bash(rm *)", "Artifact", "ArtifactComments", "ArtifactData"]
 assert settings["skillOverrides"]["plugin-authoring"] == "user-invocable-only"
 PY
 
@@ -39,6 +44,7 @@ settings["tui"] = "fullscreen"
 settings["autoCompactWindow"] = "auto"
 settings["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] = "haiku"
 settings["skillOverrides"]["docx"] = "on"
+settings["disableClaudeAiConnectors"] = False
 settings["skillOverrides"]["plugin-authoring"] = "on"
 path.write_text(json.dumps(settings))
 PY
@@ -47,6 +53,8 @@ python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claud
 python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["autoCompactWindow"] == "auto"'
 python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] == "haiku"'
 python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["skillOverrides"]["docx"] == "on"'
+python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["disableClaudeAiConnectors"] is False'
+python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["permissions"]["deny"].count("ArtifactData") == 1'
 python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["skillOverrides"]["plugin-authoring"] == "on"'
 
 # Idempotence and theme change.
@@ -92,4 +100,4 @@ if bash "$root/scripts/install-claude-settings" > /dev/null 2>&1; then
 fi
 grep -q Personal "$HOME/.claude/themes/agent-config-selected.json"
 
-echo 'PASS: Claude theme palette, contrast, default renderer, compact window, subagent model, skill overrides, settings preservation, and safety'
+echo 'PASS: Claude theme palette, contrast, default renderer, compact window, subagent model, skill overrides, claude.ai connectors, Artifact deny rules, settings preservation, and safety'

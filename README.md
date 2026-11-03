@@ -60,7 +60,19 @@ their own search and read on Sonnet instead of inheriting the main model
 `claude-in-chrome`, `morning`, `import-memory`) are set to
 `user-invocable-only` in `skillOverrides`, so their descriptions stay out of
 every request while `/name` still works; an explicit override is kept. The
-built-in `plugin-authoring` skill is hidden the same way. Other
+built-in `plugin-authoring` skill is hidden the same way.
+The Artifact tools and the claude.ai Claude Docs connector are turned off in
+the CLI, since their schemas and instructions also go into every request
+(claude.ai on the web is unaffected): `"disableClaudeAiConnectors": true` is
+set unless already set, which removes **all** claude.ai connectors from
+Claude Code, not only Claude Docs (set it to `false` to get them back);
+`Artifact`, `ArtifactComments` and `ArtifactData` are added to
+`permissions.deny`, keeping existing entries; and the now useless skills
+(`artifact-design`, `artifact-diagramming`, `artifact-capabilities`,
+`dataviz`, `anthropic-skills:docs`, `anthropic-skills:artifact-emulator`) are
+`user-invocable-only` too. In Claude Code 2.1.289 this cut a new session's
+`/context` from 28.4k to 16.4k tokens (system tools 18.1k to 8.8k, MCP tools
+and server instructions 1.4k to 0, skills 3.8k to 2.4k). Other
 settings in
 `~/.claude/settings.json` are preserved. Python 3 is required.
 
