@@ -35,10 +35,20 @@ done
 # session. using-superpowers (that injected text) and diagnosing-superpowers
 # (troubleshooting for the plugin) only add always-on tokens, so they are
 # skipped and earlier copies removed.
+# The rest get disable-model-invocation: their descriptions ("You MUST use this
+# before any creative work") sit in every session's skill list and push heavy
+# process over the global instructions' simplicity rules. They stay available
+# by name (/brainstorming) and through autonomous-development.
 meta_skills=(using-superpowers diagnosing-superpowers)
 for source in "$tmp/superpowers/skills/"*; do
   [[ -f "$source/SKILL.md" ]] || continue
   [[ " ${meta_skills[*]} " == *" ${source##*/} "* ]] && continue
+  if ! grep -q '^disable-model-invocation:' "$source/SKILL.md"; then
+    # Insert the flag before the line that closes the frontmatter.
+    awk 'NR > 1 && !done && $0 == "---" { print "disable-model-invocation: true"; done = 1 } { print }' \
+      "$source/SKILL.md" > "$source/SKILL.md.new"
+    mv -- "$source/SKILL.md.new" "$source/SKILL.md"
+  fi
   install_skill "$source" "${source##*/}"
 done
 for name in "${meta_skills[@]}"; do

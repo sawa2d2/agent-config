@@ -21,6 +21,10 @@ worktrees, pull requests or merge choices), skip those steps.
 | Mechanically checkable end state (all tests pass, lint clean) | `ralph-loop` (Claude Code only) with an explicit completion condition and an iteration limit |
 | Before claiming any unit is done | superpowers `verification-before-completion` |
 
+The superpowers skills are installed with `disable-model-invocation`, so the
+skill tool cannot load them; read `SKILL.md` from this agent's skills
+directory instead (for example `~/.claude/skills/brainstorming/SKILL.md`).
+
 Ask about unclear requirements before planning. When a tool is not installed
 in this agent, carry out its idea inline: clarify, plan in verifiable units,
 execute, verify.
