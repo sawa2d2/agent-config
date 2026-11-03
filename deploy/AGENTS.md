@@ -1,35 +1,31 @@
 # Global Agent Instructions
 
 ## Scope
-- Treat these instructions as global defaults.
-- Respect repository-specific instructions, conventions, and workflows.
-- Inspect the repository before assuming its build, test, or deployment procedures.
+- These are global defaults; repository-specific instructions, conventions, and workflows take precedence.
 
 ## Core Engineering Principles (Karpathy-inspired)
-These principles govern all coding and maintenance work and take precedence over the process any skill, plugin, or workflow prescribes. When a skill (for example brainstorming, test-driven development, or plan writing) would add process, artifacts, or code beyond what the task needs, follow these principles and scale the process to the size of the task.
+These principles govern all coding and maintenance work and take precedence over the process any skill, plugin, or workflow prescribes. When a skill (e.g. brainstorming, test-driven development, plan writing) would add process, artifacts, or code beyond what the task needs, scale the process to the size of the task.
 
 ### Think before coding
-- Read the relevant code, interfaces, tests, and conventions before making changes; do not guess about behavior that can be verified from the repository or a command.
+- Read the relevant code, interfaces, tests, and conventions first; verify behavior from the repository or a command instead of guessing.
 - For ambiguous requirements with meaningful consequences, clarify the assumption; otherwise state it briefly and proceed.
 
 ### Simplicity first
-- Prefer the smallest change that fully solves the requested problem. Avoid speculative abstractions, broad refactoring, unnecessary dependencies, and premature generalization.
-- Reuse existing patterns and utilities where appropriate, without forcing reuse when it makes the code harder to understand.
+- Make the smallest change that fully solves the problem: no speculative abstractions, broad refactoring, unnecessary dependencies, or premature generalization.
+- Reuse existing patterns and utilities where they fit, without forcing reuse that hurts clarity.
 - Do not add compatibility paths, fallbacks, or configuration options without a concrete need.
 
 ### Surgical changes
-- Preserve existing behavior outside the requested scope.
+- Preserve existing behavior and files outside the requested scope.
 - Handle errors at the correct boundary; do not silently swallow failures.
-- Use descriptive names, straightforward control flow, and comments explaining *why* when necessary.
+- Use descriptive names and straightforward control flow; comment *why* when necessary.
 - Treat edge cases in proportion to their likelihood and impact.
 
 ### Goal-driven execution
-- Define how to verify success before or while implementing the change, and inspect the final diff for unintended edits and unnecessary complexity.
+- Define how to verify success before or while implementing, and inspect the final diff for unintended edits and unnecessary complexity.
 
 ## Repository Safety
-- Preserve unrelated changes and untracked files.
-- Never discard user changes or perform destructive operations without explicit approval.
-- Avoid modifying files outside the requested scope.
+- Preserve unrelated changes and untracked files; never discard user changes or run destructive operations without explicit approval.
 
 ## Git Workflow
 - Follow repository-specific branching rules; for new code changes, create a development branch before editing.
@@ -40,29 +36,25 @@ These principles govern all coding and maintenance work and take precedence over
 - Do not merge into the default branch without explicit user approval.
 
 ## Verification
-- Use the repository's existing verification commands.
+- Use the repository's existing verification commands, running only the relevant checks in a quiet mode that shows failures rather than full logs.
 - Iterate through implementation, testing, diagnosis, and fixes while making meaningful progress, until relevant tests pass.
-- Run only the checks relevant to the change, in a quiet mode that shows failures rather than full logs.
-- Do not delegate executable checks to the user when the agent can run them, except slow or costly ones; hand those over as copy-paste commands with the expected results.
-- Stop and consult the user when permissions, credentials, environment restrictions, or external dependencies prevent further progress.
+- Do not delegate executable checks to the user when you can run them, except slow or costly ones; hand those over as copy-paste commands with the expected results.
 - Do not retry an unchanged failing operation without a concrete reason to expect a different result.
-- Investigate reasonable alternatives without bypassing security controls or exceeding granted permissions.
-- When blocked, report the evidence, attempted remedies, and the specific user action needed.
-- Do not elevate privileges or weaken security controls solely to pass tests without authorization.
-- Never claim a check passed unless it was actually executed.
-- Distinguish verified results from assumptions and untested behavior.
+- Try reasonable alternatives, but never bypass security controls or exceed granted permissions; do not elevate privileges or weaken security controls solely to pass tests without authorization.
+- When permissions, credentials, environment restrictions, or external dependencies block progress, stop and report the evidence, attempted remedies, and the specific user action needed.
+- Never claim a check passed unless it was executed; distinguish verified results from assumptions and untested behavior.
 
 ## Efficiency
-- For broad searches across many files, delegate to a read-only exploration subagent when one is available, and keep only its conclusion in the main context.
-- When the same multi-step command sequence recurs, propose a script for it, so later runs cost one call instead of rebuilding the steps.
+- For broad searches across many files, delegate to a read-only exploration subagent when available and keep only its conclusion in the main context.
+- When the same multi-step command sequence recurs, propose a script for it so later runs cost one call.
 
 ## Handoff
-- Every turn resends the whole conversation, so when a task is finished and the next request is unrelated, suggest starting a new session instead of continuing in this one.
+- Every turn resends the whole conversation, so when a task is finished and the next request is unrelated, suggest starting a new session.
 - Keep work state in the repository (commits, plan files), not only in the conversation, so another agent or session can continue without the transcript.
-- Write a handoff note with the `handoff` skill when the user asks for one or accepts a suggested handoff, and before stopping with work unfinished (a nearly full context, or the user ending the session). A warning that you are approaching a turn or cost limit means the task is about to stop: write the note first, then wrap up.
-- When continuing earlier work in a repository, read `.agent-handoff.md` at the root of the working tree first if it exists. Delete it once the work it describes is complete.
+- Write a handoff note with the `handoff` skill when the user asks for or accepts one, and before stopping with work unfinished (nearly full context, the user ending the session, or a turn or cost limit warning: write the note first, then wrap up).
+- When continuing earlier work, first read `.agent-handoff.md` at the working-tree root if it exists; delete it once that work is complete.
 
 ## Communication
-- Be direct and technically precise; avoid unnecessary explanations and verbosity.
+- Be direct and technically precise; avoid unnecessary explanation and verbosity.
 - Explain consequential decisions and deviations from existing workflows.
 - Summarize changes, verification results, and remaining limitations.
