@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Usage: disable-model-invocation <SKILL.md>
+# Add disable-model-invocation: true to a skill's frontmatter, so the skill
+# leaves the agents' skill lists and runs only when invoked by name. A skill
+# that already sets the flag either way is left as it is.
+(( $# == 1 )) || { echo 'Usage: disable-model-invocation <SKILL.md>' >&2; exit 2; }
+file=$1
+[[ -f "$file" ]] || { echo "Missing skill file: $file" >&2; exit 1; }
+grep -q '^disable-model-invocation:' "$file" && exit 0
+# Insert the flag before the line that closes the frontmatter.
+awk 'NR > 1 && !done && $0 == "---" { print "disable-model-invocation: true"; done = 1 } { print }' \
+  "$file" > "$file.new"
+mv -- "$file.new" "$file"

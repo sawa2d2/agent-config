@@ -10,24 +10,28 @@ fetch() {
   git clone --quiet --depth 1 "https://github.com/$1.git" "$tmp/$2"
 }
 
+scripts_dir="$(dirname -- "${BASH_SOURCE[0]}")"
 install_skill() {
-  bash "$(dirname -- "${BASH_SOURCE[0]}")/install-skill" "$@"
+  bash "$scripts_dir/install-skill" "$@"
 }
 
 fetch joshuawheelock/grill-me grill-me
 fetch mattpocock/skills matt-skills
 fetch obra/superpowers superpowers
 
+# These skills serve explicit requests ("grill me", a glossary or ADR), so
+# they are invoked by name only: their descriptions would otherwise sit in
+# every session's skill list, and Bob resends that list on every request.
+bash "$scripts_dir/disable-model-invocation" "$tmp/grill-me/skills/grill-me/SKILL.md"
 install_skill "$tmp/grill-me/skills/grill-me" grill-me
 for name in grill-with-docs grilling domain-modeling; do
-  if [[ -d "$tmp/matt-skills/skills/engineering/$name" ]]; then
-    install_skill "$tmp/matt-skills/skills/engineering/$name" "$name"
-  elif [[ -d "$tmp/matt-skills/skills/productivity/$name" ]]; then
-    install_skill "$tmp/matt-skills/skills/productivity/$name" "$name"
-  else
-    echo "Missing upstream skill: $name" >&2
-    exit 1
-  fi
+  source=''
+  for group in engineering productivity; do
+    [[ -d "$tmp/matt-skills/skills/$group/$name" ]] && source="$tmp/matt-skills/skills/$group/$name" && break
+  done
+  [[ -n "$source" ]] || { echo "Missing upstream skill: $name" >&2; exit 1; }
+  bash "$scripts_dir/disable-model-invocation" "$source/SKILL.md"
+  install_skill "$source" "$name"
 done
 
 # Every agent gets the Superpowers skills as standalone skills, without the
@@ -43,12 +47,7 @@ meta_skills=(using-superpowers diagnosing-superpowers)
 for source in "$tmp/superpowers/skills/"*; do
   [[ -f "$source/SKILL.md" ]] || continue
   [[ " ${meta_skills[*]} " == *" ${source##*/} "* ]] && continue
-  if ! grep -q '^disable-model-invocation:' "$source/SKILL.md"; then
-    # Insert the flag before the line that closes the frontmatter.
-    awk 'NR > 1 && !done && $0 == "---" { print "disable-model-invocation: true"; done = 1 } { print }' \
-      "$source/SKILL.md" > "$source/SKILL.md.new"
-    mv -- "$source/SKILL.md.new" "$source/SKILL.md"
-  fi
+  bash "$scripts_dir/disable-model-invocation" "$source/SKILL.md"
   install_skill "$source" "${source##*/}"
 done
 for name in "${meta_skills[@]}"; do

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Bob Shell UserPromptSubmit hook: suggest a handoff once a task has spent
-half of its cost limit.
+half of its cost limit or its context has grown past a token threshold.
 
 Every turn resends the whole context, so a long task gets more expensive per
 turn; a new task started from a handoff note continues with a small one. The
-check reads the task's cost from Bob's database without using the model, and
-adds one line of context, once per task, so the agent offers the handoff. Bob
-stores the cost of the root task, which the hook's session_id names, in
-tasks.costs (observed in Bob Shell 2.0.6). Without a cost limit, or when the
+check reads Bob's database without using the model, and adds one line of
+context, once per task, so the agent offers the handoff. Bob stores the cost
+of the root task, which the hook's session_id names, in tasks.costs, and the
+context size of each request in the assistant message's _meta.spend
+.contextTokens (observed in Bob Shell 2.0.6 and 2.0.9). The context threshold
+defaults to 50000 tokens; AGENT_CONFIG_BOB_HANDOFF_TOKENS overrides it, and 0
+turns it off. Without a cost limit the cost check is skipped; when the
 database does not look as expected, the hook adds nothing.
 """
 
@@ -17,28 +20,68 @@ from pathlib import Path
 import sqlite3
 import sys
 
-SUGGESTION = (
+DEFAULT_CONTEXT_TOKENS = 50000
+COST_SUGGESTION = (
     "This task has spent {cost:.1f} of its {limit:g} Bobcoin cost limit, and every turn resends the "
     "whole context. At the start of your reply, suggest in one line handing off to a new task. If the "
     "user accepts, write the note with the handoff skill."
 )
+CONTEXT_SUGGESTION = (
+    "This task's context has grown to {tokens} tokens, and every turn resends all of it. At the start "
+    "of your reply, suggest in one line handing off to a new task. If the user accepts, write the note "
+    "with the handoff skill."
+)
+
+
+def cost_limit(bob):
+    try:
+        with (bob / "settings/settings.json").open(encoding="utf-8") as stream:
+            limit = json.load(stream)["session"]["maxCost"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return limit if isinstance(limit, (int, float)) and limit > 0 else None
+
+
+def context_threshold():
+    try:
+        return int(os.environ.get("AGENT_CONFIG_BOB_HANDOFF_TOKENS") or DEFAULT_CONTEXT_TOKENS)
+    except ValueError:
+        return DEFAULT_CONTEXT_TOKENS
+
+
+def suggestion(database, task_id, limit, threshold):
+    if limit is not None:
+        row = database.execute("select costs from tasks where id = ?", (task_id,)).fetchone()
+        try:
+            cost = json.loads(row[0])["cost"]
+        except (ValueError, KeyError, TypeError):
+            cost = None
+        if isinstance(cost, (int, float)) and cost >= limit / 2:
+            return COST_SUGGESTION.format(cost=cost, limit=limit)
+    if threshold > 0:
+        row = database.execute("select data from messages where task_id = ? and role = 'assistant' "
+                               "order by created_at desc limit 1", (task_id,)).fetchone()
+        try:
+            tokens = json.loads(row[0])["_meta"]["spend"]["contextTokens"]
+        except (ValueError, KeyError, TypeError):
+            tokens = None
+        if isinstance(tokens, int) and tokens > threshold:
+            return CONTEXT_SUGGESTION.format(tokens=tokens)
+    return None
 
 
 def main():
     try:
         task_id = json.load(sys.stdin)["session_id"]
         bob = Path.home() / ".bob"
-        with (bob / "settings/settings.json").open(encoding="utf-8") as stream:
-            limit = json.load(stream)["session"]["maxCost"]
         database = sqlite3.connect(f"file:{bob / 'db/bob.db'}?mode=ro", uri=True)
         try:
-            row = database.execute("select costs from tasks where id = ?", (task_id,)).fetchone()
+            text = suggestion(database, task_id, cost_limit(bob), context_threshold())
         finally:
             database.close()
-        cost = json.loads(row[0])["cost"]
     except (OSError, ValueError, KeyError, TypeError, sqlite3.Error):
         return
-    if not isinstance(limit, (int, float)) or not isinstance(cost, (int, float)) or limit <= 0 or cost < limit / 2:
+    if text is None:
         return
 
     state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "agent-config/bob-handoff-suggested"
@@ -47,8 +90,7 @@ def main():
         return
     state.mkdir(parents=True, exist_ok=True)
     marker.touch()
-    json.dump({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-                                      "additionalContext": SUGGESTION.format(cost=cost, limit=limit)}}, sys.stdout)
+    json.dump({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": text}}, sys.stdout)
 
 
 if __name__ == "__main__":

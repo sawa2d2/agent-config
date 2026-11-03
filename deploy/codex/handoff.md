@@ -40,7 +40,7 @@ is a replacement for starting a fresh session from a handoff note.
 | Existing Bob behavior | Codex evidence and outcome |
 | --- | --- |
 | `session.maxCost` in Bobcoins; warnings at 80% | No equivalent normal-session Bobcoin cap is established by Codex CLI help or the official configuration reference. No currency conversion or invented setting. |
-| `bob-handoff-suggest` reads task costs and warns at half the cap on `UserPromptSubmit` | Codex's documented prompt hook has no spend or context-remaining fields. We do not parse internal transcripts, whose format the hook docs call unstable. |
+| `bob-handoff-suggest` reads task costs and context size, and warns at half the cap or above a token threshold on `UserPromptSubmit` | Codex's documented prompt hook has no spend or context-remaining fields. We do not parse internal transcripts, whose format the hook docs call unstable. |
 | `bin/bob` detects a task reaching its cost cap after exit and offers `bobtask handoff` | No equivalent normal-session cap-exit contract was established. `bin/codex` keeps its existing exec/session control; no exit-code interpretation or automatic restart is added. |
 | Fresh Bob task reads the handoff note or a compact transcript | Codex can start with a prompt pointing to the shared handoff note. No transcript export or database access is needed. |
 

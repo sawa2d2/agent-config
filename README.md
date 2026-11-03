@@ -34,6 +34,15 @@ and no runtime token or cost savings were measured.
 | `handoff` | Write `.agent-handoff.md` (see [Agent handoff notes](#agent-handoff-notes)) when asked, when a suggested handoff is accepted, or before stopping with work unfinished |
 | `autonomous-development` | Invoked by name only (`/autonomous-development`): route an objective to superpowers, Spec Kit or ralph-loop, and run long work with stacked branches, a progress file at the working-tree root and batched user checks |
 
+The upstream `grill-me`, `grilling` and `domain-modeling` skills, like
+Superpowers, are installed with `disable-model-invocation: true`
+(`scripts/disable-model-invocation`), as are the Bob `prd` and `ralph` skills
+from `scripts/install-bob-ralph`: they serve explicit requests, and every skill
+description in the list is resent with each request. Invoke them by name
+(`/grill-me`). `handoff` stays model-visible so the agent can offer it. Bob's
+built-in skills (`configure-hooks`, `office-insights` and others) have no
+setting to hide them in Bob Shell 2.0.9 and stay listed.
+
 ## Claude Code theme
 
 `./install` enables `custom:agent-config-selected`. User message backgrounds
@@ -182,11 +191,18 @@ with the automatic-review default described below; trust settings stay unchanged
 With no prompt, a handoff note is required.
 
 For Bob, `./install` also registers `scripts/bob-handoff-suggest` as a
-`UserPromptSubmit` hook. Once a task has spent half of `session.maxCost`, read
+`UserPromptSubmit` hook. Once a task has spent half of `session.maxCost`, or
+the latest request's context exceeds 50000 tokens
+(`AGENT_CONFIG_BOB_HANDOFF_TOKENS` overrides this; `0` turns it off), read
 from Bob's database without using the model, it adds one line of context, once
-per task, so the agent suggests a handoff; answering yes writes the note. It
-relies on Bob's internal `tasks.costs` column (Bob Shell 2.0.6) and adds
-nothing when that is missing or no cost limit is set.
+per task, so the agent suggests a handoff; answering yes writes the note. Bob
+charges each request by its context size, so a long task costs more per turn
+than a fresh one continuing from the note, and compaction at
+`compactionThresholdPercent` may never trigger: Bob takes the context window
+from the server at runtime, so the percentage cannot be pinned to a token count
+here. The hook relies on Bob's internal `tasks.costs` column and the
+`_meta.spend.contextTokens` of assistant messages (Bob Shell 2.0.6 and 2.0.9),
+and skips a check whose data is missing.
 `bobtask handoff` points the new Bob task at the note when the workspace has
 one, keeping the transcript only for details the note lacks.
 The `autonomous-development` skill keeps its progress file,
@@ -338,6 +354,17 @@ bash scripts/install-bob-shell
 ```
 
 Uses IBM's official installer, not Nix. Bob authentication is separate.
+
+Bob charges each request by the context it resends, so usage habits matter
+more than settings:
+
+- Start a new task for each topic instead of continuing an unrelated one.
+- Hand off early: `/handoff` writes the note, then `bobtask handoff` continues
+  in a new task with a small context.
+- Read narrow line ranges of large files; rtk compresses only
+  `execute_command` output, not `read_file`.
+- Use `spawn_subagent` for broad exploration, so only its conclusion enters
+  the main context.
 
 ## Experimental Bob Ralph (optional)
 
