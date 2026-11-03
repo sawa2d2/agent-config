@@ -167,8 +167,8 @@ session and worktree without leaving the current pane; agents run it when they
 start a development branch inside tmux, so `./install` links it into
 `~/.local/bin`. Inside tmux, it creates
 the worktree with `gwt-path -b` from the dotfiles, moves `.agent-handoff.md`
-from the current working tree into it, adds a pane above the current one
-without moving focus, marks the worktree as trusted in `~/.claude.json` so
+from the current working tree into it, adds a pane above the current one within
+the current tmux window without moving focus, marks the worktree as trusted in `~/.claude.json` so
 Claude skips its trust dialog there, and types `claude` with a prompt to read the note (or
 the given prompt) into that pane's shell. Like `gwt`, it needs the primary
 worktree on `main`.
@@ -177,6 +177,9 @@ worktree on `main`.
 use the same worktree, handoff-note, and pane conventions for Bob and Codex;
 `./install` links all three commands into `~/.local/bin`. Always use the command
 for the originating agent: Claude to Claude, Bob to Bob, and Codex to Codex.
+Never create another tmux window or move the destination pane to another window
+on your own. If there is insufficient room to split the current pane, stop and
+consult the user.
 Codex delegation starts `codex new` with the prompt through the existing wrapper,
 with the automatic-review default described below; trust settings stay unchanged.
 With no prompt, a handoff note is required.
