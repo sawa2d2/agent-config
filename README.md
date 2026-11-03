@@ -58,6 +58,7 @@ Further documentation:
 - [Codex rtk coverage](docs/codex-rtk-coverage.md)
 - [Codex session management and language tooling](docs/codex-session-language.md)
 - [Claude Code 1-hour cache writes](docs/claude-cache-writes.md)
+- [Isolating agent work under a dedicated user](docs/dev-user-isolation.md)
 
 ## Test delegation
 
