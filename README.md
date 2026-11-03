@@ -58,6 +58,17 @@ Further documentation:
 - [Codex session management and language tooling](docs/codex-session-language.md)
 - [Claude Code 1-hour cache writes](docs/claude-cache-writes.md)
 
+## Test delegation
+
+The shared Verification rules in `deploy/AGENTS.md` delegate each test run to
+Bob subagents (`spawn_subagent`), Claude Code subagents, or Codex subagents
+(`spawn_agent`). Bob's interactive subtasks are a separate mechanism.
+The parent defines commands and scope, reviews results, and handles fixes and
+Git operations; the child runs checks directly and reports exit statuses and
+failure evidence. Unavailable delegation or missing results never count as a pass.
+`./install` links the shared rules to `~/.bob/rules/agent-config.md`,
+`~/.claude/CLAUDE.md`, and `~/.codex/AGENTS.md`; no installer changes are needed.
+
 ## Tests
 
 ```bash

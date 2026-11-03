@@ -38,6 +38,9 @@ These principles govern all coding and maintenance work and take precedence over
 
 ## Verification
 - Use the repository's existing verification commands, running only the relevant checks in a quiet mode that shows failures rather than full logs.
+- Delegate each test run to a subagent: use Bob's `spawn_subagent`, a Claude Code subagent, or a Codex subagent via `spawn_agent`, as available in that agent's environment. The assigned subagent executes the checks directly rather than delegating them again.
+- The parent defines the exact commands, working directory, and test scope, reviews the child's exit statuses and failure evidence, and handles fixes and Git operations. The child reports what actually ran and its results without modifying source files or Git state; reruns after fixes also go to a child.
+- If the required child mechanism is unavailable or delegation fails, report the blocker and any unrun checks; never treat delegation failure or missing results as a passing test.
 - Iterate through implementation, testing, diagnosis, and fixes while making meaningful progress, until relevant tests pass.
 - Do not delegate executable checks to the user when you can run them, except slow or costly ones; hand those over as copy-paste commands with the expected results.
 - Do not retry an unchanged failing operation without a concrete reason to expect a different result.
