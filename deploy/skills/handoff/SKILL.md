@@ -23,4 +23,7 @@ description: Write a handoff note so a new session or another agent can continue
    what Git already records.
 4. Tell the user in one or two lines that the note is ready and how to
    continue: in Bob Shell, `bobtask handoff`; elsewhere, a new session in this
-   repository, which reads the note first.
+   repository, which reads the note first. When the user wants the work to
+   continue on a new branch in another tmux pane, run
+   `agent-delegate <new-branch>` from the working tree instead; it moves the
+   note into the new worktree and starts Claude there.

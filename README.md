@@ -124,6 +124,14 @@ transcript. The note stays inside the working tree because Codex's sandbox
 keeps `.git` read-only. Git ignores it through the global gitignore of the
 dotfiles; a repository's `.gitignore` must not list it, since Bob with
 `respectGitIgnore` refuses to read or write the files listed there.
+
+`agent-delegate <new-branch> [prompt]` hands the work to a new Claude session
+in a new worktree without leaving the current pane. Inside tmux, it creates
+the worktree with `gwt-path -b` from the dotfiles, moves `.agent-handoff.md`
+from the current working tree into it, adds a pane beside the current one
+without moving focus, and types `claude` with a prompt to read the note (or
+the given prompt) into that pane's shell. Like `gwt`, it needs the primary
+worktree on `main`.
 For Bob, `./install` also registers `scripts/bob-handoff-suggest` as a
 `UserPromptSubmit` hook. Once a task has spent half of `session.maxCost`, read
 from Bob's database without using the model, it adds one line of context, once
