@@ -135,6 +135,15 @@ without moving focus, marks the worktree as trusted in `~/.claude.json` so
 Claude skips its trust dialog there, and types `claude` with a prompt to read the note (or
 the given prompt) into that pane's shell. Like `gwt`, it needs the primary
 worktree on `main`.
+
+`bob-delegate <new-branch> [prompt]` and `codex-delegate <new-branch> [prompt]`
+use the same worktree, handoff-note, and pane conventions for Bob and Codex;
+`./install` links all three commands into `~/.local/bin`. Always use the command
+for the originating agent: Claude to Claude, Bob to Bob, and Codex to Codex.
+Codex delegation starts `codex new` with the prompt through the existing wrapper,
+with the automatic-review default described below; trust settings stay unchanged.
+With no prompt, a handoff note is required.
+
 For Bob, `./install` also registers `scripts/bob-handoff-suggest` as a
 `UserPromptSubmit` hook. Once a task has spent half of `session.maxCost`, read
 from Bob's database without using the model, it adds one line of context, once
@@ -255,7 +264,7 @@ Installs the experimental Ralph runner and Bob skills without running the loop. 
 
 ## CLI session resume
 
-Launchers live in `bin/` and dispatch to the original CLI when any arguments are supplied. Enable them in interactive Bash or Zsh with one line anywhere in your startup file:
+Launchers live in `bin/` and dispatch to the original CLI. Enable them in interactive Bash or Zsh with one line anywhere in your startup file:
 
 ```bash
 [[ -f "$HOME/agent-config/shell/aliases.sh" ]] && source "$HOME/agent-config/shell/aliases.sh"
@@ -269,7 +278,7 @@ Aliases take precedence however nvm, Nix or other startup files reorder `PATH` l
 | Claude Code | `claude` | `claudel` | In `claudel` picker, press `Ctrl+A` |
 | Codex | `codex` | `codexl` | `codexla` |
 
-To start a new session, run `<tool> new`; arguments after `new` are passed to the original CLI. Any other argument also dispatches to the original CLI unchanged:
+To start a new session, run `<tool> new`; arguments after `new` are passed to the original CLI. Other arguments also dispatch to the original CLI, with the Codex default below:
 
 | Tool | New session | New session with arguments |
 | --- | --- | --- |
@@ -278,6 +287,17 @@ To start a new session, run `<tool> new`; arguments after `new` are passed to th
 | Codex | `codex new` | `codex new "<prompt>"` |
 
 None of the original CLIs has a `new` subcommand, so the launchers reserve it; to send `new` as the first prompt, run the original CLI (`\claude new`). When the current directory has no Claude Code session yet, `claude` starts a new one instead of failing with "No conversation found to continue". Claude Code and Codex have no `chat` subcommand; `claude chat` starts a new session with `chat` as the first prompt. A leading backslash skips the alias and runs the original CLI. Bob reads auto-approval only from command-line arguments (`--yolo` is a deprecated alias of `--auto-approve`).
+
+Codex launchers default to `--approve-for-me`, including the latest-session
+resume, `codex new`, direct prompts, resume pickers, fork, exec, review, and
+`codex-delegate`. This selects automatic approval review with a workspace-write
+sandbox; it does not bypass sandboxing or hook trust. See the
+[official auto-review documentation](https://learn.chatgpt.com/docs/sandboxing/auto-review).
+Explicit approval or sandbox flags, permission-related `-c`/`--config` overrides,
+and profiles take precedence: the wrapper adds no default flag in those cases.
+For example, `codex new --sandbox read-only` and
+`codex resume --ask-for-approval on-request` retain exactly those choices.
+An explicit `--approve-for-me` is passed through once.
 
 The native resume pickers are used rather than custom fzf/database parsing.
 

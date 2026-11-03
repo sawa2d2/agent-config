@@ -56,25 +56,55 @@ expect '--continue' claude
 cd "$root"
 [[ -f "$HOME/.bob/theme.json" ]] || fail 'bob: theme was not refreshed'
 [[ -f "$HOME/.bob/settings/settings.json" ]] || fail 'bob: settings were not added'
-expect $'resume\n--last' codex
+expect $'--approve-for-me\nresume\n--last' codex
 
 # "new" starts a new session and passes the remaining arguments on.
 expect $'chat\n--auto-approve' bob new
 expect $'chat\n--auto-approve\n--mode\nx' bob new --mode x
 expect '' claude new
 expect 'two words' claude new 'two words'
-expect '' codex new
-expect 'two words' codex new 'two words'
+expect '--approve-for-me' codex new
+expect $'--approve-for-me\ntwo words' codex new 'two words'
 
-# Explicit arguments are passed through unchanged.
+# Arguments are preserved; Codex adds its automatic-review default.
 expect $'chat\n--auto-approve' bob chat --auto-approve
 expect $'--resume\ntwo words\n-p' claude --resume 'two words' -p
-expect $'exec\ntwo words' codex exec 'two words'
+expect $'--approve-for-me\nexec\ntwo words' codex exec 'two words'
 
 # Pickers use the native resume commands.
 expect '--resume' claudel
-expect $'resume' codexl
-expect $'resume\n--all' codexla
+expect $'--approve-for-me\nresume' codexl
+expect $'--approve-for-me\nresume\n--all' codexla
+
+# All session entry points share the automatic-review default.
+expect $'--approve-for-me\ntwo words' codex 'two words'
+expect $'--approve-for-me\nresume\n--last' codex resume --last
+expect $'--approve-for-me\nfork\n--last' codex fork --last
+expect $'--approve-for-me\nreview\n--uncommitted' codex review --uncommitted
+
+# Explicit approval/sandbox choices win, including compact and config forms.
+for option in '--approve-for-me' '--sandbox=read-only' '-sread-only' \
+  '--ask-for-approval=on-request' '-aon-request' \
+  '--dangerously-bypass-approvals-and-sandbox' '--yolo' '--full-auto'; do
+  expect "$option" codex new "$option"
+done
+expect $'resume\n-s\nread-only' codex resume -s read-only
+expect $'--sandbox\nread-only' codex new --sandbox read-only
+expect $'resume\n--all\n-a\non-request' codexla -a on-request
+expect $'--ask-for-approval\non-request' codex new --ask-for-approval on-request
+for setting in 'approval_policy="on-request"' 'approvals_reviewer="user"' \
+  'sandbox_mode="read-only"' 'sandbox_permissions=["disk-read-access"]' \
+  'default_permissions=":read-only"'; do
+  expect $'-c\n'"$setting" codex new -c "$setting"
+  expect "--config=$setting" codex new "--config=$setting"
+  expect "-c$setting" codex new "-c$setting"
+done
+expect $'--profile\ncustom' codex new --profile custom
+expect $'--approve-for-me\n-m\ntest\nhello' codex new -m test hello
+expect $'--approve-for-me\n-c\nmodel="test"' codex new -c 'model="test"'
+# Option-looking prompts after -- are literal, and values are not options.
+expect $'--approve-for-me\n--\n--sandbox=read-only' codex new -- --sandbox=read-only
+expect $'--approve-for-me\n-m\n--sandbox=read-only' codex new -m --sandbox=read-only
 
 # Leaving a task that stopped at its cost limit offers a new task; in tmux the first message is typed.
 mkdir -p "$tmp/loop" "$tmp/work.git" "$HOME/.bob/db"

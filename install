@@ -39,9 +39,9 @@ for dest in "$HOME/.bob/rules/agent-config.md" "$HOME/.claude/CLAUDE.md" "$HOME/
   printf 'Linked: %s -> %s\n' "$dest" "$source"
 done
 
-# Agents run agent-delegate and bob-delegate from non-interactive shells, which
+# Agents run delegation commands from non-interactive shells, which
 # lack the aliases from shell/aliases.sh, so they need a PATH entry.
-for bin_name in agent-delegate bob-delegate; do
+for bin_name in agent-delegate bob-delegate codex-delegate; do
   dest="$HOME/.local/bin/$bin_name"
   source="$repo_dir/bin/$bin_name"
   mkdir -p -- "${dest%/*}"

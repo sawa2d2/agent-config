@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Hand the current work to a new Codex session on a new branch: create a
+# worktree with gwt-path (dotfiles), move .agent-handoff.md from this working
+# tree into it, and start codex there in a new tmux pane. Focus stays in the
+# current pane.
+usage() { echo 'Usage: codex-delegate <new-branch> [prompt]' >&2; exit 2; }
+(($# == 1 || $# == 2)) && [[ -n $1 && $1 != -* ]] || usage
+branch=$1
+prompt=${2:-}
+
+[[ -n ${TMUX:-} ]] || { echo 'codex-delegate: run it inside tmux' >&2; exit 1; }
+command -v gwt-path >/dev/null || { echo 'codex-delegate: gwt-path not found' >&2; exit 127; }
+note="$(git rev-parse --show-toplevel)/.agent-handoff.md"
+if [[ -z $prompt ]]; then
+  [[ -f $note ]] || { echo 'codex-delegate: no .agent-handoff.md here; write one or pass a prompt' >&2; exit 1; }
+  prompt='Read .agent-handoff.md and continue the work it describes.'
+fi
+
+dir=$(gwt-path -b "$branch")
+# Move rather than copy, so this working tree does not keep a stale note.
+[[ -f $note ]] && mv -- "$note" "$dir/.agent-handoff.md"
+pane=$(tmux split-window -d -v -b -t "${TMUX_PANE:-}" -c "$dir" -P -F '#{pane_id}')
+# Typed into the pane's interactive shell, so codex resolves as it does for
+# the user (the agent-config wrapper first in PATH); the shell reads it once
+# it starts. The wrapper supplies automatic review unless explicitly overridden.
+tmux send-keys -t "$pane" -l "codex new $(printf '%q' "$prompt")"
+tmux send-keys -t "$pane" Enter
+echo "codex-delegate: codex started in pane $pane at $dir"

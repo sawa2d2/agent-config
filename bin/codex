@@ -19,10 +19,44 @@ real_cli=$(command -v codex || true)
 bash "$wrapper_dir/../scripts/install-codex-theme" >/dev/null
 
 if (( $# == 0 )); then
-  exec "$real_cli" resume --last
+  set -- resume --last
+elif [[ $1 == new ]]; then
+  # "new" starts a new session; Codex has no such subcommand.
+  shift
 fi
-# "new" starts a new session; Codex has no such subcommand.
-if [[ $1 == new ]]; then
-  exec "$real_cli" "${@:2}"
+
+# Automatic review keeps the workspace-write sandbox. Explicit permission
+# choices (including profiles and config overrides) must take precedence.
+auto_review=true
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  arg=${args[i]}
+  case $arg in
+    --) break ;;
+    --approve-for-me|--full-auto|--yolo|--dangerously-bypass-approvals-and-sandbox|\
+    -a*|--ask-for-approval|--ask-for-approval=*|\
+    -s*|--sandbox|--sandbox=*|\
+    -p*|--profile|--profile=*)
+      auto_review=false
+      break ;;
+    -c|--config)
+      i=$((i + 1))
+      arg=${args[i]:-} ;;
+    --config=*) arg=${arg#--config=} ;;
+    -c*) arg=${arg#-c} ;;
+    -m|-i|-C|--model|--image|--cd|--add-dir|--enable|--disable|\
+    --remote|--remote-auth-token-env|--local-provider|--output-schema|\
+    --color|-o|--output-last-message|--thread-source)
+      i=$((i + 1))
+      continue ;;
+    *) continue ;;
+  esac
+  if [[ $arg =~ ^[[:space:]]*(approval_policy|approvals_reviewer|sandbox_mode|sandbox_permissions|default_permissions)[[:space:]]*= ]]; then
+    auto_review=false
+    break
+  fi
+done
+if $auto_review; then
+  set -- --approve-for-me "$@"
 fi
 exec "$real_cli" "$@"
