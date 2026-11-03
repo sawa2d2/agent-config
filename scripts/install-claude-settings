@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Merge agent-config managed Claude Code settings: theme, default renderer and
-# auto-compact window.
+# auto-compact window and subagent model.
 # Standalone palette: no dependency on the dotfiles checkout.
 # Re-run after changing the global dotfiles theme.
 state_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/theme"
@@ -91,6 +91,12 @@ settings.setdefault("tui", "default")
 # to several hundred thousand tokens costs that much on each turn. Compact at
 # about 200k instead; setdefault keeps an explicit choice.
 settings.setdefault("autoCompactWindow", 200000)
+# Subagents otherwise inherit the main model (often Opus) and spend it on
+# searching and reading; agents that name their own model keep it.
+env = settings.setdefault("env", {})
+if not isinstance(env, dict):
+    raise ValueError(f"Expected a JSON object in env: {settings_file}")
+env.setdefault("CLAUDE_CODE_SUBAGENT_MODEL", "sonnet")
 write_json(settings_file, settings)
 print(f"Claude theme: {selected} -> {background} (readable light text)")
 print(f"Enabled: {settings_file}")

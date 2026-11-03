@@ -35,6 +35,7 @@ These apply to coding and maintenance tasks.
 - For ambiguous requirements with meaningful consequences, clarify the assumption; otherwise state it briefly and proceed.
 - Prefer the smallest change that fully solves the requested problem. Avoid speculative abstractions, broad refactoring, unnecessary dependencies, and premature generalization.
 - Reuse existing patterns and utilities where appropriate, without forcing reuse when it makes the code harder to understand.
+- For broad searches across many files, delegate to a read-only exploration subagent when one is available, and keep only its conclusion in the main context.
 - When the same multi-step command sequence recurs, propose a script for it, so later runs cost one call instead of rebuilding the steps.
 - Do not add compatibility paths, fallbacks, or configuration options without a concrete need.
 - Handle errors at the correct boundary; do not silently swallow failures.
@@ -44,6 +45,7 @@ These apply to coding and maintenance tasks.
 - Define how to verify success before or while implementing the change, and inspect the final diff for unintended edits and unnecessary complexity.
 
 ## Handoff
+- Every turn resends the whole conversation, so when a task is finished and the next request is unrelated, suggest starting a new session instead of continuing in this one.
 - Keep work state in the repository (commits, plan files), not only in the conversation, so another agent or session can continue without the transcript.
 - Write a handoff note with the `handoff` skill when the user asks for one or accepts a suggested handoff, and before stopping with work unfinished (a nearly full context, or the user ending the session). A warning that you are approaching a turn or cost limit means the task is about to stop: write the note first, then wrap up.
 - When continuing earlier work in a repository, read `.agent-handoff.md` at the root of the working tree first if it exists. Delete it once the work it describes is complete.

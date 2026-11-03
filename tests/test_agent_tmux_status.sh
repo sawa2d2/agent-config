@@ -52,18 +52,20 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do [[ $(opt @agent_status) == 'done' ]] && break;
 [[ $(opt @agent_status) == 'done' ]] || fail 'ancestry lookup'
 
 # A working window without updates turns stale; an update in time keeps it working.
-t set-option -g @agent_status_stale_after 2
+# @agent_status_at has whole seconds, so a window may turn stale up to a second
+# before stale_after has passed since the update; checks leave room for that.
+t set-option -g @agent_status_stale_after 3
 bash "$status" working
 sleep 1
 bash "$status" working
-sleep 1.5
+sleep 1
 [[ $(opt @agent_status) == working ]] || fail "turned stale despite an update: $(opt @agent_status)"
-sleep 1.5
+for _ in {1..20}; do [[ $(opt @agent_status) == stale ]] && break; sleep 0.2; done
 [[ $(opt @agent_status) == stale && $(opt @agent_attention) == 1 ]] || fail "not stale: $(opt @agent_status)"
 # Finished work is never marked stale.
 bash "$status" working
 bash "$status" 'done'
-sleep 2.5
+sleep 3.5
 [[ $(opt @agent_status) == 'done' ]] || fail "done turned stale: $(opt @agent_status)"
 
 # Seen and marked again in the same state: the flag returns and the line redraws.
