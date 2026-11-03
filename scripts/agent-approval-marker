@@ -6,7 +6,8 @@ When the whole prompt, trimmed, is exactly "approved", touch
 $AGENT_APPROVAL_DIR/<sha256 of the real path of the session's git top level>.
 gfinish (in the dotfiles) refuses to merge from an agent process tree without
 a fresh marker, so a question such as "approve 可能？" cannot count as
-approval. The agent wrappers bin/claude, bin/bob and bin/codex set AGENT_APPROVAL_DIR.
+approval. Each worktree has its own key, so approval only covers gfinish run
+in the worktree the session works in. The agent wrappers bin/claude, bin/bob and bin/codex set AGENT_APPROVAL_DIR.
 Outside a git repository, or without AGENT_APPROVAL_DIR, the hook does
 nothing; it never prints or blocks the prompt.
 """

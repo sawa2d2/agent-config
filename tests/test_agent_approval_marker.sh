@@ -34,6 +34,17 @@ printf '{"session_id":"codex","turn_id":"t","model":"test","permission_mode":"de
   | "$root/scripts/agent-approval-marker"
 [[ -f $other_marker && $other_marker != "$marker" ]] || fail 'Codex repository scope'
 rm "$other_marker"
+# A linked worktree has its own key, matching gfinish run in it: approval in
+# the main checkout's session does not cover it, approval in its session does.
+git -C "$tmp/real repo" commit -q --allow-empty -m base
+git -C "$tmp/real repo" worktree add -q -b feat "$tmp/linked wt"
+mkdir "$tmp/linked wt/sub"
+wt_marker="$AGENT_APPROVAL_DIR/$(printf %s "$tmp/linked wt" | sha256sum | cut -c1-64)"
+hook approved "$tmp/real repo"
+[[ ! -e $wt_marker ]] || fail 'main checkout approved a linked worktree'
+hook approved "$tmp/linked wt/sub"
+[[ -f $wt_marker && $wt_marker != "$marker" ]] || fail 'linked worktree marker missing'
+rm "$wt_marker"
 # Approving again refreshes the marker's time.
 touch -d '2 hours ago' "$marker"
 hook approved "$tmp/real repo"
