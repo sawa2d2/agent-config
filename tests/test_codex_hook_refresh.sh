@@ -23,6 +23,12 @@ CLI
 chmod +x "$tmp/bin/codex"
 launch() { bash "$root/bin/codex" "$@"; }
 
+# Unrelated malformed settings must neither block Codex nor be modified.
+mkdir -p "$HOME/.bob/settings" "$HOME/.claude"
+for config in "$HOME/.bob/settings/settings.json" "$HOME/.claude/settings.json"; do
+  printf '{invalid\n' > "$config"
+done
+
 # Status and handoff hooks are registered even without RTK.
 launch new
 python3 - "$CODEX_HOME/hooks.json" <<'PYTEST'
@@ -68,6 +74,10 @@ assert d['hooks']['PreToolUse'] == [{'matcher': 'Bash', 'hooks': [{'type': 'comm
 assert d['description'] == 'user metadata'
 PY
 [[ $(cat "$CODEX_HOME/argv") == $'--approve-for-me\nresume\n--last' ]] || fail 'default launch changed'
+
+for config in "$HOME/.bob/settings/settings.json" "$HOME/.claude/settings.json"; do
+  [[ $(cat "$config") == '{invalid' ]] || fail 'unrelated settings modified'
+done
 
 # Malformed configuration must fail visibly before starting the CLI.
 printf '{invalid\n' > "$CODEX_HOME/hooks.json"

@@ -19,7 +19,8 @@ SH
 cat > "$tmp/fake/tmux" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$TEST_ROOT/tmux.log"
-if [[ $1 == split-window ]]; then
+if [[ $1 == display-message ]]; then echo '$7'; exit 0; fi
+if [[ $1 == new-window ]]; then
   echo %9
 elif [[ $1 == capture-pane && $2 == -p ]]; then
   # Return the Bob input prompt so the background waiter exits immediately.
@@ -34,7 +35,7 @@ cd "$tmp/repo"
 
 # Without a note or a prompt nothing is created.
 if "$root/bin/bob-delegate" feat/x 2>/dev/null; then fail 'ran without a note or prompt'; fi
-[[ ! -e $tmp/worktrees && ! -e $tmp/tmux.log ]] || fail 'created a worktree or pane without a note'
+[[ ! -e $tmp/worktrees && ! -e $tmp/tmux.log ]] || fail 'created a worktree or window without a note'
 
 # The note moves into the new worktree, bob new is started, and the handoff
 # prompt is typed into the pane.
@@ -43,7 +44,7 @@ echo note > .agent-handoff.md
 # Wait briefly for the background subshell to send the prompt.
 sleep 1
 [[ ! -e .agent-handoff.md && $(cat "$tmp/worktrees/feat/x/.agent-handoff.md") == note ]] || fail 'note was not moved'
-grep -qx "split-window -d -v -b -t %1 -c $tmp/worktrees/feat/x -P -F #{pane_id}" "$tmp/tmux.log" || fail "split: $(cat "$tmp/tmux.log")"
+grep -qx "new-window -d -t \$7 -n feat/x -c $tmp/worktrees/feat/x -P -F #{pane_id}" "$tmp/tmux.log" || fail "window: $(cat "$tmp/tmux.log")"
 grep -qx 'send-keys -t %9 -l bob new' "$tmp/tmux.log" || fail "bob new: $(cat "$tmp/tmux.log")"
 grep -qx 'send-keys -t %9 Enter' "$tmp/tmux.log" || fail 'Enter was not sent'
 # The handoff prompt is typed after the input box appears.

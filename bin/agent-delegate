@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Hand the current work to a new Claude session on a new branch: create a
 # worktree with gwt-path (dotfiles), move .agent-handoff.md from this working
-# tree into it, and start claude there in a new tmux pane. Focus stays in the
+# tree into it, and start claude there in a new tmux window. Focus stays in the
 # current pane.
 usage() { echo 'Usage: agent-delegate <new-branch> [prompt]' >&2; exit 2; }
 (($# == 1 || $# == 2)) && [[ -n $1 && $1 != -* ]] || usage
@@ -29,10 +29,11 @@ if [[ -f $config ]]; then
     '.projects[$dir].hasTrustDialogAccepted = true' "$config" > "$config.agent-delegate.tmp"
   mv -- "$config.agent-delegate.tmp" "$config"
 fi
-pane=$(tmux split-window -d -v -b -t "${TMUX_PANE:-}" -c "$dir" -P -F '#{pane_id}')
+session=$(tmux display-message -p -t "${TMUX_PANE:-}" '#{session_id}')
+pane=$(tmux new-window -d -t "$session" -n "$branch" -c "$dir" -P -F '#{pane_id}')
 # Typed into the pane's interactive shell, so claude resolves as it does for
 # the user (the agent-config wrapper first in PATH); the shell reads it once
 # it starts.
 tmux send-keys -t "$pane" -l "claude $(printf '%q' "$prompt")"
 tmux send-keys -t "$pane" Enter
-echo "agent-delegate: claude started in pane $pane at $dir"
+echo "agent-delegate: claude started in window for $branch (pane $pane) at $dir"

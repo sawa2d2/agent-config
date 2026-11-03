@@ -34,11 +34,9 @@ execute, verify.
 Inside tmux, run `agent-delegate <new-branch> "<task>"` (Claude Code),
 `bob-delegate <new-branch> "<task>"` (Bob Shell), or
 `codex-delegate <new-branch> "<task>"` (Codex) to create the branch in a new
-worktree and start the agent in a new pane above the current pane within the
-current tmux window; do not create the branch here. Never create another tmux
-window or move the destination pane to another window on your own. If there is
-insufficient room to split the current pane, stop and consult the user.
-Tell the user the pane and branch, and stop working on that task in this
+worktree and start the agent in one new tmux window per branch
+without moving focus; do not create the branch here.
+Tell the user the window and branch, and stop working on that task in this
 session. Always preserve the originating agent: Claude to Claude, Bob to Bob,
 and Codex to Codex; never substitute another agent.
 

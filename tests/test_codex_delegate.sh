@@ -17,7 +17,8 @@ SH
 cat > "$tmp/fake/tmux" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$TEST_ROOT/tmux.log"
-[[ $1 == split-window ]] && echo %9
+if [[ $1 == display-message ]]; then echo '$7'; exit 0; fi
+[[ $1 == new-window ]] && echo %9
 exit 0
 SH
 chmod +x "$tmp/fake/gwt-path" "$tmp/fake/tmux"
@@ -32,13 +33,13 @@ cd "$tmp/repo"
 
 # Without a note or a prompt nothing is created.
 if "$root/bin/codex-delegate" feat/x 2>/dev/null; then fail 'ran without a note or prompt'; fi
-[[ ! -e $tmp/worktrees && ! -e $tmp/tmux.log ]] || fail 'created a worktree or pane without a note'
+[[ ! -e $tmp/worktrees && ! -e $tmp/tmux.log ]] || fail 'created a worktree or window without a note'
 
-# The note moves into the new worktree and codex is typed into a detached pane.
+# The note moves into the new worktree and codex is typed into a detached window.
 echo note > .agent-handoff.md
 "$root/bin/codex-delegate" feat/x > /dev/null
 [[ ! -e .agent-handoff.md && $(cat "$tmp/worktrees/feat/x/.agent-handoff.md") == note ]] || fail 'note was not moved'
-grep -qx "split-window -d -v -b -t %1 -c $tmp/worktrees/feat/x -P -F #{pane_id}" "$tmp/tmux.log" || fail "split: $(cat "$tmp/tmux.log")"
+grep -qx "new-window -d -t \$7 -n feat/x -c $tmp/worktrees/feat/x -P -F #{pane_id}" "$tmp/tmux.log" || fail "window: $(cat "$tmp/tmux.log")"
 grep -qx 'send-keys -t %9 -l codex new Read\\ .agent-handoff.md\\ and\\ continue\\ the\\ work\\ it\\ describes.' "$tmp/tmux.log" || fail "keys: $(cat "$tmp/tmux.log")"
 grep -qx 'send-keys -t %9 Enter' "$tmp/tmux.log" || fail 'Enter was not sent'
 cmp "$tmp/config.before" "$HOME/.codex/config.toml" || fail 'Codex config changed'

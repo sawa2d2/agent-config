@@ -17,6 +17,13 @@ command -v python3 >/dev/null 2>&1 || {
   exit 1
 }
 
+# Startup refreshes only Codex; no argument keeps the full installer behavior.
+[[ $# == 0 || ( $# == 1 && $1 == --codex-only ) ]] || {
+  echo 'Usage: install-agent-hooks [--codex-only]' >&2
+  exit 2
+}
+export AGENT_HOOKS_CODEX_ONLY=${1:-}
+
 repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 rtk=0
 command -v rtk >/dev/null 2>&1 && rtk=1
@@ -111,6 +118,8 @@ def unmanaged_groups(groups):
 
 # Leave hook files untouched while nothing changes.
 for path in dict.fromkeys([*targets, *rtk_targets, *extra_targets]):
+    if os.environ["AGENT_HOOKS_CODEX_ONLY"] and path != codex_home / "hooks.json":
+        continue
     events = targets.get(path, {})
     # Write through a symlink (settings kept in a dotfiles checkout, say) so the link survives.
     target = Path(os.path.realpath(path))

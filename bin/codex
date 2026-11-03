@@ -22,7 +22,7 @@ export AGENT_APPROVAL_DIR=${AGENT_APPROVAL_DIR:-${XDG_RUNTIME_DIR:-$HOME/.cache}
 # Refresh the selected theme accent and managed hooks before the CLI loads them.
 bash "$wrapper_dir/../scripts/install-codex-theme" >/dev/null
 bash "$wrapper_dir/../scripts/install-codex-compaction" >/dev/null
-bash "$wrapper_dir/../scripts/install-agent-hooks" >/dev/null
+bash "$wrapper_dir/../scripts/install-agent-hooks" --codex-only >/dev/null
 
 if (( $# == 0 )); then
   set -- resume --last

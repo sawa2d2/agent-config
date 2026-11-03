@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Hand the current work to a new Bob session on a new branch: create a
 # worktree with gwt-path (dotfiles), move .agent-handoff.md from this working
-# tree into it, and start bob there in a new tmux pane. Focus stays in the
+# tree into it, and start bob there in a new tmux window. Focus stays in the
 # current pane.
 #
 # Bob's interactive chat takes no initial prompt argument, so the handoff
@@ -24,7 +24,8 @@ fi
 dir=$(gwt-path -b "$branch")
 # Move rather than copy, so this working tree does not keep a stale note.
 [[ -f $note ]] && mv -- "$note" "$dir/.agent-handoff.md"
-pane=$(tmux split-window -d -v -b -t "${TMUX_PANE:-}" -c "$dir" -P -F '#{pane_id}')
+session=$(tmux display-message -p -t "${TMUX_PANE:-}" '#{session_id}')
+pane=$(tmux new-window -d -t "$session" -n "$branch" -c "$dir" -P -F '#{pane_id}')
 # Bob's chat takes no initial prompt argument; type the message once the input
 # box (❯) appears. Keys sent before then are lost, and starting takes a few
 # seconds, so wait up to 30 seconds.
@@ -39,4 +40,4 @@ pane=$(tmux split-window -d -v -b -t "${TMUX_PANE:-}" -c "$dir" -P -F '#{pane_id
 # bob new = bob chat --auto-approve (the bin/bob wrapper intercepts "new").
 tmux send-keys -t "$pane" -l 'bob new'
 tmux send-keys -t "$pane" Enter
-echo "bob-delegate: bob started in pane $pane at $dir"
+echo "bob-delegate: bob started in window for $branch (pane $pane) at $dir"
