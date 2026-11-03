@@ -15,8 +15,9 @@ export PATH
 real_cli=$(command -v codex || true)
 [[ -n "$real_cli" ]] || { echo 'codex: original codex CLI not found' >&2; exit 127; }
 
-# Refresh the selected theme accent.
+# Refresh the selected theme accent and managed hooks before the CLI loads them.
 bash "$wrapper_dir/../scripts/install-codex-theme" >/dev/null
+bash "$wrapper_dir/../scripts/install-agent-hooks" >/dev/null
 
 if (( $# == 0 )); then
   set -- resume --last

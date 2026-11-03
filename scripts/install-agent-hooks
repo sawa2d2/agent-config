@@ -84,9 +84,19 @@ def managed_command(command):
             or command == RTK_HOOK)
 
 
-def managed(group):
-    return any(managed_command(hook.get("command", ""))
-               for hook in group.get("hooks", []) if isinstance(hook, dict))
+def unmanaged_groups(groups):
+    for group in groups:
+        if not isinstance(group, dict):
+            yield group
+            continue
+        handlers = group.get("hooks", [])
+        kept = [hook for hook in handlers
+                if not (isinstance(hook, dict) and managed_command(hook.get("command", "")))]
+        if kept == handlers:
+            yield group
+        elif kept:
+            # A matcher group can contain user handlers alongside ours.
+            yield {**group, "hooks": kept}
 
 
 # Codex hooks.json also gets the automatic-compaction handoff warning.
@@ -102,8 +112,7 @@ for path in dict.fromkeys([*targets, *rtk_targets]):
     if not isinstance(hooks, dict) or not all(isinstance(v, list) for v in hooks.values()):
         raise SystemExit(f"Expected JSON object settings with hook lists: {path}")
 
-    updated = {event: [group for group in groups if not (isinstance(group, dict) and managed(group))]
-               for event, groups in hooks.items()}
+    updated = {event: list(unmanaged_groups(groups)) for event, groups in hooks.items()}
     entries = [(event, matcher, f"{command} {state}") for event, (matcher, state) in events.items()]
     entries += [(event, matcher, hook) for event, pairs in extra_targets.get(path, {}).items()
                 for matcher, hook in pairs]
