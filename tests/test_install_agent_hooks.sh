@@ -28,13 +28,17 @@ assert $1, (bob, claude)
 " || fail "$1"
 }
 
-# New machine: Codex gets the handoff warning even without rtk.
+# New machine: approval registration does not depend on rtk.
 install_hooks > /dev/null
-CODEX="$codex" HANDOFF="$root/scripts/codex-handoff-suggest" python3 -c '
+codex_approval() {
+  HANDOFF="$root/scripts/codex-handoff-suggest" CODEX="$codex" APPROVAL="$root/scripts/agent-approval-marker" python3 -c '
 import json, os
-expected = {"PreCompact": [{"matcher": "auto", "hooks": [{"type": "command", "command": os.environ["HANDOFF"]}]}]}
-assert json.load(open(os.environ["CODEX"])) == {"hooks": expected}
-' || fail 'Codex handoff warning missing'
+hooks = json.load(open(os.environ["CODEX"]))["hooks"]
+assert hooks["PreCompact"] == [{"matcher": "auto", "hooks": [{"type": "command", "command": os.environ["HANDOFF"]}]}]
+assert hooks["UserPromptSubmit"] == [{"hooks": [{"type": "command", "command": os.environ["APPROVAL"]}]}], hooks
+'
+}
+codex_approval || fail 'Codex approval hook missing'
 codex_before=$(cat "$codex")
 check "states(bob, 'Stop') == [(None, status + ' done')] and states(bob, 'SessionStart') == [(None, status + ' clear')]"
 check "sorted(bob['hooks']) == ['PostToolUse', 'PreToolUse', 'SessionStart', 'Stop', 'UserPromptSubmit']"
@@ -53,10 +57,12 @@ out=$(install_hooks)
 install_hooks_rtk > /dev/null
 check "states(claude, 'PreToolUse') == [(None, status + ' working'), ('Bash', 'rtk hook claude')]"
 check "states(bob, 'PreToolUse') == [(None, status + ' working'), ('^execute_command$', 'rtk hook claude')]"
-CODEX="$codex" HOOK="$root/scripts/codex-rtk-hook" HANDOFF="$root/scripts/codex-handoff-suggest" python3 -c "
+HANDOFF="$root/scripts/codex-handoff-suggest" CODEX="$codex" HOOK="$root/scripts/codex-rtk-hook" APPROVAL="$root/scripts/agent-approval-marker" python3 -c "
 import json, os
 d = json.load(open(os.environ['CODEX']))
-assert d == {'hooks': {'PreCompact': [{'matcher': 'auto', 'hooks': [{'type': 'command', 'command': os.environ['HANDOFF']}]}], 'PreToolUse': [{'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': os.environ['HOOK']}]}]}}, d
+assert d['hooks'].pop('PreCompact') == [{'matcher': 'auto', 'hooks': [{'type': 'command', 'command': os.environ['HANDOFF']}]}]
+assert d['hooks'].pop('UserPromptSubmit') == [{'hooks': [{'type': 'command', 'command': os.environ['APPROVAL']}]}]
+assert d == {'hooks': {'PreToolUse': [{'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': os.environ['HOOK']}]}]}}, d
 " || fail "Codex hooks.json: $(cat "$codex")"
 rtk_before=$(cat "$bob" "$claude" "$codex")
 out=$(install_hooks_rtk)
@@ -67,26 +73,24 @@ install_hooks > /dev/null
 [[ $(cat "$bob" "$claude") == "$before" ]] || fail 'rtk entries not removed'
 [[ $(cat "$codex") == "$codex_before" ]] || fail "Codex rtk entry not removed: $(cat "$codex")"
 
-# A custom Codex home preserves unmanaged entries and replaces old managed paths.
+# CODEX_HOME, unmanaged hooks/settings and stale approval paths are preserved/replaced.
 export CODEX_HOME="$tmp/custom-codex"
 mkdir -p "$CODEX_HOME"
 cat > "$CODEX_HOME/hooks.json" <<'JSON'
-{"description":"user hooks","hooks":{"PreCompact":[
-  {"matcher":"manual","hooks":[{"type":"command","command":"echo custom"}]},
-  {"matcher":"auto","hooks":[{"type":"command","command":"/old/scripts/codex-handoff-suggest"}]}]}}
+{"description": "mine", "hooks": {"UserPromptSubmit": [
+  {"hooks": [{"type": "command", "command": "echo custom"}]},
+  {"hooks": [{"type": "command", "command": "/old/scripts/agent-approval-marker"}]}]}}
 JSON
-install_hooks > /dev/null
-HOOK="$root/scripts/codex-handoff-suggest" python3 - <<'PY'
+install_hooks >/dev/null
+HANDOFF="$root/scripts/codex-handoff-suggest" CUSTOM="$CODEX_HOME/hooks.json" APPROVAL="$root/scripts/agent-approval-marker" python3 - <<'CHECK'
 import json, os
-from pathlib import Path
-d = json.loads((Path(os.environ['CODEX_HOME']) / 'hooks.json').read_text())
-assert d['description'] == 'user hooks'
-assert d['hooks']['PreCompact'] == [
-    {'matcher': 'manual', 'hooks': [{'type': 'command', 'command': 'echo custom'}]},
-    {'matcher': 'auto', 'hooks': [{'type': 'command', 'command': os.environ['HOOK']}]}]
-PY
-out=$(install_hooks)
-[[ -z $out && $(cat "$codex") == "$codex_before" ]] || fail 'custom Codex home changed default home or was not idempotent'
+settings = json.load(open(os.environ['CUSTOM']))
+assert settings['hooks'].pop('PreCompact') == [{'matcher': 'auto', 'hooks': [{'type': 'command', 'command': os.environ['HANDOFF']}]}]
+assert settings == {'description': 'mine', 'hooks': {'UserPromptSubmit': [
+    {'hooks': [{'type': 'command', 'command': 'echo custom'}]},
+    {'hooks': [{'type': 'command', 'command': os.environ['APPROVAL']}]}]}}
+CHECK
+[[ $(cat "$codex") == "$codex_before" ]] || fail 'default Codex home changed'
 unset CODEX_HOME
 
 # Other hooks and settings are kept; entries from another checkout path are replaced.

@@ -15,6 +15,10 @@ export PATH
 real_cli=$(command -v codex || true)
 [[ -n "$real_cli" ]] || { echo 'codex: original codex CLI not found' >&2; exit 127; }
 
+# Mark this process tree for gfinish; only the user's exact "approved"
+# prompt recorded by agent-approval-marker authorizes finalizing a repository.
+export AGENT_APPROVAL_DIR=${AGENT_APPROVAL_DIR:-${XDG_RUNTIME_DIR:-$HOME/.cache}/agent-approval}
+
 # Refresh the selected theme accent and managed hooks before the CLI loads them.
 bash "$wrapper_dir/../scripts/install-codex-theme" >/dev/null
 bash "$wrapper_dir/../scripts/install-agent-hooks" >/dev/null

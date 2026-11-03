@@ -26,6 +26,14 @@ done
 [[ -z $(hook $'  approved\n' "$tmp/link/sub") ]] || fail 'output on approval'
 [[ -f $marker ]] || fail "marker missing: $(ls -A "$AGENT_APPROVAL_DIR")"
 [[ $(ls -A "$AGENT_APPROVAL_DIR" | wc -l) == 1 ]] || fail 'extra markers'
+# A Codex-shaped event uses its cwd, including a different worktree/repository.
+mkdir "$tmp/other"
+git -C "$tmp/other" init -q
+other_marker="$AGENT_APPROVAL_DIR/$(printf %s "$tmp/other" | sha256sum | cut -c1-64)"
+printf '{"session_id":"codex","turn_id":"t","model":"test","permission_mode":"default","transcript_path":null,"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"approved"}' "$tmp/other" \
+  | "$root/scripts/agent-approval-marker"
+[[ -f $other_marker && $other_marker != "$marker" ]] || fail 'Codex repository scope'
+rm "$other_marker"
 # Approving again refreshes the marker's time.
 touch -d '2 hours ago' "$marker"
 hook approved "$tmp/real repo"

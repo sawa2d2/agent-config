@@ -7,6 +7,7 @@ trap 'rm -rf -- "$tmp"' EXIT
 mkdir -p "$tmp/real"
 # Wrappers refresh themes under HOME; keep the real home untouched.
 export HOME="$tmp/home"
+export CODEX_HOME="$tmp/codex-home"
 export XDG_CONFIG_HOME="$HOME/.config"
 
 # Fake CLIs record their argv and the PATH they were launched with.
@@ -37,13 +38,17 @@ expect() {
 
 # Without arguments, resume the latest session in the current directory.
 expect $'chat\n--auto-approve\n--resume\nlatest' bob
-# Bob and Claude mark their process tree as an agent for gfinish; Codex does not.
+# All wrappers mark their process tree as an agent for gfinish.
 for cli in bob claude codex; do
   XDG_RUNTIME_DIR="$tmp/run" "$cli" new
   expected="$tmp/run/agent-approval"
-  [[ $cli == codex ]] && expected=unset
   [[ $(cat "$tmp/approval") == "$expected" ]] || fail "$cli: AGENT_APPROVAL_DIR=$(cat "$tmp/approval")"
 done
+# An explicit directory wins; without a runtime directory use HOME's cache.
+AGENT_APPROVAL_DIR="$tmp/custom" codex new
+[[ $(cat "$tmp/approval") == "$tmp/custom" ]] || fail 'Codex replaced explicit approval directory'
+(env -u XDG_RUNTIME_DIR codex new)
+[[ $(cat "$tmp/approval") == "$HOME/.cache/agent-approval" ]] || fail 'Codex approval cache fallback'
 # Claude continues only when this directory has a session; otherwise it starts a new one.
 mkdir -p "$tmp/work.dir"
 cd "$tmp/work.dir"

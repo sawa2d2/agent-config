@@ -23,9 +23,14 @@ CLI
 chmod +x "$tmp/bin/codex"
 launch() { bash "$root/bin/codex" "$@"; }
 
-# No installed RTK and no previous hooks: do not create hooks.json.
+# Approval hooks are refreshed even without RTK.
 launch new
-[[ ! -e $CODEX_HOME/hooks.json ]] || fail 'created hooks without rtk'
+python3 - "$CODEX_HOME/hooks.json" "$root/scripts/agent-approval-marker" <<'PYTEST'
+import json, sys
+hooks = json.load(open(sys.argv[1]))['hooks']
+assert hooks['UserPromptSubmit'] == [{'hooks': [{'type': 'command', 'command': sys.argv[2]}]}]
+assert 'PreToolUse' not in hooks
+PYTEST
 printf '#!/bin/sh\n' > "$tmp/bin/rtk"
 chmod +x "$tmp/bin/rtk"
 cat > "$CODEX_HOME/hooks.json" <<'JSON'

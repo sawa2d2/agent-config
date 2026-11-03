@@ -176,19 +176,27 @@ for the checked CLI version, available signals, and limitations.
 
 ## Merge approval marker
 
-The `bin/claude` and `bin/bob` wrappers export
+The `bin/claude`, `bin/bob` and `bin/codex` wrappers export
 `AGENT_APPROVAL_DIR="${XDG_RUNTIME_DIR:-$HOME/.cache}/agent-approval"` unless
 it is already set; its presence marks the process tree as an agent. `./install`
-and both wrappers register `scripts/agent-approval-marker` as a
-`UserPromptSubmit` hook for Claude Code and Bob. When the whole prompt, trimmed,
+registers `scripts/agent-approval-marker` as a
+`UserPromptSubmit` hook for Claude Code, Bob and Codex. All three wrappers also refresh
+hooks at launch. When the whole prompt, trimmed,
 is exactly `approved` (case-sensitive), it touches
 `$AGENT_APPROVAL_DIR/<sha256 of the real path of the session's git top level>`.
 `gfinish` in the dotfiles merges from an agent only with a marker for its
 repository from the last 60 minutes, and deletes it, so a question such as
 `approve 可能？` is no approval. Outside a git repository the hook does nothing,
-and it never blocks the prompt. Both agents pass the prompt and the session's
+and it never blocks the prompt. The agents pass the prompt and the session's
 `cwd` to the hook, and Bob runs command hooks with its own environment
-(observed in Bob Shell 2.0.9).
+(observed in Bob Shell 2.0.9). Codex's
+[official hook interface](https://learn.chatgpt.com/docs/hooks) supplies the same
+`prompt` and `cwd` fields. New or changed Codex hooks must be reviewed and trusted
+in `/hooks`; installation does not bypass hook trust or command approval. This
+marker is a local workflow guard, not a sandbox security boundary. The external
+`gfinish` currently uses unquoted `xargs realpath` when computing its hash, so
+repository paths containing spaces are not compatible with that implementation;
+the marker keeps its existing canonical-path hash rule.
 
 ## tmux agent status
 
