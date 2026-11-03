@@ -219,23 +219,30 @@ the marker keeps its existing canonical-path hash rule.
 ## tmux agent status
 
 `./install` and the `bin/bob` and `bin/claude` wrappers register
-`scripts/agent-tmux-status` as Bob Shell and Claude Code hooks (in
-`~/.bob/settings/settings.json` and `~/.claude/settings.json`; other hooks are
-kept). Inside tmux, it marks the window the agent runs in. `@agent_attention`
-is `1` once the agent needed you, also in the window you are looking at, and
+`scripts/agent-tmux-status` as Bob Shell and Claude Code hooks. The installer
+also registers Codex hooks in `$CODEX_HOME/hooks.json` (default
+`~/.codex/hooks.json`); other hooks are kept. Inside tmux, it marks the window
+the agent runs in. `@agent_attention` is `1` once the agent needed you, also in the window you are looking at, and
 stays through resumed work until you submit a prompt there; `@agent_status`
 keeps the detail:
 
 | State | Attention | Set when |
 | --- | --- | --- |
 | `working` | cleared by a prompt, otherwise kept | A prompt is sent or a tool runs |
-| `waiting` | `1` | Claude Code asks for a permission |
+| `waiting` | `1` | Claude Code or Codex asks for permission |
 | `done` | `1` | The agent finished its reply |
 | `stale` | `1` | `working` without updates for `@agent_status_stale_after` seconds (default 300): a hang, an error, or Bob waiting for approval (Bob has no event for it) |
 
 A tmux configuration may also unset `@agent_attention` when a window is
 selected.
-A new Bob session or the end of a Claude Code session clears the mark. The
+A new Bob session or the end of a Claude Code or Codex session clears the mark.
+Interrupting an active Codex turn also clears it. Codex uses `UserPromptSubmit`,
+`PreToolUse` and `PostToolUse` for working, `PermissionRequest` for waiting,
+`Stop` for done, and `SessionEnd` / `Interrupt` for cleanup, as supported by
+[Codex hooks](https://learn.chatgpt.com/docs/hooks) (checked with CLI 0.160.0).
+The waiting hook returns no approval decision; normal permission handling
+continues. New or changed Codex hooks need trust via `/hooks`. These events
+do not cover every input wait (for example, a model asking a question). The
 window options `@agent_status`, `@agent_attention` and `@agent_status_at` are
 the interface; this repository does not change the tmux status line. To
 highlight windows that need you:

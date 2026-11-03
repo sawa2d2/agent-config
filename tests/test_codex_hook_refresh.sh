@@ -23,13 +23,13 @@ CLI
 chmod +x "$tmp/bin/codex"
 launch() { bash "$root/bin/codex" "$@"; }
 
-# Approval hooks are refreshed even without RTK.
+# Status and handoff hooks are registered even without RTK.
 launch new
-python3 - "$CODEX_HOME/hooks.json" "$root/scripts/agent-approval-marker" <<'PYTEST'
+python3 - "$CODEX_HOME/hooks.json" <<'PYTEST'
 import json, sys
 hooks = json.load(open(sys.argv[1]))['hooks']
-assert hooks['UserPromptSubmit'] == [{'hooks': [{'type': 'command', 'command': sys.argv[2]}]}]
-assert 'PreToolUse' not in hooks
+assert 'PermissionRequest' in hooks and 'Stop' in hooks and 'PreCompact' in hooks
+assert any(h['command'].endswith('/agent-approval-marker') for g in hooks['UserPromptSubmit'] for h in g['hooks'])
 PYTEST
 printf '#!/bin/sh\n' > "$tmp/bin/rtk"
 chmod +x "$tmp/bin/rtk"
@@ -42,9 +42,11 @@ import json, sys
 p, root = sys.argv[1:]
 d = json.load(open(p))
 assert d['description'] == 'user metadata'
-assert d['hooks']['Stop'] == [{'hooks': [{'type': 'command', 'command': 'echo done'}]}]
+assert d['hooks']['Stop'] == [{'hooks': [{'type': 'command', 'command': 'echo done'}]},
+    {'hooks': [{'type': 'command', 'command': root + '/scripts/agent-tmux-status done'}]}]
 assert d['hooks']['PreToolUse'] == [
     {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'echo user', 'timeout': 7}]},
+    {'hooks': [{'type': 'command', 'command': root + '/scripts/agent-tmux-status working'}]},
     {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': root + '/scripts/codex-rtk-hook'}]}]
 PY
 [[ $(cat "$CODEX_HOME/argv") == $'--sandbox\nread-only' ]] || fail 'explicit sandbox changed'
@@ -58,10 +60,11 @@ cmp -s "$CODEX_HOME/hooks.json" "$tmp/before.json" || fail 'unchanged definition
 [[ $(cat "$CODEX_HOME/argv") == $'-a\non-request' ]] || fail 'explicit approval changed'
 rm "$tmp/bin/rtk"
 launch
-python3 - "$CODEX_HOME/hooks.json" <<'PY'
+python3 - "$CODEX_HOME/hooks.json" "$root" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
-assert d['hooks']['PreToolUse'] == [{'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'echo user', 'timeout': 7}]}]
+assert d['hooks']['PreToolUse'] == [{'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'echo user', 'timeout': 7}]},
+    {'hooks': [{'type': 'command', 'command': sys.argv[2] + '/scripts/agent-tmux-status working'}]}]
 assert d['description'] == 'user metadata'
 PY
 [[ $(cat "$CODEX_HOME/argv") == $'--approve-for-me\nresume\n--last' ]] || fail 'default launch changed'

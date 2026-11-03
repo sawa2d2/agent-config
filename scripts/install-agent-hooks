@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Register scripts/agent-tmux-status as Bob Shell and Claude Code hooks, so
+# Register scripts/agent-tmux-status as Bob Shell, Claude Code and Codex hooks, so
 # the tmux window of a running agent shows whether it works, waits or is done.
 # When rtk is on PATH, also register its PreToolUse hook (for Codex, through
 # scripts/codex-rtk-hook), which rewrites shell commands to rtk equivalents
@@ -32,9 +32,20 @@ import tempfile
 
 command = shlex.quote(os.environ["AGENT_TMUX_STATUS"])
 home = Path.home()
+codex_home = Path(os.environ.get("CODEX_HOME") or home / ".codex")
 # Event -> (matcher or None, state). Bob has no Notification or SessionEnd
 # event (observed in Bob Shell 2.0.6); a new session clears the old mark.
 targets = {
+    codex_home / "hooks.json": {
+        "UserPromptSubmit": (None, "prompt"),
+        "PreToolUse": (None, "working"),
+        "PostToolUse": (None, "working"),
+        # No decision output: leave Codex's ordinary approval flow intact.
+        "PermissionRequest": (None, "waiting"),
+        "Stop": (None, "done"),
+        "Interrupt": (None, "clear"),
+        "SessionEnd": (None, "clear"),
+    },
     home / ".bob/settings/settings.json": {
         "SessionStart": (None, "clear"),
         "UserPromptSubmit": (None, "prompt"),
@@ -58,7 +69,6 @@ targets = {
 # Claude hook; its rewrite keeps each agent's normal command approval. Codex
 # approves every rewrite, so its hook rewrites read-only commands only.
 RTK_HOOK = "rtk hook claude"
-codex_home = Path(os.environ.get("CODEX_HOME") or home / ".codex")
 rtk_targets = {
     home / ".bob/settings/settings.json": {"PreToolUse": ("^execute_command$", RTK_HOOK)},
     home / ".claude/settings.json": {"PreToolUse": ("Bash", RTK_HOOK)},

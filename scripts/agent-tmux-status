@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: agent-tmux-status <prompt|working|waiting|done|clear>
 #
-# Hook command for Bob Shell and Claude Code: marks the tmux window the agent
+# Hook command for Bob Shell, Claude Code and Codex: marks the tmux window the agent
 # runs in. Window options form the interface for tmux configurations:
 #   @agent_status       working, waiting, done or stale
 #   @agent_attention    1 once the agent needed the user (waiting, done,
