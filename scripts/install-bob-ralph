@@ -36,8 +36,9 @@ for name in prd ralph; do
 
   stage="$(mktemp -d "$skill_dir/.agent-config.XXXXXX")"
   cp -R -- "$source/." "$stage/"
-  # Invoked by name only (/prd, /ralph): Bob resends the skill list on every
-  # request, and these serve only explicit PRD and Ralph work.
+  # Invoked by name only ($prd, $ralph): Bob resends the skill list on every
+  # request, and these serve only explicit PRD and Ralph work. /prd goes
+  # through the model's use_skill, which skips flagged skills.
   bash "$repo_dir/scripts/disable-model-invocation" "$stage/SKILL.md"
   : > "$stage/.agent-config-managed"
   if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi

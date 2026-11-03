@@ -386,6 +386,19 @@ bash scripts/install-bob-ralph
 ```
 
 Installs the experimental Ralph runner and Bob skills without running the loop. Test it only in a disposable repository.
+The Bob copies of `prd` and `ralph` get `disable-model-invocation: true` (unless
+upstream sets the key), so their trigger-word descriptions stay out of every
+request; invoke them as `$prd` and `$ralph`. A Bob Shell 2.0.9 `bob -p` check
+confirmed the flagged skill drops out of the model's skill list. Explicit
+`$ralph` loading was checked only in code, since `bob -p` expands neither
+`$skill` nor `/skill`: `$name` inlines the skill and filters only on
+`user-invocable`, while `/name` asks the model to call `use_skill`, which skips
+skills with this flag.
+
+Claude Code `skillOverrides` cannot hide the `ralph-loop` plugin's `help` and
+`cancel-ralph`: in Claude Code 2.1.289, plugin commands are always listed
+regardless of the key (namespaced or not), so `install-claude-settings` sets
+none for them.
 
 ## Codex Ralph (optional)
 
