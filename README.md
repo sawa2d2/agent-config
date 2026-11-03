@@ -544,6 +544,8 @@ started. `-w N` sets the number of weeks (`0` for all). Filter with `--since`,
 `--split-commit <ref>` instead compares the mean, standard deviation and median
 per session, with units, before and after a time or commit; `--json` prints one
 row per session.
+What drives the 1-hour cache writes is assessed in
+[Claude Code 1-hour cache writes](docs/claude-cache-writes.md).
 
 `bob-stats` (requires Python 3) prints the same weekly view for Bob tasks from
 `~/.bob/db/bob.db`, opened read-only, with `-w N` as above: tasks, requests,
