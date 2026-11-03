@@ -5,6 +5,27 @@
 - Respect repository-specific instructions, conventions, and workflows.
 - Inspect the repository before assuming its build, test, or deployment procedures.
 
+## Core Engineering Principles (Karpathy-inspired)
+These principles govern all coding and maintenance work and take precedence over the process any skill, plugin, or workflow prescribes. When a skill (for example brainstorming, test-driven development, or plan writing) would add process, artifacts, or code beyond what the task needs, follow these principles and scale the process to the size of the task.
+
+### Think before coding
+- Read the relevant code, interfaces, tests, and conventions before making changes; do not guess about behavior that can be verified from the repository or a command.
+- For ambiguous requirements with meaningful consequences, clarify the assumption; otherwise state it briefly and proceed.
+
+### Simplicity first
+- Prefer the smallest change that fully solves the requested problem. Avoid speculative abstractions, broad refactoring, unnecessary dependencies, and premature generalization.
+- Reuse existing patterns and utilities where appropriate, without forcing reuse when it makes the code harder to understand.
+- Do not add compatibility paths, fallbacks, or configuration options without a concrete need.
+
+### Surgical changes
+- Preserve existing behavior outside the requested scope.
+- Handle errors at the correct boundary; do not silently swallow failures.
+- Use descriptive names, straightforward control flow, and comments explaining *why* when necessary.
+- Treat edge cases in proportion to their likelihood and impact.
+
+### Goal-driven execution
+- Define how to verify success before or while implementing the change, and inspect the final diff for unintended edits and unnecessary complexity.
+
 ## Repository Safety
 - Preserve unrelated changes and untracked files.
 - Never discard user changes or perform destructive operations without explicit approval.
@@ -29,20 +50,9 @@
 - Never claim a check passed unless it was actually executed.
 - Distinguish verified results from assumptions and untested behavior.
 
-## Engineering
-These apply to coding and maintenance tasks.
-- Read the relevant code, interfaces, tests, and conventions before making changes; do not guess about behavior that can be verified from the repository or a command.
-- For ambiguous requirements with meaningful consequences, clarify the assumption; otherwise state it briefly and proceed.
-- Prefer the smallest change that fully solves the requested problem. Avoid speculative abstractions, broad refactoring, unnecessary dependencies, and premature generalization.
-- Reuse existing patterns and utilities where appropriate, without forcing reuse when it makes the code harder to understand.
+## Efficiency
 - For broad searches across many files, delegate to a read-only exploration subagent when one is available, and keep only its conclusion in the main context.
 - When the same multi-step command sequence recurs, propose a script for it, so later runs cost one call instead of rebuilding the steps.
-- Do not add compatibility paths, fallbacks, or configuration options without a concrete need.
-- Handle errors at the correct boundary; do not silently swallow failures.
-- Preserve existing behavior outside the requested scope.
-- Use descriptive names, straightforward control flow, and comments explaining *why* when necessary.
-- Treat edge cases in proportion to their likelihood and impact.
-- Define how to verify success before or while implementing the change, and inspect the final diff for unintended edits and unnecessary complexity.
 
 ## Handoff
 - Every turn resends the whole conversation, so when a task is finished and the next request is unrelated, suggest starting a new session instead of continuing in this one.
