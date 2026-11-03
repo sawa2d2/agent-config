@@ -553,7 +553,12 @@ price ratios, the same for every model: `input + 1.25*cache_write_5m +
 `per req vs prev` (this week ÷ previous week × 100 in %; below 100% is a
 reduction, 50% is half; `-` without data). Each API request is counted once by
 its `requestId`, and each session in the week (local time, from Monday) it
-started. `-w N` sets the number of weeks (`0` for all). Filter with `--since`,
+started. `--window <length>` (such as `5h`, `2d` or `1w`) instead sums
+consecutive windows of that length, the last ending now, labeled by their local
+start time; there each request counts in the window of its own timestamp, and a
+session in every window it has requests in, and `vs prev` compares with the
+window before. `-w N` (`--windows`, also `--weeks`) sets the number of
+weeks or windows (`0` for all). Filter with `--since`,
 `--until`, `--project` and `--min-requests`; `--split <time>` or
 `--split-commit <ref>` instead compares the mean, standard deviation and median
 per session, with units, before and after a time or commit; `--json` prints one
@@ -562,10 +567,12 @@ What drives the 1-hour cache writes is assessed in
 [Claude Code 1-hour cache writes](docs/claude-cache-writes.md).
 
 `bob-stats` (requires Python 3) prints the same weekly view for Bob tasks from
-`~/.bob/db/bob.db`, opened read-only, with `-w N` as above: tasks, requests,
-`ctx/req (tok)` (context tokens ÷ requests), cost, cost per request, and their
-ratios to the week before in %, then the median (`task p50`), 90th percentile
-(`task p90`) and maximum (`task max`) of the week's task costs. The cost is
+`~/.bob/db/bob.db`, opened read-only, with `--window` and `-w N` as above
+(with `--window`, requests are placed by their assistant message's
+`created_at`): tasks, requests, `ctx/req (tok)` (context tokens ÷ requests),
+cost, cost per request, and their ratios to the week before in %, then the
+median (`task p50`), 90th percentile (`task p90`) and maximum (`task max`) of
+the week's (or window's) task costs, each the whole task's cost. The cost is
 shown in the unit Bob records. Bob records only the cost and context tokens of
 each request, without an input, cache or output breakdown. A task's cost is the
 one Bob compares with the per-task `session.maxCost` limit (`tasks.costs`):
@@ -586,7 +593,8 @@ the model itself.
 
 `codex-stats` (requires Python 3) prints the same weekly view as `claude-stats`
 for Codex from the rollouts under `~/.codex/sessions` and
-`~/.codex/archived_sessions`, honoring `CODEX_HOME`, with `-w N` as above. Each
+`~/.codex/archived_sessions`, honoring `CODEX_HOME`, with `--window` and `-w N`
+as above (with `--window`, responses are placed by their record's timestamp). Each
 model response is counted once by its `response_id`, and each rollout (subagent
 threads included) as a session. The weighted total uses the GPT-5 API price
 ratios, the same for every model:

@@ -49,4 +49,18 @@ grep -Eqx "$monday +1 +1 +10 +10 +50.0% +50.0%" <<< "$out" || fail "ratio: $out"
 [[ $(stats -w 1 | tail -n1) == "$(tail -n1 <<< "$out")" ]] || fail "ratio with -w 1: $(stats -w 1)"
 [[ $(stats -w 0 | rows) == 3 ]] || fail 'all weeks'
 
+# --window 5h: consecutive windows ending now, each response in the window of its timestamp.
+# Session f has one response 7 hours ago and one an hour ago, so it counts in both windows.
+{
+  record "$(date -u -d '-7 hours' +%FT%TZ)" r6 100 0 0
+  record "$(date -u -d '-1 hour' +%FT%TZ)" r7 10 0 0
+} > "$CODEX_HOME/sessions/now/rollout-f.jsonl"
+out=$(stats --window 5h -w 2)
+grep -Eq '^start +sessions ' <<< "$out" || fail "window header: $out"
+grep -Fq 'start    = start (local time) of each 5h window, the last ending now; each' <<< "$out" || fail "window legend: $out"
+[[ $(rows <<< "$out") == 2 ]] || fail "window rows: $out"
+grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +1 +1 +100 +100 +- +-' <<< "$out" || fail "previous window: $out"
+grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +2 +2 +20 +10 +20.0% +10.0%' <<< "$out" || fail "current window: $out"
+! stats --window 0h 2>/dev/null || fail 'invalid window'
+
 echo 'PASS: codex-stats'

@@ -2,12 +2,14 @@
 """Weekly token usage from Claude Code transcripts.
 
 Reads ~/.claude/projects/**/*.jsonl (CLAUDE_CONFIG_DIR is honored), counts each
-API request once (by requestId or message id), and prints per-week sums, or the
-mean, standard deviation and median per session split into before/after groups.
+API request once (by requestId or message id), and prints per-week sums (or per
+fixed-length window with --window), or the mean, standard deviation and median
+per session split into before/after groups.
 """
 import argparse
 import json
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -30,8 +32,6 @@ WEEKLY_LEGEND = """\
 weighted = input + 1.25*cache_write_5m + 2*cache_write_1h + 0.1*cache_read + 5*output [tokens]
 weights  = Anthropic API price ratios to the input price, the same for every model
 per req  = weighted / requests [tokens]
-vs prev  = this week / previous week * 100 [%] (-: no previous week, or it was 0)
-week     = Monday (local time) of the week each session started
 """
 
 
@@ -49,6 +49,7 @@ def commit_time(ref, repo):
 def read_session(path):
     seen = set()
     start = None
+    request_times = []  # (time, weighted) per request
     totals = dict.fromkeys(["requests", "input", "write_5m", "write_1h", "read", "output"], 0)
     with open(path, encoding="utf-8") as f:
         for line in f:
@@ -70,12 +71,14 @@ def read_session(path):
             creation = usage.get("cache_creation") or {}
             write_1h = creation.get("ephemeral_1h_input_tokens", 0) or 0
             write_all = usage.get("cache_creation_input_tokens", 0) or 0
+            request = {"input": usage.get("input_tokens", 0) or 0, "write_5m": write_all - write_1h,
+                       "write_1h": write_1h, "read": usage.get("cache_read_input_tokens", 0) or 0,
+                       "output": usage.get("output_tokens", 0) or 0}
             totals["requests"] += 1
-            totals["input"] += usage.get("input_tokens", 0) or 0
-            totals["write_1h"] += write_1h
-            totals["write_5m"] += write_all - write_1h
-            totals["read"] += usage.get("cache_read_input_tokens", 0) or 0
-            totals["output"] += usage.get("output_tokens", 0) or 0
+            for k, v in request.items():
+                totals[k] += v
+            request_times.append((parse_time(ts) if ts else None,
+                                  sum(request[k] * w for k, w in WEIGHTS.items())))
     if not totals["requests"] or start is None:
         return None
     t = totals
@@ -92,6 +95,7 @@ def read_session(path):
         # Roughly the context size each request resends.
         "total_per_request": round((t["input"] + t["write_5m"] + t["write_1h"] + t["read"]
                                     + t["output"]) / t["requests"]),
+        "request_times": request_times,
     }
 
 
@@ -116,34 +120,90 @@ def print_group(name, sessions):
 
 
 def ratio(previous, current):
-    """This week as a percentage of the previous week; '-' without one or from zero."""
+    """This window as a percentage of the previous one; '-' without one or from zero."""
     return "-" if not previous else f"{current / previous * 100:.1f}%"
 
 
-def print_weekly(sessions, count):
-    """Print per-week sums of the last `count` weeks (0: all), grouping sessions
-    by the local Monday of their start, with the ratio to the week before."""
-    today = datetime.now().astimezone().date()
-    first = today - timedelta(days=today.weekday(), weeks=count - 1)
-    weeks = {}
-    for s in sessions:
-        day = s["start"].astimezone().date()
-        weeks.setdefault(day - timedelta(days=day.weekday()), []).append(s)
-    sums = {}
-    for week, group in weeks.items():
-        requests = sum(s["requests"] for s in group)
-        weighted = sum(s["weighted"] for s in group)
-        sums[week] = (len(group), requests, weighted, weighted / requests)
-    print(WEEKLY_LEGEND)
-    print(f"{'week':<12}{'sessions':>10}{'requests':>10}{'weighted (tok)':>16}{'per req (tok)':>15}"
-          f"{'weighted vs prev':>18}{'per req vs prev':>17}")
-    for week, (n, requests, weighted, per_request) in sorted(sums.items()):
-        if count and week < first:
+def print_windows(sessions, windows):
+    """Print per-window sums of the shown windows with the ratio to the window
+    before. Weekly, whole sessions count in the week they started; otherwise
+    each request counts in the window of its timestamp."""
+    if windows.weekly:
+        entries = [(s["start"], i, s["requests"], s["weighted"]) for i, s in enumerate(sessions)]
+    else:
+        entries = [(time or s["start"], i, 1, weighted)
+                   for i, s in enumerate(sessions) for time, weighted in s["request_times"]]
+    groups = {}
+    for time, session, requests, weighted in entries:
+        group = groups.setdefault(windows.key(time), [set(), 0, 0])
+        group[0].add(session)
+        group[1] += requests
+        group[2] += weighted
+    sums = {key: (len(ids), requests, round(weighted), weighted / requests)
+            for key, (ids, requests, weighted) in groups.items()}
+    print(WEEKLY_LEGEND + windows.vs_prev() + windows.column("session"))
+    print(f"{windows.heading:<{windows.width}}{'sessions':>10}{'requests':>10}{'weighted (tok)':>16}"
+          f"{'per req (tok)':>15}{'weighted vs prev':>18}{'per req vs prev':>17}")
+    for key, (n, requests, weighted, per_request) in sorted(sums.items()):
+        if not windows.shown(key):
             continue
-        previous = sums.get(week - timedelta(weeks=1))
-        print(f"{week.isoformat():<12}{n:>10}{requests:>10,}{weighted:>16,}{per_request:>15,.0f}"
+        previous = sums.get(key - windows.step)
+        print(f"{windows.label(key)}{n:>10}{requests:>10,}{weighted:>16,}{per_request:>15,.0f}"
               f"{ratio(previous and previous[2], weighted):>18}"
               f"{ratio(previous and previous[3], per_request):>17}")
+
+
+def window_spec(value):
+    """argparse type: 'week' or a length such as 5h, 2d or 1w."""
+    if value != "week" and not re.fullmatch(r"[1-9][0-9]*[hdw]", value):
+        raise argparse.ArgumentTypeError(f"expected week or a length such as 5h, 2d, 1w: {value!r}")
+    return value
+
+
+class Windows:
+    """Local weeks from Monday ('week'), or consecutive windows of a fixed
+    length, the last ending now; `count` of them are shown (0: all)."""
+
+    def __init__(self, spec, count):
+        self.spec, self.count = spec, count
+        self.weekly = spec == "week"
+        now = datetime.now().astimezone()
+        if self.weekly:
+            self.step, self.unit, self.heading, self.width = timedelta(weeks=1), "week", "week", 12
+            today = now.date()
+            self.first = today - timedelta(days=today.weekday(), weeks=count - 1)
+        else:
+            units = {"h": "hours", "d": "days", "w": "weeks"}
+            self.step = timedelta(**{units[spec[-1]]: int(spec[:-1])})
+            self.unit, self.heading, self.width = "window", "start", 18
+            self.end = now
+            self.first = now - self.step * count
+
+    def key(self, time):
+        """The week's Monday, or the start time of the window containing `time`."""
+        if self.weekly:
+            day = time.astimezone().date()
+            return day - timedelta(days=day.weekday())
+        return self.end - self.step * ((self.end - time) // self.step + 1)
+
+    def shown(self, key):
+        return not self.count or key >= self.first
+
+    def label(self, key):
+        return f"{key.isoformat() if self.weekly else key.astimezone().strftime('%Y-%m-%d %H:%M'):<{self.width}}"
+
+    def vs_prev(self):
+        u = self.unit
+        return f"vs prev  = this {u} / previous {u} * 100 [%] (-: no previous {u}, or it was 0)\n"
+
+    def column(self, item, event="started"):
+        """Legend line defining the first column and what counts in it."""
+        if self.weekly:
+            return f"week     = Monday (local time) of the week each {item} {event}\n"
+        return (f"start    = start (local time) of each {self.spec} window, the last ending now; each\n"
+                f"           request counts in the window of its timestamp, and each {item} in\n"
+                f"           every window it has requests in\n")
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -157,8 +217,12 @@ def main():
     parser.add_argument("--project", help="only transcript directories containing this substring")
     parser.add_argument("--min-requests", type=int, default=1,
                         help="skip sessions with fewer API requests (default: 1)")
-    parser.add_argument("-w", "--weeks", type=int, default=10,
-                        help="weeks shown without a split, including this one (0: all; default: 10)")
+    parser.add_argument("--window", type=window_spec, default="week",
+                        help="aggregation window: week (local, from Monday) or a length such as "
+                             "5h, 2d, 1w ending now (default: week)")
+    parser.add_argument("-w", "--windows", "--weeks", type=int, default=10,
+                        help="windows shown without a split, including the current one "
+                             "(0: all; default: 10)")
     parser.add_argument("--json", action="store_true", help="print per-session rows as JSON")
     args = parser.parse_args()
 
@@ -178,7 +242,8 @@ def main():
 
     if args.json:
         for s in sessions:
-            print(json.dumps({**s, "start": s["start"].isoformat()}))
+            row = {k: v for k, v in s.items() if k != "request_times"}
+            print(json.dumps({**row, "start": s["start"].isoformat()}))
         return
 
     if args.split:
@@ -186,7 +251,7 @@ def main():
     elif args.split_commit:
         cut = commit_time(args.split_commit, args.repo)
     else:
-        print_weekly(sessions, args.weeks)
+        print_windows(sessions, Windows(args.window, args.windows))
         return
     print(f"split at {cut.isoformat()}")
     print(SPLIT_LEGEND)

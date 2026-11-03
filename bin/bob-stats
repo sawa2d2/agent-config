@@ -4,7 +4,9 @@
 Reads ~/.bob/db/bob.db read-only. Bob stores, per model request, the cost and
 the context tokens sent in the assistant message's _meta.spend; it records no
 input/output/cache breakdown. Each task counts in the week (local time, from
-Monday) it was created.
+Monday) it was created; with --window, each request (assistant message) counts
+in the fixed-length window of its messages.created_at, and each task in every
+window it has requests in.
 
 A subagent task spends from its parent's session.maxCost budget, and Bob adds
 its cost to the parent's tasks.costs, so it counts as part of the parent; a
@@ -22,9 +24,10 @@ _meta.summary, which later compactions keep.
 """
 import argparse
 import json
+import re
 import sqlite3
 import sys
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 DB_PATH = Path.home() / ".bob/db/bob.db"
@@ -33,9 +36,8 @@ LEGEND = """\
 cost     = sum of spend.cost over requests [as recorded by Bob]
 per req  = cost / requests
 ctx/req  = sum of spend.contextTokens / requests [tokens]
-vs prev  = this week / previous week * 100 [%] (-: no previous week, or it was 0)
-task p50, task p90, task max
-         = median, 90th percentile and maximum of the week's task costs; a task's
+{vs_prev}task p50, task p90, task max
+         = median, 90th percentile and maximum of the {unit}'s task costs; a task's
            cost (subagents included) is what session.maxCost limits
 ctx p50, ctx p90, ctx max
          = median, 90th percentile and maximum of spend.contextTokens per request [tokens]
@@ -43,19 +45,18 @@ ctx p50, ctx p90, ctx max
          = requests with over 100,000 context tokens / requests, and their summed
            context tokens / all summed context tokens [%]
 compacts = compactions (summary messages Bob stores when it compacts)
-model    = tasks.env model id and contextWindow [tokens], with the tasks recording them;
-           Bob compacts at compactionThresholdPercent of contextWindow
-week     = Monday (local time) of the week each task was created
-"""
+model    = tasks.env model id and contextWindow [tokens], with the tasks recording them
+           (created in the windows shown); Bob compacts at compactionThresholdPercent
+           of contextWindow
+{column}"""
 
 
-def week_of(ms):
-    day = datetime.fromtimestamp(ms / 1000).astimezone().date()
-    return day - timedelta(days=day.weekday())
+def local_time(ms):
+    return datetime.fromtimestamp(ms / 1000).astimezone()
 
 
 def ratio(previous, current):
-    """This week as a percentage of the previous week; '-' without one or from zero."""
+    """This window as a percentage of the previous one; '-' without one or from zero."""
     return "-" if not previous else f"{current / previous * 100:.1f}%"
 
 
@@ -79,16 +80,70 @@ def recorded_cost(costs):
     return cost if isinstance(cost, (int, float)) else None
 
 
+def window_spec(value):
+    """argparse type: 'week' or a length such as 5h, 2d or 1w."""
+    if value != "week" and not re.fullmatch(r"[1-9][0-9]*[hdw]", value):
+        raise argparse.ArgumentTypeError(f"expected week or a length such as 5h, 2d, 1w: {value!r}")
+    return value
+
+
+class Windows:
+    """Local weeks from Monday ('week'), or consecutive windows of a fixed
+    length, the last ending now; `count` of them are shown (0: all)."""
+
+    def __init__(self, spec, count):
+        self.spec, self.count = spec, count
+        self.weekly = spec == "week"
+        now = datetime.now().astimezone()
+        if self.weekly:
+            self.step, self.unit, self.heading, self.width = timedelta(weeks=1), "week", "week", 12
+            today = now.date()
+            self.first = today - timedelta(days=today.weekday(), weeks=count - 1)
+        else:
+            units = {"h": "hours", "d": "days", "w": "weeks"}
+            self.step = timedelta(**{units[spec[-1]]: int(spec[:-1])})
+            self.unit, self.heading, self.width = "window", "start", 18
+            self.end = now
+            self.first = now - self.step * count
+
+    def key(self, time):
+        """The week's Monday, or the start time of the window containing `time`."""
+        if self.weekly:
+            day = time.astimezone().date()
+            return day - timedelta(days=day.weekday())
+        return self.end - self.step * ((self.end - time) // self.step + 1)
+
+    def shown(self, key):
+        return not self.count or key >= self.first
+
+    def label(self, key):
+        return f"{key.isoformat() if self.weekly else key.astimezone().strftime('%Y-%m-%d %H:%M'):<{self.width}}"
+
+    def vs_prev(self):
+        u = self.unit
+        return f"vs prev  = this {u} / previous {u} * 100 [%] (-: no previous {u}, or it was 0)\n"
+
+    def column(self, item, event="started"):
+        """Legend line defining the first column and what counts in it."""
+        if self.weekly:
+            return f"week     = Monday (local time) of the week each {item} {event}\n"
+        return (f"start    = start (local time) of each {self.spec} window, the last ending now; each\n"
+                f"           request counts in the window of its timestamp, and each {item} in\n"
+                f"           every window it has requests in\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("-w", "--weeks", type=int, default=10,
-                        help="weeks shown, including this one (0: all; default: 10)")
+    parser.add_argument("--window", type=window_spec, default="week",
+                        help="aggregation window: week (local, from Monday) or a length such as "
+                             "5h, 2d, 1w ending now (default: week)")
+    parser.add_argument("-w", "--windows", "--weeks", type=int, default=10,
+                        help="windows shown, including the current one (0: all; default: 10)")
     args = parser.parse_args()
     if not DB_PATH.is_file():
         sys.exit(f"bob-stats: database not found: {DB_PATH}")
 
-    today = date.today()
-    first = today - timedelta(days=today.weekday(), weeks=args.weeks - 1)
+    windows = Windows(args.window, args.windows)
     db = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     tasks = {task_id: (parent, task_type, created, costs, env) for task_id, parent, task_type, created, costs, env
              in db.execute("SELECT id, parent_id, task_type, created_at, costs, env FROM tasks")}
@@ -101,15 +156,15 @@ def main():
 
     weeks = {}
     compactions = {}
-    rows = db.execute("SELECT task_id, data FROM messages WHERE role = 'assistant' AND task_id IN "
-                      "(SELECT id FROM tasks)")
-    for task_id, data in rows:
+    rows = db.execute("SELECT task_id, data, created_at FROM messages WHERE role = 'assistant' "
+                      "AND task_id IN (SELECT id FROM tasks)")
+    for task_id, data, created in rows:
         try:
             meta = json.loads(data)["_meta"]
         except (json.JSONDecodeError, KeyError, TypeError):
             continue
         task_id = limited(task_id)
-        week = week_of(tasks[task_id][2])
+        week = windows.key(local_time(tasks[task_id][2] if windows.weekly else created))
         if meta.get("summary") is True:
             compactions[week] = compactions.get(week, 0) + 1
         if "spend" not in meta:
@@ -128,36 +183,36 @@ def main():
         w["task costs"] = sorted(c if (c := recorded_cost(tasks[task_id][3])) is not None else summed
                                  for task_id, summed in w["tasks"].items())
 
-    print(LEGEND)
-    print(f"{'week':<12}{'tasks':>8}{'requests':>10}{'ctx/req (tok)':>15}{'cost':>10}{'per req':>10}"
+    print(LEGEND.format(unit=windows.unit, vs_prev=windows.vs_prev(), column=windows.column("task", "was created")))
+    print(f"{windows.heading:<{windows.width}}{'tasks':>8}{'requests':>10}{'ctx/req (tok)':>15}{'cost':>10}{'per req':>10}"
           f"{'cost vs prev':>14}{'per req vs prev':>17}{'task p50':>10}{'task p90':>10}{'task max':>10}")
     for week, w in sorted(weeks.items()):
-        if args.weeks and week < first:
+        if not windows.shown(week):
             continue
-        previous = weeks.get(week - timedelta(weeks=1))
+        previous = weeks.get(week - windows.step)
         per_request = w["cost"] / w["requests"]
         costs = w["task costs"]
-        print(f"{week.isoformat():<12}{len(w['tasks']):>8}{w['requests']:>10,}"
+        print(f"{windows.label(week)}{len(w['tasks']):>8}{w['requests']:>10,}"
               f"{w['context'] / w['requests']:>15,.0f}{w['cost']:>10.2f}{per_request:>10.3f}"
               f"{ratio(previous and previous['cost'], w['cost']):>14}"
               f"{ratio(previous and previous['cost'] / previous['requests'], per_request):>17}"
               f"{percentile(costs, 0.5):>10.2f}{percentile(costs, 0.9):>10.2f}{costs[-1]:>10.2f}")
 
     print()
-    print(f"{'week':<12}{'ctx p50':>10}{'ctx p90':>10}{'ctx max':>10}{'>100k req':>11}{'>100k ctx':>11}{'compacts':>10}")
+    print(f"{windows.heading:<{windows.width}}{'ctx p50':>10}{'ctx p90':>10}{'ctx max':>10}{'>100k req':>11}{'>100k ctx':>11}{'compacts':>10}")
     for week, w in sorted(weeks.items()):
-        if args.weeks and week < first:
+        if not windows.shown(week):
             continue
         contexts = sorted(w["contexts"])
         above = [c for c in contexts if c > COMPACT_TARGET]
-        print(f"{week.isoformat():<12}{percentile(contexts, 0.5):>10,.0f}{percentile(contexts, 0.9):>10,.0f}"
+        print(f"{windows.label(week)}{percentile(contexts, 0.5):>10,.0f}{percentile(contexts, 0.9):>10,.0f}"
               f"{contexts[-1]:>10,}{share(len(above), len(contexts)):>11}"
               f"{share(sum(above), w['context']):>11}{compactions.get(week, 0):>10}")
 
     # Bob picks the model; the compaction percentage only means something against its window.
     models = {}
     for task_id, (_, _, _, _, env) in tasks.items():
-        if args.weeks and week_of(tasks[limited(task_id)][2]) < first:
+        if not windows.shown(windows.key(local_time(tasks[limited(task_id)][2]))):
             continue
         try:
             model = json.loads(env)["model"]

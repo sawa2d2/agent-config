@@ -72,4 +72,20 @@ grep -Eqx "$monday +1 +1 +6 +6 +50.0% +50.0%" <<< "$out" || fail "ratio: $out"
 [[ $(stats -w 1 | tail -n1) == "$(tail -n1 <<< "$out")" ]] || fail "ratio with -w 1: $(stats -w 1)"
 [[ $(stats -w 0 | rows) == 4 ]] || fail 'all weeks'
 
+# --window 5h: consecutive windows ending now, each request in the window of its timestamp.
+# Session e has one request 7 hours ago and one an hour ago, so it counts in both windows.
+{
+  printf '%s\n' '{"type":"assistant","timestamp":"'"$(date -u -d '-7 hours' +%FT%TZ)"'","requestId":"r5","message":{"id":"m6","usage":{"input_tokens":100}}}'
+  printf '%s\n' '{"type":"assistant","timestamp":"'"$(date -u -d '-1 hour' +%FT%TZ)"'","requestId":"r6","message":{"id":"m7","usage":{"input_tokens":10,"output_tokens":2}}}'
+} > "$CLAUDE_CONFIG_DIR/projects/-home-b/e.jsonl"
+out=$(stats --window 5h -w 2)
+grep -Eq '^start +sessions ' <<< "$out" || fail "window header: $out"
+grep -Fqx 'vs prev  = this window / previous window * 100 [%] (-: no previous window, or it was 0)' <<< "$out" || fail "window legend: $out"
+grep -Fq 'start    = start (local time) of each 5h window, the last ending now; each' <<< "$out" || fail "window legend: $out"
+[[ $(rows <<< "$out") == 2 ]] || fail "window rows: $out"
+grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +1 +1 +100 +100 +- +-' <<< "$out" || fail "previous window: $out"
+grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +2 +2 +26 +13 +26.0% +13.0%' <<< "$out" || fail "current window: $out"
+[[ $(stats --window 5h -w 1 | tail -n1) == "$(tail -n1 <<< "$out")" ]] || fail "window -w 1: $(stats --window 5h -w 1)"
+! stats --window 5x 2>/dev/null || fail 'invalid window'
+
 echo 'PASS: claude-stats'

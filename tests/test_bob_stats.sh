@@ -82,4 +82,28 @@ grep -Eqx '2025-12-29 +500 +500 +500 +0.0% +0.0% +0' <<< "$out" || fail "all wee
 [[ $(rows <<< "$out") == 6 ]] || fail "all weeks: $out"
 grep -Fqx 'model: not recorded (tasks: 3)' <<< "$out" || fail "all weeks model: $out"
 
+# --window 5h: consecutive windows ending now, each request in the window of its message's
+# created_at. Task e, created 7 hours ago, has a request then and one plus a compaction an hour
+# ago; its task cost columns show the whole task's recorded cost. Older messages (created_at 0)
+# fall outside the two windows shown.
+DB="$HOME/.bob/db/bob.db" python3 - <<'PY'
+import json, os, sqlite3, time
+db = sqlite3.connect(os.environ["DB"])
+now = int(time.time() * 1000)
+hour = 3600000
+db.execute("INSERT INTO tasks VALUES ('e', NULL, ?, ?, 'normal', NULL)", (json.dumps({"cost": 0.6}), now - 7 * hour))
+for id, created, meta in [("e1", now - 7 * hour, {"spend": {"cost": 0.5, "contextTokens": 5000}}),
+                          ("e2", now - hour, {"spend": {"cost": 0.1, "contextTokens": 1000}}),
+                          ("e3", now - hour, {"summary": True})]:
+    db.execute("INSERT INTO messages VALUES (?, 'e', 'assistant', ?, ?)", (id, json.dumps({"_meta": meta}), created))
+db.commit()
+PY
+out=$("$root/bin/bob-stats" --window 5h -w 2)
+grep -Eq '^start +tasks ' <<< "$out" || fail "window header: $out"
+grep -Fq 'start    = start (local time) of each 5h window, the last ending now; each' <<< "$out" || fail "window legend: $out"
+[[ $(rows <<< "$out") == 4 ]] || fail "window rows: $out"
+grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +1 +1 +5,000 +0.50 +0.500 +- +- +0.60 +0.60 +0.60' <<< "$out" || fail "previous window: $out"
+grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +1 +1 +1,000 +0.10 +0.100 +20.0% +20.0% +0.60 +0.60 +0.60' <<< "$out" || fail "current window: $out"
+grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +1,000 +1,000 +1,000 +0.0% +0.0% +1' <<< "$out" || fail "context current window: $out"
+
 echo 'PASS: bob-stats'
