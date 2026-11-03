@@ -20,11 +20,45 @@ bash "$wrapper_dir/../scripts/install-bob-theme" >/dev/null
 bash "$wrapper_dir/../scripts/install-bob-settings" >/dev/null
 bash "$wrapper_dir/../scripts/install-agent-hooks" >/dev/null
 
+# Type the handoff prompt into the new chat, since Bob's chat takes no initial
+# prompt. Keys sent before its input box (❯) shows are lost, and starting takes
+# about five seconds, so wait for the box for up to 30 seconds.
+type_prompt() {
+  local _
+  for _ in {1..60}; do
+    tmux capture-pane -p -t "$TMUX_PANE" | grep -q '❯' && break
+    sleep 0.5
+  done
+  tmux send-keys -t "$TMUX_PANE" -l "$1" && tmux send-keys -t "$TMUX_PANE" Enter
+}
+
+# Run an auto-approved chat. When the user leaves a task that stopped at its
+# cost limit, offer to continue in a new task started by `bobtask handoff`.
+chat() {
+  local since prompt='' status answer
+  while :; do
+    since=$(( $(date +%s) * 1000 ))
+    if [[ -n $prompt && -n ${TMUX:-} ]]; then
+      # Clear the screen so the input box of the chat that just ended does not count.
+      printf '\033[H\033[2J'
+      type_prompt "$prompt" &
+    fi
+    status=0
+    "$real_bob" chat --auto-approve "$@" || status=$?
+    set --
+    prompt=$("$wrapper_dir/bobtask" handoff --cost-limit-since "$since" --no-start) || return "$status"
+    read -r -p 'bob: the task reached its cost limit. Continue in a new task? [Y/n] ' answer || answer=n
+    [[ $answer == [nN]* ]] && return "$status"
+  done
+}
+
 if (( $# == 0 )); then
-  exec "$real_bob" chat --resume latest --auto-approve
+  chat --resume latest
+  exit
 fi
 # "new" starts a new auto-approved chat; Bob has no such subcommand.
 if [[ $1 == new ]]; then
-  exec "$real_bob" chat --auto-approve "${@:2}"
+  chat "${@:2}"
+  exit
 fi
 exec "$real_bob" "$@"

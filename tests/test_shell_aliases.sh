@@ -32,7 +32,7 @@ SCRIPT
   output=$(cd "$tmp/cwd" && PATH="/usr/bin:/bin" "$shell" "$tmp/run.$shell")
   [[ "$output" == *"$root/bin/claude"* ]] || fail "$shell: claude alias missing: $output"
   [[ "$output" == *"$root/bin/codexla"* ]] || fail "$shell: codexla alias missing: $output"
-  [[ "$output" == *'chat --resume latest'* ]] || fail "$shell: bob did not use the launcher: $output"
+  [[ "$output" == *'chat --auto-approve --resume latest'* ]] || fail "$shell: bob did not use the launcher: $output"
 }
 
 check bash 'shopt -s expand_aliases'

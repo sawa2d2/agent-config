@@ -295,6 +295,15 @@ to the clipboard (`pbcopy`, `wl-copy` or `xclip`) and printed; paste it to
 start. Exit the
 stopped Bob first: tasks locked by a running Bob are not listed.
 
+The `bob` and `bob new` launchers do this on their own when a task stops at
+its cost limit: after you exit Bob, they find the newest task of the current
+project that was updated during the chat and has spent `session.maxCost`,
+ask `Continue in a new task? [Y/n]`, and start a new chat from
+`bobtask handoff --cost-limit-since <ms> --no-start`. Inside tmux, the first
+message is typed into the new chat once its input box shows; elsewhere
+paste it from the clipboard. Bob does not store its turn count, so a task
+stopped at the turn limit is not detected; run `bobtask handoff` for it.
+
 ## Tests
 
 `tests/run` runs every `tests/*.sh` (or the files given) and prints only the

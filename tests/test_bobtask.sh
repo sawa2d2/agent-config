@@ -133,7 +133,7 @@ out=$(cat "$note")
 [[ $out == *$'file\n[... 5 more characters omitted]'* ]] || fail "handoff tool output not cut: $out"
 [[ $out != *'whole file'* && $out == *'[output omitted: run the call again'* ]] || fail "handoff keeps file output: $out"
 [[ $(grep -c '^buil$' "$note") == 1 && $out == *'[same output as at '* ]] || fail "handoff repeats output: $out"
-[[ $(cat "$tmp/clipboard") == "$note is the transcript"* ]] || fail "clipboard: $(cat "$tmp/clipboard")"
+[[ $(cat "$tmp/clipboard") == "The transcript of an earlier Bob task in this workspace is $note."* ]] || fail "clipboard: $(cat "$tmp/clipboard")"
 grep -q 'Copied to the clipboard' "$tmp/handoff-err" || fail "handoff message: $(cat "$tmp/handoff-err")"
 
 # handoff: a handoff note at the root of the workspace's working tree is preferred over the transcript.
@@ -144,6 +144,23 @@ printf '%s\n' 'Goal: test' > "$work/a/.agent-handoff.md"
 grep -q "Handoff note: $work/a/.agent-handoff.md" "$tmp/handoff-err" || fail "note message: $(cat "$tmp/handoff-err")"
 [[ $(cat "$tmp/bob-cwd") == "$work/a/sub" ]] || fail "note handoff cwd: $(cat "$tmp/bob-cwd")"
 rm "$work/a/.agent-handoff.md"
+
+# handoff --cost-limit-since takes the newest current-project task updated since then that reached
+# session.maxCost; --no-start prints the first message instead of starting Bob.
+sqlite3 "$db" "ALTER TABLE tasks ADD COLUMN costs TEXT;
+  UPDATE tasks SET costs = '{\"cost\": 25}' WHERE id = 'insub';
+  UPDATE tasks SET costs = '{\"cost\": 5}' WHERE id = 'titled';"
+mkdir -p "$HOME/.bob/settings"
+printf '%s\n' '{"session": {"maxCost": 20}}' > "$HOME/.bob/settings/settings.json"
+rm "$tmp/bob-args"
+cd "$work/a"
+status=0
+TMPDIR="$tmp/tmpdir" bobtask handoff --cost-limit-since $(( ($(date +%s) + 60) * 1000 )) --no-start > "$tmp/out" 2>&1 \
+  || status=$?
+[[ $status == 3 && ! -s $tmp/out ]] || fail "no limited task: status $status, $(cat "$tmp/out")"
+out=$(TMPDIR="$tmp/tmpdir" bobtask handoff --cost-limit-since 0 --no-start 2> /dev/null)
+[[ $out == "The transcript of an earlier Bob task in this workspace is $tmp/tmpdir/bob-handoff/insub.md."* ]] || fail "limited task prompt: $out"
+[[ ! -e $tmp/bob-args ]] || fail 'handoff --no-start started Bob'
 rm "$tmp/bin/pbcopy"
 
 # resume: every directory by default, -c for the current project; Bob starts in the task workspace.

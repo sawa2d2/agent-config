@@ -367,12 +367,44 @@ def handoff_note(directory):
     return path if os.path.isfile(path) else None
 
 
+def cost_limit_task(db, since):
+    """Newest task of the current project updated since `since` (epoch ms)
+    whose cost reached Bob's session.maxCost, or None."""
+    try:
+        with (Path.home() / ".bob/settings/settings.json").open(encoding="utf-8") as stream:
+            limit = json.load(stream)["session"]["maxCost"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(limit, (int, float)) or limit <= 0:
+        return None
+    for task in resumable_tasks(db, current_project()):
+        if task["updated_at"] < since:
+            break
+        try:
+            cost = json.loads(task["costs"])["cost"]
+        except (ValueError, KeyError, TypeError):
+            continue
+        if isinstance(cost, (int, float)) and cost >= limit:
+            return task
+    return None
+
+
 def command_handoff(args):
-    db = connect(readonly=True)
-    chosen = pick_tasks(db, args, multi=False)
-    if not chosen:
-        return
-    task = chosen[0]
+    if args.cost_limit_since is not None:
+        # Exit 3 without output when no task stopped at the cost limit, so the
+        # bob wrapper can tell that case from a failure.
+        if not DB_PATH.is_file():
+            sys.exit(3)
+        db = connect(readonly=True)
+        task = cost_limit_task(db, args.cost_limit_since)
+        if task is None:
+            sys.exit(3)
+    else:
+        db = connect(readonly=True)
+        chosen = pick_tasks(db, args, multi=False)
+        if not chosen:
+            return
+        task = chosen[0]
     directory = workspace_path(task["directory"] or task["project_id"])
     if not os.path.isdir(directory):
         fail(f"directory not found: {directory}")
@@ -395,13 +427,17 @@ def command_handoff(args):
                   "the earlier Bob task) for it instead of reading the whole transcript.")
         print(f"Handoff note: {note} (updated {format_time(os.path.getmtime(note))})", file=sys.stderr)
     else:
-        prompt = (f"{path} is the transcript of an earlier Bob task in this workspace. Read its first "
+        # Bob takes a message that starts with "/" for a command, so the path is not first.
+        prompt = (f"The transcript of an earlier Bob task in this workspace is {path}. Read its first "
                   "user message and its last few sections, where the latest state is, rather than the whole "
                   "file, and search the rest only for details you need. Outputs of file-reading tools are "
                   "left out; read the files again when needed. Then continue the work from where it stopped.")
     copied = copy_to_clipboard(prompt)
     print(f"Transcript: {path}", file=sys.stderr)
     print(f"{'Copied to the clipboard' if copied else 'Paste this'} as the first message:\n{prompt}", file=sys.stderr)
+    if args.no_start:
+        print(prompt)
+        return
     os.chdir(directory)
     os.execvp("bob", ["bob", "chat", "--auto-approve"])
 
@@ -425,6 +461,11 @@ def main():
                                   help="start a new task in a task's workspace from its transcript")
     handoff.add_argument("--tool-limit", type=int, default=500, metavar="N",
                          help="characters kept from each tool output (default: 500)")
+    handoff.add_argument("--cost-limit-since", type=int, metavar="MS",
+                         help="instead of picking, take the newest task of the current project updated since "
+                              "MS (epoch milliseconds) that reached session.maxCost; exit 3 if there is none")
+    handoff.add_argument("--no-start", action="store_true",
+                         help="print the first message on stdout instead of starting Bob")
     handoff.set_defaults(run=command_handoff)
     args = parser.parse_args()
     args.run(args)
