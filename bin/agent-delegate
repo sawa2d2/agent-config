@@ -21,7 +21,15 @@ fi
 dir=$(gwt-path -b "$branch")
 # Move rather than copy, so this working tree does not keep a stale note.
 [[ -f $note ]] && mv -- "$note" "$dir/.agent-handoff.md"
-pane=$(tmux split-window -d -h -t "${TMUX_PANE:-}" -c "$dir" -P -F '#{pane_id}')
+# The user chose to skip Claude's trust dialog for worktrees made here. Write to
+# a temporary file and rename, so a running claude never reads a partial file.
+config="$HOME/.claude.json"
+if [[ -f $config ]]; then
+  jq --arg dir "$(cd -- "$dir" && pwd -P)" \
+    '.projects[$dir].hasTrustDialogAccepted = true' "$config" > "$config.agent-delegate.tmp"
+  mv -- "$config.agent-delegate.tmp" "$config"
+fi
+pane=$(tmux split-window -d -v -b -t "${TMUX_PANE:-}" -c "$dir" -P -F '#{pane_id}')
 # Typed into the pane's interactive shell, so claude resolves as it does for
 # the user (the agent-config wrapper first in PATH); the shell reads it once
 # it starts.
