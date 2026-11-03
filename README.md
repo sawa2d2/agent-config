@@ -565,6 +565,15 @@ or above the usual `task p90`, so that most tasks finish under it; weeks whose
 `task max` exceeds it show how often a task would have stopped at the limit,
 where Bob offers to double it.
 
+A second table helps pick `session.compactionThresholdPercent`: per week, the
+median, 90th percentile and maximum context tokens per request (`ctx p50`,
+`ctx p90`, `ctx max`), the share of requests and of summed context tokens over
+100k (`>100k req`, `>100k ctx`), the cross-agent compaction target, and the
+number of compactions (`compacts`, counted from the summary message Bob stores
+for each). The `model:` lines below it give the model id and `contextWindow`
+recorded in each task's environment, which the percentage applies to; Bob picks
+the model itself.
+
 `codex-stats` (requires Python 3) prints the same weekly view as `claude-stats`
 for Codex from the rollouts under `~/.codex/sessions` and
 `~/.codex/archived_sessions`, honoring `CODEX_HOME`, with `-w N` as above. Each

@@ -11,6 +11,14 @@ its cost to the parent's tasks.costs, so it counts as part of the parent; a
 subtask has a limit of its own and counts as a task (observed in Bob Shell
 2.0.9). A task's cost is its tasks.costs.cost, the figure maxCost is compared
 with.
+
+Bob compacts a task's context once a request's context tokens reach
+session.compactionThresholdPercent of the model's context window. The second
+table shows how the requests' context compares with the cross-agent target of
+about 100k tokens, and how often Bob compacted; the model lines show the window
+the percentage applies to. Bob 2.0.9 keeps the "Compacted N messages" text only
+in telemetry, but each compaction stores one assistant message marked
+_meta.summary, which later compactions keep.
 """
 import argparse
 import json
@@ -20,6 +28,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 DB_PATH = Path.home() / ".bob/db/bob.db"
+COMPACT_TARGET = 100_000  # tokens; the context size every agent is set to compact at
 LEGEND = """\
 cost     = sum of spend.cost over requests [as recorded by Bob]
 per req  = cost / requests
@@ -28,6 +37,14 @@ vs prev  = this week / previous week * 100 [%] (-: no previous week, or it was 0
 task p50, task p90, task max
          = median, 90th percentile and maximum of the week's task costs; a task's
            cost (subagents included) is what session.maxCost limits
+ctx p50, ctx p90, ctx max
+         = median, 90th percentile and maximum of spend.contextTokens per request [tokens]
+>100k req, >100k ctx
+         = requests with over 100,000 context tokens / requests, and their summed
+           context tokens / all summed context tokens [%]
+compacts = compactions (summary messages Bob stores when it compacts)
+model    = tasks.env model id and contextWindow [tokens], with the tasks recording them;
+           Bob compacts at compactionThresholdPercent of contextWindow
 week     = Monday (local time) of the week each task was created
 """
 
@@ -50,6 +67,10 @@ def percentile(values, fraction):
     return values[low] + (values[high] - values[low]) * (position - low)
 
 
+def share(part, whole):
+    return "-" if not whole else f"{part / whole * 100:.1f}%"
+
+
 def recorded_cost(costs):
     try:
         cost = json.loads(costs)["cost"]
@@ -69,8 +90,8 @@ def main():
     today = date.today()
     first = today - timedelta(days=today.weekday(), weeks=args.weeks - 1)
     db = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
-    tasks = {task_id: (parent, task_type, created, costs) for task_id, parent, task_type, created, costs
-             in db.execute("SELECT id, parent_id, task_type, created_at, costs FROM tasks")}
+    tasks = {task_id: (parent, task_type, created, costs, env) for task_id, parent, task_type, created, costs, env
+             in db.execute("SELECT id, parent_id, task_type, created_at, costs, env FROM tasks")}
 
     def limited(task_id):
         """The task whose maxCost budget task_id spends from."""
@@ -79,19 +100,28 @@ def main():
         return task_id
 
     weeks = {}
+    compactions = {}
     rows = db.execute("SELECT task_id, data FROM messages WHERE role = 'assistant' AND task_id IN "
                       "(SELECT id FROM tasks)")
     for task_id, data in rows:
         try:
-            spend = json.loads(data)["_meta"]["spend"]
+            meta = json.loads(data)["_meta"]
         except (json.JSONDecodeError, KeyError, TypeError):
             continue
         task_id = limited(task_id)
-        w = weeks.setdefault(week_of(tasks[task_id][2]), {"tasks": {}, "requests": 0, "context": 0, "cost": 0.0})
+        week = week_of(tasks[task_id][2])
+        if meta.get("summary") is True:
+            compactions[week] = compactions.get(week, 0) + 1
+        if "spend" not in meta:
+            continue
+        spend = meta["spend"]
+        w = weeks.setdefault(week, {"tasks": {}, "requests": 0, "context": 0, "cost": 0.0, "contexts": []})
         cost = spend.get("cost", 0) or 0
+        context = spend.get("contextTokens", 0) or 0
         w["tasks"][task_id] = w["tasks"].get(task_id, 0) + cost
         w["requests"] += 1
-        w["context"] += spend.get("contextTokens", 0) or 0
+        w["context"] += context
+        w["contexts"].append(context)
         w["cost"] += cost
     for w in weeks.values():
         # Summed message spend stands in when Bob recorded no task cost.
@@ -112,6 +142,36 @@ def main():
               f"{ratio(previous and previous['cost'], w['cost']):>14}"
               f"{ratio(previous and previous['cost'] / previous['requests'], per_request):>17}"
               f"{percentile(costs, 0.5):>10.2f}{percentile(costs, 0.9):>10.2f}{costs[-1]:>10.2f}")
+
+    print()
+    print(f"{'week':<12}{'ctx p50':>10}{'ctx p90':>10}{'ctx max':>10}{'>100k req':>11}{'>100k ctx':>11}{'compacts':>10}")
+    for week, w in sorted(weeks.items()):
+        if args.weeks and week < first:
+            continue
+        contexts = sorted(w["contexts"])
+        above = [c for c in contexts if c > COMPACT_TARGET]
+        print(f"{week.isoformat():<12}{percentile(contexts, 0.5):>10,.0f}{percentile(contexts, 0.9):>10,.0f}"
+              f"{contexts[-1]:>10,}{share(len(above), len(contexts)):>11}"
+              f"{share(sum(above), w['context']):>11}{compactions.get(week, 0):>10}")
+
+    # Bob picks the model; the compaction percentage only means something against its window.
+    models = {}
+    for task_id, (_, _, _, _, env) in tasks.items():
+        if args.weeks and week_of(tasks[limited(task_id)][2]) < first:
+            continue
+        try:
+            model = json.loads(env)["model"]
+            key = (str(model["id"]), model.get("contextWindow"))
+        except (TypeError, ValueError, KeyError, AttributeError):
+            key = None
+        models[key] = models.get(key, 0) + 1
+    print()
+    for key, count in sorted(models.items(), key=lambda item: -item[1]):
+        if key is None:
+            print(f"model: not recorded (tasks: {count})")
+        else:
+            window = f"{key[1]:,}" if isinstance(key[1], int) else "-"
+            print(f"model: {key[0]}, contextWindow {window} (tasks: {count})")
 
 if __name__ == "__main__":
     main()
