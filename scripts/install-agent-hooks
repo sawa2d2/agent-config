@@ -6,8 +6,9 @@ set -euo pipefail
 # When rtk is on PATH, also register its PreToolUse hook (for Codex, through
 # scripts/codex-rtk-hook), which rewrites shell commands to rtk equivalents
 # that condense their output to save tokens. For Bob, also register
-# scripts/bob-handoff-suggest, which suggests a handoff once a task has spent
-# half of its cost limit. For all three, register scripts/agent-approval-marker,
+# scripts/bob-handoff-suggest on UserPromptSubmit and PostToolUse, which
+# suggests a handoff once a task has spent half of its cost limit or its
+# context has grown large, also during tool loops. For all three, register scripts/agent-approval-marker,
 # which records that the user said "approved" for gfinish.
 # Codex also gets an automatic PreCompact handoff warning. Entries whose
 # command runs one of these scripts (any checkout path) or the rtk hook are
@@ -87,7 +88,9 @@ rtk_targets = {
 approval_marker = shlex.quote(os.environ["AGENT_APPROVAL_MARKER"])
 extra_targets = {
     home / ".bob/settings/settings.json": {
-        "UserPromptSubmit": [(None, shlex.quote(os.environ["BOB_HANDOFF_SUGGEST"])), (None, approval_marker)]},
+        "UserPromptSubmit": [(None, shlex.quote(os.environ["BOB_HANDOFF_SUGGEST"])), (None, approval_marker)],
+        # Bob shows PostToolUse context to the model but drops PreToolUse's (Bob Shell 2.0.9).
+        "PostToolUse": [(None, shlex.quote(os.environ["BOB_HANDOFF_SUGGEST"]))]},
     home / ".claude/settings.json": {"UserPromptSubmit": [(None, approval_marker)]},
     codex_home / "hooks.json": {
         "UserPromptSubmit": [(None, approval_marker)],

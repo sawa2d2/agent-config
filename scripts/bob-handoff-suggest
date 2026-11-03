@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Bob Shell UserPromptSubmit hook: suggest a handoff once a task has spent
-half of its cost limit or its context has grown past a token threshold.
+"""Bob Shell UserPromptSubmit and PostToolUse hook: suggest a handoff once a
+task has spent half of its cost limit or its context has grown past a token
+threshold.
 
 Every turn resends the whole context, so a long task gets more expensive per
 turn; a new task started from a handoff note continues with a small one. The
 check reads Bob's database without using the model, and adds one line of
-context, once per task, so the agent offers the handoff. Bob stores the cost
+context, once per task, so the agent offers the handoff. PostToolUse covers
+autonomous tool loops that run many requests between prompts; Bob appends its
+additionalContext to the tool result, while it drops PreToolUse's (observed in
+Bob Shell 2.0.9). Both events share the once-per-task mark. Bob stores the cost
 of the root task, which the hook's session_id names, in tasks.costs, and the
 context size of each request in the assistant message's _meta.spend
 .contextTokens (observed in Bob Shell 2.0.6 and 2.0.9). The context threshold
@@ -23,13 +27,13 @@ import sys
 DEFAULT_CONTEXT_TOKENS = 50000
 COST_SUGGESTION = (
     "This task has spent {cost:.1f} of its {limit:g} Bobcoin cost limit, and every turn resends the "
-    "whole context. At the start of your reply, suggest in one line handing off to a new task. If the "
-    "user accepts, write the note with the handoff skill."
+    "whole context. At the start of your next message to the user, suggest in one line handing off to "
+    "a new task. If the user accepts, write the note with the handoff skill."
 )
 CONTEXT_SUGGESTION = (
     "This task's context has grown to {tokens} tokens, and every turn resends all of it. At the start "
-    "of your reply, suggest in one line handing off to a new task. If the user accepts, write the note "
-    "with the handoff skill."
+    "of your next message to the user, suggest in one line handing off to a new task. If the user "
+    "accepts, write the note with the handoff skill."
 )
 
 
@@ -72,7 +76,13 @@ def suggestion(database, task_id, limit, threshold):
 
 def main():
     try:
-        task_id = json.load(sys.stdin)["session_id"]
+        event = json.load(sys.stdin)
+        task_id, event_name = event["session_id"], event["hook_event_name"]
+        state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "agent-config/bob-handoff-suggested"
+        marker = state / task_id.replace("/", "_")
+        # PostToolUse runs on every tool call; skip the database once suggested.
+        if marker.exists():
+            return
         bob = Path.home() / ".bob"
         database = sqlite3.connect(f"file:{bob / 'db/bob.db'}?mode=ro", uri=True)
         try:
@@ -84,13 +94,9 @@ def main():
     if text is None:
         return
 
-    state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "agent-config/bob-handoff-suggested"
-    marker = state / task_id.replace("/", "_")
-    if marker.exists():
-        return
     state.mkdir(parents=True, exist_ok=True)
     marker.touch()
-    json.dump({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": text}}, sys.stdout)
+    json.dump({"hookSpecificOutput": {"hookEventName": event_name, "additionalContext": text}}, sys.stdout)
 
 
 if __name__ == "__main__":

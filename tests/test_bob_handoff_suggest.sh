@@ -27,6 +27,8 @@ db.executemany("insert into messages values (?, ?, ?, ?)", [
 db.commit()' "$HOME/.bob/db/bob.db"
 hook() { printf '{"session_id": "%s", "cwd": "/w", "hook_event_name": "UserPromptSubmit", "prompt": "x"}' "$1" \
   | "$root/scripts/bob-handoff-suggest"; }
+tool_hook() { printf '{"session_id": "%s", "cwd": "/w", "hook_event_name": "PostToolUse", "tool_name": "execute_command", "tool_input": {"command": "ls"}, "tool_response": "x", "tool_use_id": "t"}' "$1" \
+  | "$root/scripts/bob-handoff-suggest"; }
 settings '{"session": {"maxCost": 20}}'
 
 # Below half of the cost limit and the context threshold, nothing is added.
@@ -43,8 +45,23 @@ assert "12.3 of its 20 Bobcoin" in d["additionalContext"] and "handoff skill" in
 [[ -z $(hook high) ]] || fail 'suggested twice'
 [[ -n $(hook other) ]] || fail 'another task not suggested'
 
+# During a tool loop, PostToolUse suggests with its own event name, and the
+# mark is shared, so neither event repeats the suggestion.
+rm -rf "$XDG_STATE_HOME"
+[[ -z $(tool_hook low) ]] || fail 'tool loop suggested below half the limit'
+out=$(tool_hook high)
+python3 -c '
+import json, sys
+d = json.loads(sys.argv[1])["hookSpecificOutput"]
+assert d["hookEventName"] == "PostToolUse", d
+assert "12.3 of its 20 Bobcoin" in d["additionalContext"], d
+' "$out" || fail "tool loop suggestion: $out"
+[[ -z $(hook high) && -z $(tool_hook high) ]] || fail 'suggested again after PostToolUse'
+[[ -n $(hook big) && -z $(tool_hook big) ]] || fail 'suggested again after UserPromptSubmit'
+
 # A context above the threshold is suggested once, with or without a cost
 # limit; the environment variable moves the threshold, and 0 turns it off.
+rm -rf "$XDG_STATE_HOME"
 out=$(hook big)
 python3 -c '
 import json, sys

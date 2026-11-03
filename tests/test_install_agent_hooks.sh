@@ -37,6 +37,7 @@ check "sorted(bob['hooks']) == ['PostToolUse', 'PreToolUse', 'SessionStart', 'St
 check "states(claude, 'Notification') == [('permission_prompt', status + ' waiting')]"
 check "sorted(claude['hooks']) == ['Notification', 'PostToolUse', 'PreToolUse', 'SessionEnd', 'Stop', 'UserPromptSubmit']"
 check "states(bob, 'UserPromptSubmit') == [(None, status + ' prompt'), (None, suggest), (None, approval)]"
+check "states(bob, 'PostToolUse') == [(None, status + ' working'), (None, suggest)]"
 check "states(claude, 'UserPromptSubmit') == [(None, status + ' prompt'), (None, approval)]"
 check "all(cmd.endswith((' prompt', ' working', ' done', ' waiting', ' clear')) for s in (bob, claude) for e in s['hooks'] for _, cmd in states(s, e) if cmd not in (suggest, approval))"
 

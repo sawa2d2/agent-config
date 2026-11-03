@@ -216,11 +216,14 @@ with the automatic-review default described below; trust settings stay unchanged
 With no prompt, a handoff note is required.
 
 For Bob, `./install` also registers `scripts/bob-handoff-suggest` as a
-`UserPromptSubmit` hook. Once a task has spent half of `session.maxCost`, or
+`UserPromptSubmit` and `PostToolUse` hook, so the check also runs during
+autonomous tool loops that send many requests between prompts. Bob appends a
+`PostToolUse` hook's `additionalContext` to the tool result the model reads,
+but ignores a `PreToolUse` hook's (verified in Bob Shell 2.0.9). Once a task has spent half of `session.maxCost`, or
 the latest request's context exceeds 50000 tokens
 (`AGENT_CONFIG_BOB_HANDOFF_TOKENS` overrides this; `0` turns it off), read
 from Bob's database without using the model, it adds one line of context, once
-per task, so the agent suggests a handoff; answering yes writes the note. Bob
+per task (shared by both events), so the agent suggests a handoff; answering yes writes the note. Bob
 charges each request by its context size, so a long task costs more per turn
 than a fresh one continuing from the note, and compaction at
 `compactionThresholdPercent` may never trigger: Bob takes the context window
