@@ -155,6 +155,17 @@ one, keeping the transcript only for details the note lacks.
 The `autonomous-development` skill keeps its progress file,
 `.agent-progress.md`, at the working-tree root for the same reasons.
 
+For Codex, `./install` registers `scripts/codex-handoff-suggest` on
+`PreCompact` with matcher `auto`. It displays a UI warning suggesting a
+handoff when automatic compaction starts. It lets compaction continue; it
+does not ask the model to write a note before compaction. After compaction,
+ask the agent to use the handoff skill, then exit normally and run
+`codex new "Read .agent-handoff.md and continue the work described there."`
+in the same worktree. New or changed hooks require review in `/hooks`.
+There is no Bobcoin conversion, inferred percentage, cost-limit restart,
+or automatic session replacement. See [Codex handoff support](deploy/codex/handoff.md)
+for the checked CLI version, available signals, and limitations.
+
 ## Merge approval marker
 
 The `bin/claude` and `bin/bob` wrappers export

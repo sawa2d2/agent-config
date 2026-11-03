@@ -8,8 +8,10 @@ set -euo pipefail
 # that condense their output to save tokens. For Bob, also register
 # scripts/bob-handoff-suggest, which suggests a handoff once a task has spent
 # half of its cost limit. For both, also register scripts/agent-approval-marker,
-# which records that the user said "approved" for gfinish. Entries whose
-# command runs one of these scripts (any checkout path) or the rtk hook are
+# which records that the user said "approved" for gfinish.
+# Codex gets scripts/codex-handoff-suggest on automatic PreCompact events;
+# it only warns in the UI and lets compaction continue.
+# Entries whose command runs one of these scripts (any checkout path) or the rtk hook are
 # replaced; every other hook and setting is kept. Re-running changes nothing, and the rtk entries go away once rtk is no longer installed.
 command -v python3 >/dev/null 2>&1 || {
   echo 'python3 is required to merge agent hooks safely' >&2
@@ -21,6 +23,7 @@ rtk=0
 command -v rtk >/dev/null 2>&1 && rtk=1
 AGENT_TMUX_STATUS="$repo_dir/scripts/agent-tmux-status" CODEX_RTK_HOOK="$repo_dir/scripts/codex-rtk-hook" \
   BOB_HANDOFF_SUGGEST="$repo_dir/scripts/bob-handoff-suggest" \
+  CODEX_HANDOFF_SUGGEST="$repo_dir/scripts/codex-handoff-suggest" \
   AGENT_APPROVAL_MARKER="$repo_dir/scripts/agent-approval-marker" RTK="$rtk" python3 - <<'PY'
 import json
 import os
@@ -70,11 +73,13 @@ extra_targets = {
     home / ".bob/settings/settings.json": {
         "UserPromptSubmit": [(None, shlex.quote(os.environ["BOB_HANDOFF_SUGGEST"])), (None, approval_marker)]},
     home / ".claude/settings.json": {"UserPromptSubmit": [(None, approval_marker)]},
+    codex_home / "hooks.json": {
+        "PreCompact": [("auto", shlex.quote(os.environ["CODEX_HANDOFF_SUGGEST"]))]},
 }
 
 
 def managed_command(command):
-    return (any(script in command for script in ("agent-tmux-status", "codex-rtk-hook", "bob-handoff-suggest",
+    return (any(script in command for script in ("agent-tmux-status", "codex-rtk-hook", "bob-handoff-suggest", "codex-handoff-suggest",
                                                     "agent-approval-marker"))
             or command == RTK_HOOK)
 
@@ -84,7 +89,7 @@ def managed(group):
                for hook in group.get("hooks", []) if isinstance(hook, dict))
 
 
-# Codex hooks.json is left alone (and never created) while nothing changes.
+# Codex hooks.json also gets the automatic-compaction handoff warning.
 for path in dict.fromkeys([*targets, *rtk_targets]):
     events = targets.get(path, {})
     # Write through a symlink (settings kept in a dotfiles checkout, say) so the link survives.

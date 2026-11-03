@@ -28,9 +28,14 @@ assert $1, (bob, claude)
 " || fail "$1"
 }
 
-# New machine: both settings files are created with every hook; Codex hooks.json only with rtk.
+# New machine: Codex gets the handoff warning even without rtk.
 install_hooks > /dev/null
-[[ ! -e $codex ]] || fail 'Codex hooks.json created without rtk'
+CODEX="$codex" HANDOFF="$root/scripts/codex-handoff-suggest" python3 -c '
+import json, os
+expected = {"PreCompact": [{"matcher": "auto", "hooks": [{"type": "command", "command": os.environ["HANDOFF"]}]}]}
+assert json.load(open(os.environ["CODEX"])) == {"hooks": expected}
+' || fail 'Codex handoff warning missing'
+codex_before=$(cat "$codex")
 check "states(bob, 'Stop') == [(None, status + ' done')] and states(bob, 'SessionStart') == [(None, status + ' clear')]"
 check "sorted(bob['hooks']) == ['PostToolUse', 'PreToolUse', 'SessionStart', 'Stop', 'UserPromptSubmit']"
 check "states(claude, 'Notification') == [('permission_prompt', status + ' waiting')]"
@@ -42,16 +47,16 @@ check "all(cmd.endswith((' prompt', ' working', ' done', ' waiting', ' clear')) 
 # Re-running leaves the files untouched.
 before=$(cat "$bob" "$claude")
 out=$(install_hooks)
-[[ -z $out && $(cat "$bob" "$claude") == "$before" ]] || fail "second run changed files: $out"
+[[ -z $out && $(cat "$bob" "$claude") == "$before" && $(cat "$codex") == "$codex_before" ]] || fail "second run changed files: $out"
 
 # With rtk installed, its hook rewrites Claude's Bash and Bob's execute_command calls.
 install_hooks_rtk > /dev/null
 check "states(claude, 'PreToolUse') == [(None, status + ' working'), ('Bash', 'rtk hook claude')]"
 check "states(bob, 'PreToolUse') == [(None, status + ' working'), ('^execute_command$', 'rtk hook claude')]"
-CODEX="$codex" HOOK="$root/scripts/codex-rtk-hook" python3 -c "
+CODEX="$codex" HOOK="$root/scripts/codex-rtk-hook" HANDOFF="$root/scripts/codex-handoff-suggest" python3 -c "
 import json, os
 d = json.load(open(os.environ['CODEX']))
-assert d == {'hooks': {'PreToolUse': [{'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': os.environ['HOOK']}]}]}}, d
+assert d == {'hooks': {'PreCompact': [{'matcher': 'auto', 'hooks': [{'type': 'command', 'command': os.environ['HANDOFF']}]}], 'PreToolUse': [{'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': os.environ['HOOK']}]}]}}, d
 " || fail "Codex hooks.json: $(cat "$codex")"
 rtk_before=$(cat "$bob" "$claude" "$codex")
 out=$(install_hooks_rtk)
@@ -60,8 +65,29 @@ out=$(install_hooks_rtk)
 # Once rtk is gone, its entries are removed.
 install_hooks > /dev/null
 [[ $(cat "$bob" "$claude") == "$before" ]] || fail 'rtk entries not removed'
-CODEX="$codex" python3 -c "import json, os; assert json.load(open(os.environ['CODEX'])) == {'hooks': {}}" \
-  || fail "Codex rtk entry not removed: $(cat "$codex")"
+[[ $(cat "$codex") == "$codex_before" ]] || fail "Codex rtk entry not removed: $(cat "$codex")"
+
+# A custom Codex home preserves unmanaged entries and replaces old managed paths.
+export CODEX_HOME="$tmp/custom-codex"
+mkdir -p "$CODEX_HOME"
+cat > "$CODEX_HOME/hooks.json" <<'JSON'
+{"description":"user hooks","hooks":{"PreCompact":[
+  {"matcher":"manual","hooks":[{"type":"command","command":"echo custom"}]},
+  {"matcher":"auto","hooks":[{"type":"command","command":"/old/scripts/codex-handoff-suggest"}]}]}}
+JSON
+install_hooks > /dev/null
+HOOK="$root/scripts/codex-handoff-suggest" python3 - <<'PY'
+import json, os
+from pathlib import Path
+d = json.loads((Path(os.environ['CODEX_HOME']) / 'hooks.json').read_text())
+assert d['description'] == 'user hooks'
+assert d['hooks']['PreCompact'] == [
+    {'matcher': 'manual', 'hooks': [{'type': 'command', 'command': 'echo custom'}]},
+    {'matcher': 'auto', 'hooks': [{'type': 'command', 'command': os.environ['HOOK']}]}]
+PY
+out=$(install_hooks)
+[[ -z $out && $(cat "$codex") == "$codex_before" ]] || fail 'custom Codex home changed default home or was not idempotent'
+unset CODEX_HOME
 
 # Other hooks and settings are kept; entries from another checkout path are replaced.
 cat > "$claude" <<'JSON'
