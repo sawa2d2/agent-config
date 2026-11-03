@@ -127,6 +127,33 @@ directories or plugin cache. There is therefore no matching installed skill
 for this repository to change. Unmanaged plugins and user choices are preserved.
 See [the audit and supported controls](docs/codex-skill-metadata.md).
 
+## Codex child model default
+
+`./install` runs `scripts/install-codex-subagent-model`, which adds
+`[agents] default_subagent_model = "gpt-6-luna"` only when unset in
+`${CODEX_HOME:-~/.codex}/config.toml`. Run it separately with:
+
+```sh
+bash scripts/install-codex-subagent-model
+```
+
+This is the default for **all** model-unspecified children, including exploration;
+it does not change the parent model. GPT-6 Luna appears in Codex 0.160.0's bundled
+and local account catalogs as a fast, affordable model for easier tasks. The
+[official subagent examples](https://learn.chatgpt.com/docs/agent-configuration/subagents)
+also use it for code exploration. Explicit spawn values override this default;
+custom agent files and project/profile overrides remain untouched. Reasoning
+effort is not configured here. Defining a custom `explorer` model would override
+explicit spawn model choices, so this installer does not create one.
+
+The installer preserves existing model settings, comments, permissions and config
+symlinks. Inline `agents = { ... }` tables and escaped quoted keys are left
+untouched with a notice;
+add `default_subagent_model` inside that table yourself if wanted. No launcher
+flags are added. Restart Codex after installation. CLI strict-config acceptance
+was checked in temporary fixtures; live child routing, task quality and usage
+savings have not been measured. Model access can vary by account.
+
 ## Codex theme
 
 Codex has no setting for its user message background: it lightens the

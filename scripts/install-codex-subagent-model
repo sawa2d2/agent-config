@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Codex 0.160.0 accepts agents.default_subagent_model. Unlike a custom
+# explorer's model, this default yields to explicit spawn and role choices.
+# It applies to ALL unspecified child models, not just exploration.
+command -v python3 >/dev/null 2>&1 || {
+  echo 'python3 is required to merge Codex subagent defaults safely' >&2
+  exit 1
+}
+python3 - <<'PY'
+import os
+from pathlib import Path
+import re
+import tempfile
+
+config = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "config.toml"
+# Follow symlinks, as the other settings installers do.
+config = Path(os.path.realpath(config))
+text = config.read_text(encoding="utf-8") if config.exists() else ""
+
+# Inspect only keys and headers, leaving the original TOML intact. Mask
+# multiline strings and comments so example config in instructions is ignored.
+# Single-line strings stay intact for quoted keys and table names.
+tokens = re.compile(r'"""(?:\\[\s\S]|(?!""")[\s\S])*"""'
+                    r"|'''[\s\S]*?'''"
+                    r'|"(?:\\.|[^"\\\n])*"'
+                    r"|'[^'\n]*'|#[^\n]*")
+def mask(match):
+    value = match.group()
+    if value.startswith(('"""', "'''", '#')):
+        return re.sub(r'[^\n]', ' ', value)
+    return value
+
+visible = tokens.sub(mask, text)
+agent_key = r'''(?:agents|"agents"|'agents')'''
+model_key = r'''(?:default_subagent_model|"default_subagent_model"|'default_subagent_model')'''
+section = None
+agent_header = None
+for index, line in enumerate(visible.splitlines()):
+    # Escaped quoted keys need a full TOML parser (not in Python 3.9/3.10).
+    # Leave unusual key syntax untouched rather than risk a duplicate table.
+    key_part = line.split('=', 1)[0]
+    if '\\' in key_part:
+        print(f"Kept Codex configuration with escaped keys: {config}")
+        raise SystemExit(0)
+    header = re.fullmatch(r'\s*\[\s*(.*?)\s*\]\s*', line)
+    if header:
+        section = header.group(1)
+        if re.fullmatch(agent_key, section):
+            agent_header = index
+        continue
+    if section is None:
+        # Inline agents tables cannot be extended with a dotted key. Keep
+        # them intact, including ones without a model, rather than reformat.
+        if re.match(r'\s*' + agent_key + r'\s*=', line):
+            print(f"Kept inline Codex agents configuration: {config}")
+            raise SystemExit(0)
+        configured = re.match(r'\s*' + agent_key + r'\s*\.\s*' + model_key + r'\s*=', line)
+    else:
+        configured = (re.fullmatch(agent_key, section)
+                      and re.match(r'\s*' + model_key + r'\s*=', line))
+    if configured:
+        raise SystemExit(0)
+
+entry = 'default_subagent_model = "gpt-6-luna"\n'
+if agent_header is not None:
+    lines = text.splitlines(keepends=True)
+    if not lines[agent_header].endswith('\n'):
+        lines[agent_header] += '\n'
+    lines.insert(agent_header + 1, entry)
+    updated = ''.join(lines)
+elif text:
+    # A root dotted key also works when agents has implicit subtables.
+    updated = 'agents.' + entry + text
+else:
+    updated = '[agents]\n' + entry
+
+config.parent.mkdir(parents=True, exist_ok=True)
+fd, temporary = tempfile.mkstemp(prefix=f'.{config.name}.', dir=config.parent)
+try:
+    with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        stream.write(updated)
+    if config.exists():
+        os.chmod(temporary, config.stat().st_mode & 0o777)
+    os.replace(temporary, config)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+print(f"Set Codex unspecified child model to gpt-6-luna: {config}")
+PY

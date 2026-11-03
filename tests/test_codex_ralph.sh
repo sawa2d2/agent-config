@@ -74,7 +74,7 @@ mkdir -p "$fixture/deploy/skills" "$fixture/scripts" "$fixture/bin"
 cp "$root/install" "$fixture/install"
 printf 'fixture instructions\n' > "$fixture/deploy/AGENTS.md"
 cp "$root/bin/codex-ralph" "$fixture/bin/"
-for name in install-rtk install-claude-settings install-bob-theme install-codex-theme install-codex-compaction install-bob-settings install-agent-hooks install-tools install-nix-tools install-claude-plugins; do
+for name in install-rtk install-claude-settings install-bob-theme install-codex-theme install-codex-compaction install-codex-subagent-model install-bob-settings install-agent-hooks install-tools install-nix-tools install-claude-plugins; do
   printf '#!/bin/sh\nexit 0\n' > "$fixture/scripts/$name"
 done
 bash "$fixture/install" >/dev/null
