@@ -74,6 +74,14 @@ bash scripts/install-bob-theme
 The background applies only in true-color terminals; Bob uses fixed ANSI
 colors for user messages in 256- and 16-color terminals.
 
+## Codex skill metadata
+
+The Claude Office/browser overrides above are not copied into Codex settings.
+The Codex 0.160.0 audit found none of those 11 skill names in the local skill
+directories or plugin cache. There is therefore no matching installed skill
+for this repository to change. Unmanaged plugins and user choices are preserved.
+See [the audit and supported controls](docs/codex-skill-metadata.md).
+
 ## Codex theme
 
 Codex has no setting for its user message background: it lightens the
