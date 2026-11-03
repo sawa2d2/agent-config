@@ -7,8 +7,10 @@ set -euo pipefail
 # that skip ignored files such as dependencies and build output; compaction
 # before the context is nearly full, which keeps each turn smaller; and a cost
 # limit per task so a runaway task cannot spend a day's share of a monthly
-# Bobcoin budget (keys observed in Bob Shell 2.0.6; Bob compacts at 90% and has
-# no cost limit by default).
+# Bobcoin budget; and auto-approved reads outside the workspace, so a task
+# started by `bobtask handoff` can read the earlier task's transcript in
+# $TMPDIR (keys observed in Bob Shell 2.0.6; Bob compacts at 90%, has no cost
+# limit and cancels every tool call outside the workspace by default).
 command -v python3 >/dev/null 2>&1 || {
   echo 'python3 is required to merge Bob settings safely' >&2
   exit 1
@@ -22,7 +24,11 @@ import tempfile
 
 settings_file = Path.home() / ".bob/settings/settings.json"
 defaults = {"session": {"limitWarnings": True, "respectGitIgnore": True,
-                        "compactionThresholdPercent": 80, "maxCost": 20}}
+                        "compactionThresholdPercent": 80, "maxCost": 20},
+            "approval": {"outsideWorkspaceAllowed": True}}
+# Outside the workspace, only the read group goes through: Bob still asks
+# before edits and commands there.
+READ_OUTSIDE_WORKSPACE = {"groupId": "read", "enableOutsideWorkspace": True}
 # Earlier installs raised maxTurns to 300. A long task resends a growing
 # context on every turn, and the handoff note lets a new task continue, so
 # that value goes back to Bob's default of 100; any other value is the user's.
@@ -34,7 +40,7 @@ settings = {}
 if settings_file.exists():
     with settings_file.open(encoding="utf-8") as stream:
         settings = json.load(stream)
-if not isinstance(settings, dict) or not isinstance(settings.get("session", {}), dict):
+if not isinstance(settings, dict) or not all(isinstance(settings.get(section, {}), dict) for section in defaults):
     raise SystemExit(f"Expected JSON object settings: {settings_file}")
 
 changed = False
@@ -47,6 +53,12 @@ for section, values in defaults.items():
         if key not in current:
             current[key] = value
             changed = True
+options = settings["approval"].setdefault("permissionOptions", [])
+if not isinstance(options, list):
+    raise SystemExit(f"Expected a list in approval.permissionOptions: {settings_file}")
+if not any(isinstance(option, dict) and option.get("groupId") == "read" for option in options):
+    options.append(READ_OUTSIDE_WORKSPACE)
+    changed = True
 if not changed:
     raise SystemExit(0)
 

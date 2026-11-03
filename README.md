@@ -98,6 +98,7 @@ yourself are kept:
 | `session.respectGitIgnore` | `true` | Apply each `.gitignore` like a `.bobignore`: ignored files are hidden from listings and search and cannot be read or written |
 | `session.compactionThresholdPercent` | `80` | Compact the context at 80% instead of 90%, keeping each turn smaller; instructions given only in chat may be summarized away |
 | `session.maxCost` | `20` | Stop a task once it has spent 20 Bobcoins (no limit by default); with `limitWarnings` the agent is told to wrap up at 80%, and continuing doubles the limit for that task |
+| `approval.outsideWorkspaceAllowed` and a `read` entry in `approval.permissionOptions` | `true` | Auto-approve reads outside the workspace, so a task started by `bobtask handoff` can read the transcript in `$TMPDIR` (Bob cancels every tool call outside the workspace by default); edits and commands there still ask. Any file the user can read becomes readable without a prompt |
 
 Earlier installs set `session.maxTurns` to `300`; that exact value is removed so Bob's default applies, and any other value is kept.
 
@@ -281,9 +282,13 @@ stay unchanged. The database schema is internal to Bob Shell (observed in
 
 `handoff` continues a task that Bob stopped, for example at its turn limit,
 in a fresh context. It writes the transcript to
-`$TMPDIR/bob-handoff/<task-id>.md`, keeping the first `N` (default 2000)
+`$TMPDIR/bob-handoff/<task-id>.md`, keeping the first `N` (default 500)
 characters of each tool output, then starts `bob chat` in the task's
-workspace. Bob's interactive chat takes no initial prompt, so the first
+workspace. To keep the transcript short, successful output of `read_file`,
+`list_files` and `glob`, which the new task can get again, is left out, and
+output repeating an earlier one is replaced by a pointer to it; the first
+message asks the new task to read the start and the end of the transcript and
+search the rest instead of reading all of it. Bob's interactive chat takes no initial prompt, so the first
 message that points it at the transcript, or at the workspace's handoff note
 when there is one (see [Agent handoff notes](#agent-handoff-notes)), is copied
 to the clipboard (`pbcopy`, `wl-copy` or `xclip`) and printed; paste it to

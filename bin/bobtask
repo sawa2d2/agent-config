@@ -292,12 +292,22 @@ def message_text(message):
     return role, message.get("content", "")
 
 
-def print_transcript(db, task, out=sys.stdout, tool_limit=None):
-    """Write a task transcript as text; tool output is cut to tool_limit characters."""
+# Tools whose output the agent can get again from the workspace; a handoff
+# transcript leaves their successful output out.
+REREADABLE_TOOLS = {"read_file", "list_files", "glob"}
+
+
+def print_transcript(db, task, out=sys.stdout, tool_limit=None, compact=False):
+    """Write a task transcript as text; tool output is cut to tool_limit characters.
+
+    With compact, successful output of REREADABLE_TOOLS and output repeating an
+    earlier one are replaced by a short marker, so a new task reads less.
+    """
     print(f"# {task['title'] or task['first_message'] or '(no title)'}", file=out)
     print(f"ID: {task['id']}", file=out)
     print(f"Workspace: {task['project_id']}", file=out)
     print(f"Updated: {format_time(task['updated_at'])}", file=out)
+    seen = {}
     for message in db.execute("SELECT role, data, created_at FROM messages WHERE task_id = ? ORDER BY created_at ASC",
                               (task["id"],)):
         data = json.loads(message["data"])
@@ -305,9 +315,16 @@ def print_transcript(db, task, out=sys.stdout, tool_limit=None):
             continue
         heading, text = message_text(data)
         text = text.rstrip()
-        if tool_limit is not None and heading.startswith("tool:") and len(text) > tool_limit:
-            text = f"{text[:tool_limit]}\n[... {len(text) - tool_limit} more characters omitted]"
-        print(f"\n## {heading} ({format_time(message['created_at'])})\n", file=out)
+        time = format_time(message["created_at"])
+        if compact and heading.removeprefix("tool: ") in REREADABLE_TOOLS:
+            text = "[output omitted: run the call again to see the current content]"
+        elif compact and heading.startswith("tool:") and text in seen:
+            text = f"[same output as at {seen[text]}]"
+        elif heading.startswith("tool:"):
+            seen[text] = time
+            if tool_limit is not None and len(text) > tool_limit:
+                text = f"{text[:tool_limit]}\n[... {len(text) - tool_limit} more characters omitted]"
+        print(f"\n## {heading} ({time})\n", file=out)
         print(text, file=out)
 
 
@@ -368,7 +385,7 @@ def command_handoff(args):
     handoff_dir.mkdir(mode=0o700, exist_ok=True)
     path = handoff_dir / f"{task['id']}.md"
     with path.open("w", encoding="utf-8") as out:
-        print_transcript(db, task, out, tool_limit=args.tool_limit)
+        print_transcript(db, task, out, tool_limit=args.tool_limit, compact=True)
     # A handoff note written by the agent (see deploy/AGENTS.md) is far shorter
     # than the transcript, so the new task starts from it when present.
     note = handoff_note(directory)
@@ -378,8 +395,10 @@ def command_handoff(args):
                   "the earlier Bob task) for it instead of reading the whole transcript.")
         print(f"Handoff note: {note} (updated {format_time(os.path.getmtime(note))})", file=sys.stderr)
     else:
-        prompt = (f"Read {path}. It is the transcript of an earlier Bob task in this workspace. "
-                  "Summarize its goal and current state, then continue the work from where it stopped.")
+        prompt = (f"{path} is the transcript of an earlier Bob task in this workspace. Read its first "
+                  "user message and its last few sections, where the latest state is, rather than the whole "
+                  "file, and search the rest only for details you need. Outputs of file-reading tools are "
+                  "left out; read the files again when needed. Then continue the work from where it stopped.")
     copied = copy_to_clipboard(prompt)
     print(f"Transcript: {path}", file=sys.stderr)
     print(f"{'Copied to the clipboard' if copied else 'Paste this'} as the first message:\n{prompt}", file=sys.stderr)
@@ -404,8 +423,8 @@ def main():
     dump.set_defaults(run=command_dump)
     handoff = commands.add_parser("handoff", parents=[scope],
                                   help="start a new task in a task's workspace from its transcript")
-    handoff.add_argument("--tool-limit", type=int, default=2000, metavar="N",
-                         help="characters kept from each tool output (default: 2000)")
+    handoff.add_argument("--tool-limit", type=int, default=500, metavar="N",
+                         help="characters kept from each tool output (default: 500)")
     handoff.set_defaults(run=command_handoff)
     args = parser.parse_args()
     args.run(args)

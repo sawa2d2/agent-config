@@ -53,6 +53,9 @@ for i, data in enumerate([
     {"role": "system", "content": "SYSTEM PROMPT"},
     {"role": "assistant", "content": "Let me look.", "toolCalls": [{"id": "c1", "name": "read_file", "arguments": {"path": "x"}}]},
     {"role": "tool", "content": "file body", "toolUsage": {"signature": {"name": "read_file", "arguments": {}, "isError": True}}},
+    {"role": "tool", "content": "whole file", "toolUsage": {"signature": {"name": "read_file", "arguments": {}}}},
+    {"role": "tool", "content": "build log", "toolUsage": {"signature": {"name": "execute_command", "arguments": {}}}},
+    {"role": "tool", "content": "build log", "toolUsage": {"signature": {"name": "execute_command", "arguments": {}}}},
     {"role": "assistant", "content": "Done."},
 ]):
     db.execute("INSERT INTO messages VALUES (?, 'titled', ?, ?, ?)", (f"t-{i}", data["role"], json.dumps(data), 2 + i))
@@ -111,7 +114,7 @@ done
 PICK=titled bobtask dump --json | python3 -c '
 import json, sys
 data = json.loads(sys.stdin.read())
-assert data["task"]["id"] == "titled" and len(data["messages"]) == 5, data'
+assert data["task"]["id"] == "titled" and len(data["messages"]) == 8, data'
 
 # handoff: writes the transcript with cut tool output, copies the prompt and starts a new Bob in the workspace.
 cat > "$tmp/bin/pbcopy" <<'COPY'
@@ -128,7 +131,9 @@ grep -q -- --multi "$tmp/picker-args" && fail 'handoff picker is multi-select'
 out=$(cat "$note")
 [[ $out == *'hello titled'* && $out == *'Done.'* && $out != *'SYSTEM PROMPT'* ]] || fail "handoff transcript: $out"
 [[ $out == *$'file\n[... 5 more characters omitted]'* ]] || fail "handoff tool output not cut: $out"
-[[ $(cat "$tmp/clipboard") == "Read $note."* ]] || fail "clipboard: $(cat "$tmp/clipboard")"
+[[ $out != *'whole file'* && $out == *'[output omitted: run the call again'* ]] || fail "handoff keeps file output: $out"
+[[ $(grep -c '^buil$' "$note") == 1 && $out == *'[same output as at '* ]] || fail "handoff repeats output: $out"
+[[ $(cat "$tmp/clipboard") == "$note is the transcript"* ]] || fail "clipboard: $(cat "$tmp/clipboard")"
 grep -q 'Copied to the clipboard' "$tmp/handoff-err" || fail "handoff message: $(cat "$tmp/handoff-err")"
 
 # handoff: a handoff note at the root of the workspace's working tree is preferred over the transcript.
