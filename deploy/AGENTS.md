@@ -30,6 +30,7 @@ These principles govern all coding and maintenance work and take precedence over
 ## Git Workflow
 - Follow repository-specific branching rules; for new code changes, create a development branch before editing.
 - To start a new development branch inside tmux, run `agent-delegate <new-branch> "<task and context>"` (Claude Code), `bob-delegate <new-branch> "<task and context>"` (Bob Shell), or `codex-delegate <new-branch> "<task and context>"` (Codex) instead of creating the branch here: it creates the branch in a new worktree and starts the agent in one new tmux window per branch without moving focus, which does the work. Then tell the user the window and branch, and stop working on that task in this session.
+- For routine, low-reasoning delegated work (merge waits, branch cleanup, mechanical edits), pass `-m sonnet` to `agent-delegate` or `-m gpt-6-luna` to `codex-delegate`; otherwise keep the default model.
 - Always preserve the originating agent when delegating: Claude to Claude, Bob to Bob, and Codex to Codex. Never substitute another agent because its delegation command is available.
 - The primary agent owns Git operations. Subagents must not create branches, commit, or push unless explicitly delegated by the primary agent.
 - Never commit directly to the default branch or force-push without explicit approval.

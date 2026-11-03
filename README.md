@@ -232,7 +232,9 @@ from the current working tree into it, creates one new tmux window per branch
 without moving focus, marks the worktree as trusted in `~/.claude.json` so
 Claude skips its trust dialog there, and types `claude` with a prompt to read the note (or
 the given prompt) into that pane's shell. Like `gwt`, it needs the primary
-worktree on `main`.
+worktree on `main`. `-m|--model <model>` (before the branch) starts it as
+`claude --model <model>`; agents pass `-m sonnet` for routine, low-reasoning
+work to save Opus usage, and the default model is unchanged otherwise.
 
 `bob-delegate <new-branch> [prompt]` and `codex-delegate <new-branch> [prompt]`
 use the same worktree, handoff-note, and window conventions for Bob and Codex;
@@ -240,7 +242,9 @@ use the same worktree, handoff-note, and window conventions for Bob and Codex;
 for the originating agent: Claude to Claude, Bob to Bob, and Codex to Codex.
 Codex delegation starts `codex new` with the prompt through the existing wrapper,
 with the automatic-review default described below; trust settings stay unchanged.
-With no prompt, a handoff note is required.
+With no prompt, a handoff note is required. `codex-delegate` takes the same
+`-m|--model <model>` option as `agent-delegate`; agents pass `-m gpt-6-luna` for
+routine work. Bob Shell has no model option for `bob chat`.
 
 For Bob, `./install` also registers `scripts/bob-handoff-suggest` as a
 `UserPromptSubmit` and `PostToolUse` hook, so the check also runs during

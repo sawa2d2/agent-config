@@ -63,4 +63,13 @@ PATH="$root/bin:$PATH" bash -c "$command_line"
 # Outside tmux it refuses.
 if TMUX= "$root/bin/codex-delegate" feat/z "x" 2>/dev/null; then fail 'ran outside tmux'; fi
 
+# A model is passed through, and the wrapper keeps automatic review with it.
+: > "$tmp/tmux.log"
+"$root/bin/codex-delegate" --model gpt-6-luna feat/m "merge it" > /dev/null
+command_line=$(sed -n 's/^send-keys -t %9 -l //p' "$tmp/tmux.log")
+[[ $command_line == 'codex new --model gpt-6-luna merge\ it' ]] || fail "model: $command_line"
+PATH="$root/bin:$PATH" bash -c "$command_line"
+[[ $(cat "$tmp/codex.args") == $'--approve-for-me\n--model\ngpt-6-luna\nmerge it' ]] || fail "model arguments: $(cat "$tmp/codex.args")"
+if "$root/bin/codex-delegate" -m 2>/dev/null; then fail 'ran with -m and no model'; fi
+
 echo 'PASS: codex-delegate'

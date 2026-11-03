@@ -51,6 +51,12 @@ jq -e --arg dir "$tmp/worktrees/feat/x" \
 "$root/bin/agent-delegate" feat/y "fix the build" > /dev/null
 grep -qx 'send-keys -t %9 -l claude fix\\ the\\ build' "$tmp/tmux.log" || fail "prompt: $(cat "$tmp/tmux.log")"
 
+# A model is passed through to claude; a missing model value is rejected.
+: > "$tmp/tmux.log"
+"$root/bin/agent-delegate" --model sonnet feat/m "merge it" > /dev/null
+grep -qx 'send-keys -t %9 -l claude --model sonnet merge\\ it' "$tmp/tmux.log" || fail "model: $(cat "$tmp/tmux.log")"
+if "$root/bin/agent-delegate" -m 2>/dev/null; then fail 'ran with -m and no model'; fi
+
 # Outside tmux it refuses.
 if TMUX= "$root/bin/agent-delegate" feat/z "x" 2>/dev/null; then fail 'ran outside tmux'; fi
 
