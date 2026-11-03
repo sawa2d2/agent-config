@@ -1,8 +1,7 @@
 # Codex session management and language tooling
 
 Assessed on 2026-11-03 against installed `codex-cli 0.160.0` and
-`pyright 1.1.414`. This is a branch-local assessment of the corresponding
-CODEX-TODO item; integration into the default branch is pending.
+`pyright 1.1.414` for the corresponding CODEX-TODO item.
 
 ## Session workflows
 

@@ -447,6 +447,14 @@ in total and per request, with `-w N` as above; `ratio` and `ratio/req` give
 cost and cost per request as a percentage of the week before. Bob records only the cost and
 context tokens of each request, without an input, cache or output breakdown.
 
+`codex-stats` (requires Python 3) prints the same weekly view as `claude-stats`
+for Codex from the rollouts under `~/.codex/sessions` and
+`~/.codex/archived_sessions`, honoring `CODEX_HOME`, with `-w N` as above. Each
+model response is counted once by its `response_id`, and each rollout (subagent
+threads included) as a session. The weighted total uses the GPT-5 price ratios:
+cached input 0.1x and output 8x uncached input. The rollout format is internal
+to Codex (observed in 0.160.0).
+
 `bobtask` manages Bob tasks (requires Python 3 and fzf). Pickers show the
 update time, the stored workspace (`project_id`, such as `file:/path/to/dir`),
 title and task ID of resumable tasks from every directory. With `-c`
