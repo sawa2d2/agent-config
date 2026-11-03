@@ -107,6 +107,8 @@ for skill in ("docx", "pptx", "xlsx", "pdf", "google-workspace", "computer-use",
               "built-in-browser", "chrome-browser", "claude-in-chrome", "morning",
               "import-memory"):
     overrides.setdefault(skill, "user-invocable-only")
+# The built-in plugin-authoring skill (Claude Code mods) is also rarely needed.
+overrides.setdefault("plugin-authoring", "user-invocable-only")
 write_json(settings_file, settings)
 print(f"Claude theme: {selected} -> {background} (readable light text)")
 print(f"Enabled: {settings_file}")

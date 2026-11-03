@@ -26,6 +26,7 @@ assert settings["tui"] == "default"
 assert settings["autoCompactWindow"] == 200000
 assert settings["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] == "sonnet"
 assert settings["skillOverrides"]["docx"] == "user-invocable-only"
+assert settings["skillOverrides"]["plugin-authoring"] == "user-invocable-only"
 PY
 
 # An explicit renderer choice (for example via /tui fullscreen) and compact window are preserved.
@@ -38,6 +39,7 @@ settings["tui"] = "fullscreen"
 settings["autoCompactWindow"] = "auto"
 settings["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] = "haiku"
 settings["skillOverrides"]["docx"] = "on"
+settings["skillOverrides"]["plugin-authoring"] = "on"
 path.write_text(json.dumps(settings))
 PY
 bash "$root/scripts/install-claude-settings" > /dev/null
@@ -45,6 +47,7 @@ python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claud
 python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["autoCompactWindow"] == "auto"'
 python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] == "haiku"'
 python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["skillOverrides"]["docx"] == "on"'
+python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["skillOverrides"]["plugin-authoring"] == "on"'
 
 # Idempotence and theme change.
 bash "$root/scripts/install-claude-settings" > /dev/null

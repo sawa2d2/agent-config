@@ -59,7 +59,8 @@ their own search and read on Sonnet instead of inheriting the main model
 `google-workspace`, `computer-use`, `built-in-browser`, `chrome-browser`,
 `claude-in-chrome`, `morning`, `import-memory`) are set to
 `user-invocable-only` in `skillOverrides`, so their descriptions stay out of
-every request while `/name` still works; an explicit override is kept. Other
+every request while `/name` still works; an explicit override is kept. The
+built-in `plugin-authoring` skill is hidden the same way. Other
 settings in
 `~/.claude/settings.json` are preserved. Python 3 is required.
 
