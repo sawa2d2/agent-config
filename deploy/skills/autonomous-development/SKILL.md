@@ -29,6 +29,14 @@ Ask about unclear requirements before planning. When a tool is not installed
 in this agent, carry out its idea inline: clarify, plan in verifiable units,
 execute, verify.
 
+## Starting a branch
+
+Inside tmux, run `agent-delegate <new-branch> "<task>"` (Claude Code) or
+`bob-delegate <new-branch> "<task>"` (Bob Shell) to create the branch in a new
+worktree and start the agent in a new pane above; do not create the branch
+here. Tell the user the pane and branch, and stop working on that task in this
+session.
+
 ## Branches: independent first, stacked when needed
 
 - A unit that does not depend on unmerged work branches from the default

@@ -39,17 +39,19 @@ for dest in "$HOME/.bob/rules/agent-config.md" "$HOME/.claude/CLAUDE.md" "$HOME/
   printf 'Linked: %s -> %s\n' "$dest" "$source"
 done
 
-# Agents run agent-delegate from non-interactive shells, which lack the aliases
-# from shell/aliases.sh, so it needs a PATH entry.
-dest="$HOME/.local/bin/agent-delegate"
-source="$repo_dir/bin/agent-delegate"
-mkdir -p -- "${dest%/*}"
-if [[ -e "$dest" && ! -L "$dest" ]]; then
-  printf 'Refusing to replace non-symlink: %s\n' "$dest" >&2
-  exit 1
-fi
-ln -sfn -- "$source" "$dest"
-printf 'Linked: %s -> %s\n' "$dest" "$source"
+# Agents run agent-delegate and bob-delegate from non-interactive shells, which
+# lack the aliases from shell/aliases.sh, so they need a PATH entry.
+for bin_name in agent-delegate bob-delegate; do
+  dest="$HOME/.local/bin/$bin_name"
+  source="$repo_dir/bin/$bin_name"
+  mkdir -p -- "${dest%/*}"
+  if [[ -e "$dest" && ! -L "$dest" ]]; then
+    printf 'Refusing to replace non-symlink: %s\n' "$dest" >&2
+    exit 1
+  fi
+  ln -sfn -- "$source" "$dest"
+  printf 'Linked: %s -> %s\n' "$dest" "$source"
+done
 
 # Preserve legacy Bob AGENTS.md; it may contain user-managed instructions.
 if [[ -e "$HOME/.bob/AGENTS.md" || -L "$HOME/.bob/AGENTS.md" ]]; then
