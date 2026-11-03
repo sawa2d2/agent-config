@@ -457,30 +457,35 @@ transcript and that session's `projects/<project>/<session-id>/`,
 `file-history/<session-id>` and `session-env/<session-id>` data. Project memory
 is never touched.
 
-`claude-stats` (requires Python 3) prints weekly token usage (sessions,
-requests, total, input-equivalent weighted total and weighted per request) of
-the last 10 weeks from `~/.claude/projects/**/*.jsonl`, honoring
-`CLAUDE_CONFIG_DIR`. Each API request is counted once by its `requestId`, and
-each session in the week (local time, from Monday) it started. `-w N` sets the
-number of weeks (`0` for all). `ratio` and `ratio/req` give weighted and weighted
-per request as a percentage of the week before (current ÷ previous; below 100%
-is a reduction, 50% is half; `-` without data). Filter with `--since`, `--until`, `--project`
-and `--min-requests`; `--split <time>` or `--split-commit <ref>` instead
-compares the mean, standard deviation and median per session before and after
-a time or commit; `--json` prints one row per session.
+`claude-stats` (requires Python 3) prints weekly token usage of the last 10
+weeks from `~/.claude/projects/**/*.jsonl`, honoring `CLAUDE_CONFIG_DIR`. A
+legend above the table states each formula and unit. Columns: sessions,
+requests, `weighted (tok)` (input-token equivalents from the Anthropic API
+price ratios, the same for every model: `input + 1.25*cache_write_5m +
+2*cache_write_1h + 0.1*cache_read + 5*output`), `per req (tok)` (weighted ÷ requests), and `weighted vs prev` and
+`per req vs prev` (this week ÷ previous week × 100 in %; below 100% is a
+reduction, 50% is half; `-` without data). Each API request is counted once by
+its `requestId`, and each session in the week (local time, from Monday) it
+started. `-w N` sets the number of weeks (`0` for all). Filter with `--since`,
+`--until`, `--project` and `--min-requests`; `--split <time>` or
+`--split-commit <ref>` instead compares the mean, standard deviation and median
+per session, with units, before and after a time or commit; `--json` prints one
+row per session.
 
 `bob-stats` (requires Python 3) prints the same weekly view for Bob tasks from
-`~/.bob/db/bob.db`, opened read-only: tasks, requests, context tokens and cost,
-in total and per request, with `-w N` as above; `ratio` and `ratio/req` give
-cost and cost per request as a percentage of the week before. Bob records only the cost and
-context tokens of each request, without an input, cache or output breakdown.
+`~/.bob/db/bob.db`, opened read-only, with `-w N` as above: tasks, requests,
+`ctx/req (tok)` (context tokens ÷ requests), cost, cost per request, and their
+ratios to the week before in %. The cost is shown in the unit Bob records. Bob
+records only the cost and context tokens of each request, without an input,
+cache or output breakdown.
 
 `codex-stats` (requires Python 3) prints the same weekly view as `claude-stats`
 for Codex from the rollouts under `~/.codex/sessions` and
 `~/.codex/archived_sessions`, honoring `CODEX_HOME`, with `-w N` as above. Each
 model response is counted once by its `response_id`, and each rollout (subagent
-threads included) as a session. The weighted total uses the GPT-5 price ratios:
-cached input 0.1x and output 8x uncached input. The rollout format is internal
+threads included) as a session. The weighted total uses the GPT-5 API price
+ratios, the same for every model:
+`uncached_input + 0.1*cached_input + 8*output`. The rollout format is internal
 to Codex (observed in 0.160.0).
 
 `bobtask` manages Bob tasks (requires Python 3 and fzf). Pickers show the

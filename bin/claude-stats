@@ -17,8 +17,22 @@ from pathlib import Path
 # Input-token equivalents per token, from the Anthropic price ratios:
 # cache write 1.25x (5 min) or 2x (1 h), cache read 0.1x, output 5x input.
 WEIGHTS = {"input": 1.0, "write_5m": 1.25, "write_1h": 2.0, "read": 0.1, "output": 5.0}
-METRICS = ["requests", "input", "cache_write", "cache_read", "output", "total", "weighted",
-           "total_per_request"]
+# Rows of the before/after comparison: metric, unit.
+SPLIT_ROWS = [("requests", "requests"), ("input", "tokens"), ("cache_write", "tokens"),
+              ("cache_read", "tokens"), ("output", "tokens"), ("weighted", "tokens"),
+              ("total_per_request", "tokens")]
+SPLIT_LEGEND = """\
+values are per session
+weighted          = input + 1.25*cache_write_5m + 2*cache_write_1h + 0.1*cache_read + 5*output
+weights           = Anthropic API price ratios to the input price, the same for every model
+total_per_request = (input + cache_write + cache_read + output) / requests"""
+WEEKLY_LEGEND = """\
+weighted = input + 1.25*cache_write_5m + 2*cache_write_1h + 0.1*cache_read + 5*output [tokens]
+weights  = Anthropic API price ratios to the input price, the same for every model
+per req  = weighted / requests [tokens]
+vs prev  = this week / previous week * 100 [%] (-: no previous week, or it was 0)
+week     = Monday (local time) of the week each session started
+"""
 
 
 def parse_time(value):
@@ -95,10 +109,10 @@ def print_group(name, sessions):
     print(f"{name}: {len(sessions)} sessions")
     if not sessions:
         return
-    print(f"  {'metric':<12}{'mean':>14}{'stdev':>14}{'median':>14}")
-    for metric in METRICS:
+    print(f"  {'metric':<19}{'unit':<10}{'mean':>12}{'stdev':>12}{'median':>12}")
+    for metric, unit in SPLIT_ROWS:
         s = describe([x[metric] for x in sessions])
-        print(f"  {metric:<12}{s['mean']:>14,.0f}{s['stdev']:>14,.0f}{s['median']:>14,.0f}")
+        print(f"  {metric:<19}{unit:<10}{s['mean']:>12,.0f}{s['stdev']:>12,.0f}{s['median']:>12,.0f}")
 
 
 def ratio(previous, current):
@@ -119,19 +133,17 @@ def print_weekly(sessions, count):
     for week, group in weeks.items():
         requests = sum(s["requests"] for s in group)
         weighted = sum(s["weighted"] for s in group)
-        sums[week] = (len(group), requests, sum(s["total"] for s in group), weighted,
-                      weighted / requests)
-    print(f"{'week':<12}{'sessions':>10}{'requests':>10}{'total':>16}{'weighted':>14}"
-          f"{'weighted/req':>14}{'ratio':>9}{'ratio/req':>10}")
-    for week, (n, requests, total, weighted, per_request) in sorted(sums.items()):
+        sums[week] = (len(group), requests, weighted, weighted / requests)
+    print(WEEKLY_LEGEND)
+    print(f"{'week':<12}{'sessions':>10}{'requests':>10}{'weighted (tok)':>16}{'per req (tok)':>15}"
+          f"{'weighted vs prev':>18}{'per req vs prev':>17}")
+    for week, (n, requests, weighted, per_request) in sorted(sums.items()):
         if count and week < first:
             continue
         previous = sums.get(week - timedelta(weeks=1))
-        print(f"{week.isoformat():<12}{n:>10}{requests:>10,}{total:>16,}{weighted:>14,}"
-              f"{per_request:>14,.0f}"
-              f"{ratio(previous and previous[3], weighted):>9}"
-              f"{ratio(previous and previous[4], per_request):>10}")
-
+        print(f"{week.isoformat():<12}{n:>10}{requests:>10,}{weighted:>16,}{per_request:>15,.0f}"
+              f"{ratio(previous and previous[2], weighted):>18}"
+              f"{ratio(previous and previous[3], per_request):>17}")
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -177,6 +189,7 @@ def main():
         print_weekly(sessions, args.weeks)
         return
     print(f"split at {cut.isoformat()}")
+    print(SPLIT_LEGEND)
     print_group("before", [s for s in sessions if s["start"] < cut])
     print_group("after", [s for s in sessions if s["start"] >= cut])
 

@@ -6,6 +6,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 export CODEX_HOME="$tmp/codex" TZ=UTC
 fail() { echo "FAIL: $*" >&2; exit 1; }
+rows() { grep -Ec '^[0-9]{4}-[0-9]{2}-[0-9]{2} '; } # week rows, after the legend and header
 stats() { "$root/bin/codex-stats" "$@"; }
 record() { # timestamp response_id input cached output
   printf '{"timestamp":"%s","type":"token_usage_record","payload":{"response_id":"%s","usage":{"input_tokens":%d,"cached_input_tokens":%d,"cache_write_input_tokens":0,"output_tokens":%d,"reasoning_output_tokens":0,"total_tokens":%d}}}\n' \
@@ -28,10 +29,10 @@ record 2026-01-02T00:00:00Z r3 100 0 5 > "$CODEX_HOME/archived_sessions/rollout-
 echo '{"timestamp":"2026-01-03T00:00:00Z","type":"session_meta","payload":{"id":"e"}}' \
   > "$CODEX_HOME/archived_sessions/rollout-e.jsonl"
 
-# Week of 2025-12-29: 3 requests, 1,635 tokens; weighted 800 = 400 uncached + 1,200 * 0.1 cached + 35 * 8 output.
+# Week of 2025-12-29: 3 requests; weighted 800 = 400 uncached + 1,200 * 0.1 cached + 35 * 8 output.
 out=$(stats -w 0)
-grep -Eqx '2025-12-29 +2 +3 +1,635 +800 +267 +- +-' <<< "$out" || fail "all weeks: $out"
-[[ $(wc -l <<< "$out") == 2 ]] || fail "all weeks: $out"
+grep -Eqx '2025-12-29 +2 +3 +800 +267 +- +-' <<< "$out" || fail "all weeks: $out"
+[[ $(rows <<< "$out") == 1 ]] || fail "all weeks: $out"
 [[ $(TZ=Asia/Tokyo stats -w 0 | tail -n1) == 2025-12-29* ]] || fail 'weekly local time'
 
 # By default only the last 10 weeks show; this week's row shows its ratio to last week's,
@@ -41,9 +42,11 @@ record "$(date -u +%FT%TZ)" r4 10 0 0 > "$CODEX_HOME/sessions/now/rollout-c.json
 record "$(date -u -d '-7 days' +%FT%TZ)" r5 20 0 0 > "$CODEX_HOME/sessions/now/rollout-d.jsonl"
 monday=$(date -d "-$(( $(date +%u) - 1 )) days" +%F)
 out=$(stats)
-[[ $(wc -l <<< "$out") == 3 ]] || fail "default weeks: $out"
-grep -Eqx "$monday +1 +1 +10 +10 +10 +50.0% +50.0%" <<< "$out" || fail "ratio: $out"
-[[ $(stats -w 1 | tail -n +2) == "$(tail -n1 <<< "$out")" ]] || fail "ratio with -w 1: $(stats -w 1)"
-[[ $(stats -w 0 | wc -l) == 4 ]] || fail 'all weeks'
+[[ $(rows <<< "$out") == 2 ]] || fail "default weeks: $out"
+grep -Fqx 'per req  = weighted / requests [tokens]' <<< "$out" || fail "legend: $out"
+grep -Eqx "$monday +1 +1 +10 +10 +50.0% +50.0%" <<< "$out" || fail "ratio: $out"
+[[ $(stats -w 1 | rows) == 1 ]] || fail "-w 1 rows"
+[[ $(stats -w 1 | tail -n1) == "$(tail -n1 <<< "$out")" ]] || fail "ratio with -w 1: $(stats -w 1)"
+[[ $(stats -w 0 | rows) == 3 ]] || fail 'all weeks'
 
 echo 'PASS: codex-stats'

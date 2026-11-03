@@ -14,6 +14,13 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 DB_PATH = Path.home() / ".bob/db/bob.db"
+LEGEND = """\
+cost     = sum of spend.cost over requests [as recorded by Bob]
+per req  = cost / requests
+ctx/req  = sum of spend.contextTokens / requests [tokens]
+vs prev  = this week / previous week * 100 [%] (-: no previous week, or it was 0)
+week     = Monday (local time) of the week each task was created
+"""
 
 
 def week_of(ms):
@@ -53,18 +60,18 @@ def main():
         w["context"] += spend.get("contextTokens", 0) or 0
         w["cost"] += spend.get("cost", 0) or 0
 
-    print(f"{'week':<12}{'tasks':>8}{'requests':>10}{'context':>14}{'cost':>10}"
-          f"{'context/req':>13}{'cost/req':>10}{'ratio':>9}{'ratio/req':>10}")
+    print(LEGEND)
+    print(f"{'week':<12}{'tasks':>8}{'requests':>10}{'ctx/req (tok)':>15}{'cost':>10}{'per req':>10}"
+          f"{'cost vs prev':>14}{'per req vs prev':>17}")
     for week, w in sorted(weeks.items()):
         if args.weeks and week < first:
             continue
         previous = weeks.get(week - timedelta(weeks=1))
         per_request = w["cost"] / w["requests"]
-        print(f"{week.isoformat():<12}{len(w['tasks']):>8}{w['requests']:>10,}{w['context']:>14,}"
-              f"{w['cost']:>10.2f}{w['context'] / w['requests']:>13,.0f}{per_request:>10.3f}"
-              f"{ratio(previous and previous['cost'], w['cost']):>9}"
-              f"{ratio(previous and previous['cost'] / previous['requests'], per_request):>10}")
-
+        print(f"{week.isoformat():<12}{len(w['tasks']):>8}{w['requests']:>10,}"
+              f"{w['context'] / w['requests']:>15,.0f}{w['cost']:>10.2f}{per_request:>10.3f}"
+              f"{ratio(previous and previous['cost'], w['cost']):>14}"
+              f"{ratio(previous and previous['cost'] / previous['requests'], per_request):>17}")
 
 if __name__ == "__main__":
     main()

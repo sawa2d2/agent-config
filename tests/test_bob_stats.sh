@@ -6,6 +6,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 export HOME="$tmp/home" TZ=UTC
 fail() { echo "FAIL: $*" >&2; exit 1; }
+rows() { grep -Ec '^[0-9]{4}-[0-9]{2}-[0-9]{2} '; } # week rows, after the legend and header
 
 [[ $("$root/bin/bob-stats" 2>&1) == 'bob-stats: database not found: '* ]] || fail 'missing database'
 
@@ -37,12 +38,14 @@ monday=$(date -d "-$(( $(date +%u) - 1 )) days" +%F)
 # By default the last 10 weeks show; only assistant messages with spend count.
 # This week's row shows cost and cost per request as a percentage of last week's, even when -w 1 hides it.
 out=$("$root/bin/bob-stats")
-[[ $(wc -l <<< "$out") == 3 ]] || fail "default weeks: $out"
-grep -Eqx "$monday +1 +2 +4,000 +0.40 +2,000 +0.200 +50.0% +25.0%" <<< "$out" || fail "this week: $out"
-[[ $("$root/bin/bob-stats" -w 1 | tail -n +2) == "$(tail -n1 <<< "$out")" ]] || fail 'ratio with -w 1'
+[[ $(rows <<< "$out") == 2 ]] || fail "default weeks: $out"
+grep -Fqx 'per req  = cost / requests' <<< "$out" || fail "legend: $out"
+grep -Eqx "$monday +1 +2 +2,000 +0.40 +0.200 +50.0% +25.0%" <<< "$out" || fail "this week: $out"
+[[ $("$root/bin/bob-stats" -w 1 | rows) == 1 ]] || fail "-w 1 rows"
+[[ $("$root/bin/bob-stats" -w 1 | tail -n1) == "$(tail -n1 <<< "$out")" ]] || fail 'ratio with -w 1'
 # -w 0 shows every week.
 out=$("$root/bin/bob-stats" -w 0)
-grep -Eqx '2025-12-29 +1 +1 +500 +0.05 +500 +0.050 +- +-' <<< "$out" || fail "all weeks: $out"
-[[ $(wc -l <<< "$out") == 4 ]] || fail "all weeks: $out"
+grep -Eqx '2025-12-29 +1 +1 +500 +0.05 +0.050 +- +-' <<< "$out" || fail "all weeks: $out"
+[[ $(rows <<< "$out") == 3 ]] || fail "all weeks: $out"
 
 echo 'PASS: bob-stats'
