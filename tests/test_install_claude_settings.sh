@@ -23,7 +23,7 @@ assert "text" not in theme["overrides"]
 assert settings["theme"] == "custom:agent-config-selected"
 assert settings["permissions"]["allow"] == ["Read"]
 assert settings["tui"] == "default"
-assert settings["autoCompactWindow"] == 200000
+assert settings["autoCompactWindow"] == 120000
 assert settings["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] == "sonnet"
 assert settings["skillOverrides"]["docx"] == "user-invocable-only"
 assert settings["skillOverrides"]["artifact-design"] == "user-invocable-only"
@@ -33,6 +33,18 @@ assert settings["disableClaudeAiConnectors"] is True
 assert settings["permissions"]["deny"] == ["Bash(rm *)", "Artifact", "ArtifactComments", "ArtifactData"]
 assert settings["skillOverrides"]["plugin-authoring"] == "user-invocable-only"
 PY
+
+# The previous managed default moves to the new one.
+python3 - <<'PY'
+import json
+from pathlib import Path
+path = Path.home() / ".claude/settings.json"
+settings = json.loads(path.read_text())
+settings["autoCompactWindow"] = 200000
+path.write_text(json.dumps(settings))
+PY
+bash "$root/scripts/install-claude-settings" > /dev/null
+python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["autoCompactWindow"] == 120000'
 
 # An explicit renderer choice (for example via /tui fullscreen) and compact window are preserved.
 python3 - <<'PY'

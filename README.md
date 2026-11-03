@@ -62,9 +62,11 @@ follow the saved dotfiles theme variant (default: teal), with a darker shade
 for contrast against Claude Code's light text. It also sets `"tui": "default"`
 when no renderer is configured, so output stays in terminal and tmux scrollback;
 an explicit `/tui fullscreen` choice is kept. Unless set already,
-`"autoCompactWindow": 200000` compacts the context at about 200k tokens rather
-than near the 1M window, since every request resends the whole context;
-`/autocompact` or an explicit value overrides it. Unless set already,
+`"autoCompactWindow": 120000` treats the context window as 120k tokens rather
+than 1M, so compaction starts somewhat below that (with `200000` it was observed
+at about 164k), since every request resends the whole context;
+`/autocompact` or an explicit value overrides it. The previous default `200000`
+is moved to `120000`. Unless set already,
 `env.CLAUDE_CODE_SUBAGENT_MODEL` is `sonnet`, so subagents without a model of
 their own search and read on Sonnet instead of inheriting the main model
 (often Opus). Office and browser skills (`docx`, `pptx`, `xlsx`, `pdf`,
@@ -176,11 +178,13 @@ The theme is dark; on a light terminal select another one with `/theme`.
 
 ## Codex compaction
 
-`./install` and `bin/codex` add `model_auto_compact_token_limit = 200000`
-to `$CODEX_HOME/config.toml` (default: `~/.codex/config.toml`) when absent.
-This token threshold follows this repository's Claude `autoCompactWindow=200000`
-policy; it is not equivalent to Bob's `session.compactionThresholdPercent=80`
-and is not an OpenAI recommended value. It targets earlier compaction for large
+`./install` and `bin/codex` add `model_auto_compact_token_limit = 100000`
+to `$CODEX_HOME/config.toml` (default: `~/.codex/config.toml`) when absent,
+and move the earlier managed root line with `200000` to it. All three agents
+compact at about 100k tokens, where Claude's `autoCompactWindow=120000` is
+expected to (scaled from the 164k observed with `200000`):
+heavy use looks alike across agents, and per-turn cost grows with the context.
+It is not an OpenAI recommended value. It targets earlier compaction for large
 contexts without overriding the model's context window. Existing explicit values,
 including quoted keys and profile settings, are kept; if a profile in this file
 sets the threshold, no global default is added. CLI `-c` overrides still apply.
@@ -202,7 +206,7 @@ yourself are kept:
 | --- | --- | --- |
 | `session.limitWarnings` | `true` | Tell the agent to wrap up five turns before the turn limit (Bob's default of 100 model calls per task) and at 80% of `maxCost`; the shared instructions then have it write a handoff note |
 | `session.respectGitIgnore` | `true` | Apply each `.gitignore` like a `.bobignore`: ignored files are hidden from listings and search and cannot be read or written |
-| `session.compactionThresholdPercent` | `80` | Compact the context at 80% instead of 90%, keeping each turn smaller; instructions given only in chat may be summarized away |
+| `session.compactionThresholdPercent` | `37` | Compact the context at 37% instead of 90%: about 100k tokens of the 270k window Bob reports for `premium-ide`, where Claude and Codex compact too. Another model's window shifts this point. The earlier default `80` moves to `37`. Instructions given only in chat may be summarized away |
 | `session.maxCost` | `20` | Stop a task once it has spent 20 Bobcoins (no limit by default); with `limitWarnings` the agent is told to wrap up at 80%, and continuing doubles the limit for that task |
 | `approval.outsideWorkspaceAllowed` and a `read` entry in `approval.permissionOptions` | `true` | Auto-approve reads outside the workspace, so a task started by `bobtask handoff` can read the transcript in `$TMPDIR` (Bob cancels every tool call outside the workspace by default); edits and commands there still ask. Any file the user can read becomes readable without a prompt |
 
@@ -256,10 +260,9 @@ the latest request's context exceeds 50000 tokens
 from Bob's database without using the model, it adds one line of context, once
 per task (shared by both events), so the agent suggests a handoff; answering yes writes the note. Bob
 charges each request by its context size, so a long task costs more per turn
-than a fresh one continuing from the note, and compaction at
-`compactionThresholdPercent` may never trigger: Bob takes the context window
-from the server at runtime, so the percentage cannot be pinned to a token count
-here. The hook relies on Bob's internal `tasks.costs` column and the
+than a fresh one continuing from the note, and Bob takes the context window
+from the server at runtime, so `compactionThresholdPercent` cannot be pinned to
+a token count here. The hook relies on Bob's internal `tasks.costs` column and the
 `_meta.spend.contextTokens` of assistant messages (Bob Shell 2.0.6 and 2.0.9),
 and skips a check whose data is missing.
 `bobtask handoff` points the new Bob task at the note when the workspace has

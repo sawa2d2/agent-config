@@ -89,9 +89,11 @@ settings["theme"] = "custom:agent-config-selected"
 # setdefault preserves an explicit choice such as /tui fullscreen.
 settings.setdefault("tui", "default")
 # Every request resends the whole context, so a 1M-context session that grows
-# to several hundred thousand tokens costs that much on each turn. Compact at
-# about 200k instead; setdefault keeps an explicit choice.
-settings.setdefault("autoCompactWindow", 200000)
+# to several hundred thousand tokens costs that much on each turn. Treat the
+# window as 120k instead; compaction starts below it (about 164k for 200000). An explicit choice is kept, except 200000: it was the
+# previous managed default and cannot be told apart from a chosen value.
+if settings.get("autoCompactWindow", 200000) == 200000:
+    settings["autoCompactWindow"] = 120000
 # Subagents otherwise inherit the main model (often Opus) and spend it on
 # searching and reading; agents that name their own model keep it.
 env = settings.setdefault("env", {})
