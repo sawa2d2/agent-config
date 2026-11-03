@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""Weekly token usage from Claude Code transcripts.
+
+Reads ~/.claude/projects/**/*.jsonl (CLAUDE_CONFIG_DIR is honored), counts each
+API request once (by requestId or message id), and prints per-week sums, or the
+mean, standard deviation and median per session split into before/after groups.
+"""
+import argparse
+import json
+import os
+import statistics
+import subprocess
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+# Input-token equivalents per token, from the Anthropic price ratios:
+# cache write 1.25x (5 min) or 2x (1 h), cache read 0.1x, output 5x input.
+WEIGHTS = {"input": 1.0, "write_5m": 1.25, "write_1h": 2.0, "read": 0.1, "output": 5.0}
+METRICS = ["requests", "input", "cache_write", "cache_read", "output", "total", "weighted",
+           "total_per_request"]
+
+
+def parse_time(value):
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return dt if dt.tzinfo else dt.astimezone()
+
+
+def commit_time(ref, repo):
+    out = subprocess.run(["git", "-C", repo, "show", "-s", "--format=%cI", ref],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    return parse_time(out)
+
+
+def read_session(path):
+    seen = set()
+    start = None
+    totals = dict.fromkeys(["requests", "input", "write_5m", "write_1h", "read", "output"], 0)
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            ts = record.get("timestamp")
+            if ts and start is None:
+                start = parse_time(ts)
+            message = record.get("message")
+            usage = message.get("usage") if isinstance(message, dict) else None
+            if not usage:
+                continue
+            key = record.get("requestId") or message.get("id")
+            if key in seen:
+                continue
+            seen.add(key)
+            creation = usage.get("cache_creation") or {}
+            write_1h = creation.get("ephemeral_1h_input_tokens", 0) or 0
+            write_all = usage.get("cache_creation_input_tokens", 0) or 0
+            totals["requests"] += 1
+            totals["input"] += usage.get("input_tokens", 0) or 0
+            totals["write_1h"] += write_1h
+            totals["write_5m"] += write_all - write_1h
+            totals["read"] += usage.get("cache_read_input_tokens", 0) or 0
+            totals["output"] += usage.get("output_tokens", 0) or 0
+    if not totals["requests"] or start is None:
+        return None
+    t = totals
+    return {
+        "path": str(path),
+        "start": start,
+        "requests": t["requests"],
+        "input": t["input"],
+        "cache_write": t["write_5m"] + t["write_1h"],
+        "cache_read": t["read"],
+        "output": t["output"],
+        "total": t["input"] + t["write_5m"] + t["write_1h"] + t["read"] + t["output"],
+        "weighted": round(sum(t[k] * w for k, w in WEIGHTS.items())),
+        # Roughly the context size each request resends.
+        "total_per_request": round((t["input"] + t["write_5m"] + t["write_1h"] + t["read"]
+                                    + t["output"]) / t["requests"]),
+    }
+
+
+def describe(values):
+    if not values:
+        return None
+    return {
+        "mean": statistics.fmean(values),
+        "stdev": statistics.stdev(values) if len(values) > 1 else 0.0,
+        "median": statistics.median(values),
+    }
+
+
+def print_group(name, sessions):
+    print(f"{name}: {len(sessions)} sessions")
+    if not sessions:
+        return
+    print(f"  {'metric':<12}{'mean':>14}{'stdev':>14}{'median':>14}")
+    for metric in METRICS:
+        s = describe([x[metric] for x in sessions])
+        print(f"  {metric:<12}{s['mean']:>14,.0f}{s['stdev']:>14,.0f}{s['median']:>14,.0f}")
+
+
+def ratio(previous, current):
+    """This week as a percentage of the previous week; '-' without one or from zero."""
+    return "-" if not previous else f"{current / previous * 100:.1f}%"
+
+
+def print_weekly(sessions, count):
+    """Print per-week sums of the last `count` weeks (0: all), grouping sessions
+    by the local Monday of their start, with the ratio to the week before."""
+    today = datetime.now().astimezone().date()
+    first = today - timedelta(days=today.weekday(), weeks=count - 1)
+    weeks = {}
+    for s in sessions:
+        day = s["start"].astimezone().date()
+        weeks.setdefault(day - timedelta(days=day.weekday()), []).append(s)
+    sums = {}
+    for week, group in weeks.items():
+        requests = sum(s["requests"] for s in group)
+        weighted = sum(s["weighted"] for s in group)
+        sums[week] = (len(group), requests, sum(s["total"] for s in group), weighted,
+                      weighted / requests)
+    print(f"{'week':<12}{'sessions':>10}{'requests':>10}{'total':>16}{'weighted':>14}"
+          f"{'weighted/req':>14}{'ratio':>9}{'ratio/req':>10}")
+    for week, (n, requests, total, weighted, per_request) in sorted(sums.items()):
+        if count and week < first:
+            continue
+        previous = sums.get(week - timedelta(weeks=1))
+        print(f"{week.isoformat():<12}{n:>10}{requests:>10,}{total:>16,}{weighted:>14,}"
+              f"{per_request:>14,.0f}"
+              f"{ratio(previous and previous[3], weighted):>9}"
+              f"{ratio(previous and previous[4], per_request):>10}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--since", help="only sessions starting at or after this ISO time")
+    parser.add_argument("--until", help="only sessions starting before this ISO time")
+    split = parser.add_mutually_exclusive_group()
+    split.add_argument("--split", help="ISO time dividing sessions into before/after")
+    split.add_argument("--split-commit", metavar="REF",
+                       help="split at the committer time of this git commit")
+    parser.add_argument("--repo", default=".", help="repository for --split-commit (default: .)")
+    parser.add_argument("--project", help="only transcript directories containing this substring")
+    parser.add_argument("--min-requests", type=int, default=1,
+                        help="skip sessions with fewer API requests (default: 1)")
+    parser.add_argument("-w", "--weeks", type=int, default=10,
+                        help="weeks shown without a split, including this one (0: all; default: 10)")
+    parser.add_argument("--json", action="store_true", help="print per-session rows as JSON")
+    args = parser.parse_args()
+
+    root = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude")) / "projects"
+    sessions = []
+    for path in sorted(root.glob("**/*.jsonl")):
+        if args.project and args.project not in str(path.parent):
+            continue
+        row = read_session(path)
+        if row and row["requests"] >= args.min_requests:
+            sessions.append(row)
+    if args.since:
+        sessions = [s for s in sessions if s["start"] >= parse_time(args.since)]
+    if args.until:
+        sessions = [s for s in sessions if s["start"] < parse_time(args.until)]
+    sessions.sort(key=lambda s: s["start"])
+
+    if args.json:
+        for s in sessions:
+            print(json.dumps({**s, "start": s["start"].isoformat()}))
+        return
+
+    if args.split:
+        cut = parse_time(args.split)
+    elif args.split_commit:
+        cut = commit_time(args.split_commit, args.repo)
+    else:
+        print_weekly(sessions, args.weeks)
+        return
+    print(f"split at {cut.isoformat()}")
+    print_group("before", [s for s in sessions if s["start"] < cut])
+    print_group("after", [s for s in sessions if s["start"] >= cut])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

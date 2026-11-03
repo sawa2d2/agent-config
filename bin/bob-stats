@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""Weekly token usage and cost from Bob Shell tasks.
+
+Reads ~/.bob/db/bob.db read-only. Bob stores, per model request, the cost and
+the context tokens sent in the assistant message's _meta.spend; it records no
+input/output/cache breakdown. Each task counts in the week (local time, from
+Monday) it was created.
+"""
+import argparse
+import json
+import sqlite3
+import sys
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+DB_PATH = Path.home() / ".bob/db/bob.db"
+
+
+def week_of(ms):
+    day = datetime.fromtimestamp(ms / 1000).astimezone().date()
+    return day - timedelta(days=day.weekday())
+
+
+def ratio(previous, current):
+    """This week as a percentage of the previous week; '-' without one or from zero."""
+    return "-" if not previous else f"{current / previous * 100:.1f}%"
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("-w", "--weeks", type=int, default=10,
+                        help="weeks shown, including this one (0: all; default: 10)")
+    args = parser.parse_args()
+    if not DB_PATH.is_file():
+        sys.exit(f"bob-stats: database not found: {DB_PATH}")
+
+    today = date.today()
+    first = today - timedelta(days=today.weekday(), weeks=args.weeks - 1)
+    db = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    weeks = {}
+    rows = db.execute("""SELECT tasks.id, tasks.created_at, messages.data FROM messages
+                         JOIN tasks ON tasks.id = messages.task_id
+                         WHERE messages.role = 'assistant'""")
+    for task_id, created, data in rows:
+        week = week_of(created)
+        try:
+            spend = json.loads(data)["_meta"]["spend"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            continue
+        w = weeks.setdefault(week, {"tasks": set(), "requests": 0, "context": 0, "cost": 0.0})
+        w["tasks"].add(task_id)
+        w["requests"] += 1
+        w["context"] += spend.get("contextTokens", 0) or 0
+        w["cost"] += spend.get("cost", 0) or 0
+
+    print(f"{'week':<12}{'tasks':>8}{'requests':>10}{'context':>14}{'cost':>10}"
+          f"{'context/req':>13}{'cost/req':>10}{'ratio':>9}{'ratio/req':>10}")
+    for week, w in sorted(weeks.items()):
+        if args.weeks and week < first:
+            continue
+        previous = weeks.get(week - timedelta(weeks=1))
+        per_request = w["cost"] / w["requests"]
+        print(f"{week.isoformat():<12}{len(w['tasks']):>8}{w['requests']:>10,}{w['context']:>14,}"
+              f"{w['cost']:>10.2f}{w['context'] / w['requests']:>13,.0f}{per_request:>10.3f}"
+              f"{ratio(previous and previous['cost'], w['cost']):>9}"
+              f"{ratio(previous and previous['cost'] / previous['requests'], per_request):>10}")
+
+
+if __name__ == "__main__":
+    main()

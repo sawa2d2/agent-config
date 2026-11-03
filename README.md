@@ -429,6 +429,24 @@ transcript and that session's `projects/<project>/<session-id>/`,
 `file-history/<session-id>` and `session-env/<session-id>` data. Project memory
 is never touched.
 
+`claude-stats` (requires Python 3) prints weekly token usage (sessions,
+requests, total, input-equivalent weighted total and weighted per request) of
+the last 10 weeks from `~/.claude/projects/**/*.jsonl`, honoring
+`CLAUDE_CONFIG_DIR`. Each API request is counted once by its `requestId`, and
+each session in the week (local time, from Monday) it started. `-w N` sets the
+number of weeks (`0` for all). `ratio` and `ratio/req` give weighted and weighted
+per request as a percentage of the week before (current ÷ previous; below 100%
+is a reduction, 50% is half; `-` without data). Filter with `--since`, `--until`, `--project`
+and `--min-requests`; `--split <time>` or `--split-commit <ref>` instead
+compares the mean, standard deviation and median per session before and after
+a time or commit; `--json` prints one row per session.
+
+`bob-stats` (requires Python 3) prints the same weekly view for Bob tasks from
+`~/.bob/db/bob.db`, opened read-only: tasks, requests, context tokens and cost,
+in total and per request, with `-w N` as above; `ratio` and `ratio/req` give
+cost and cost per request as a percentage of the week before. Bob records only the cost and
+context tokens of each request, without an input, cache or output breakdown.
+
 `bobtask` manages Bob tasks (requires Python 3 and fzf). Pickers show the
 update time, the stored workspace (`project_id`, such as `file:/path/to/dir`),
 title and task ID of resumable tasks from every directory. With `-c`
