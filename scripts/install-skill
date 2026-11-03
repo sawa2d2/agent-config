@@ -7,7 +7,7 @@ set -euo pipefail
 (( $# >= 2 )) || { echo 'Usage: install-skill <source-dir> <name> [target-dir...]' >&2; exit 2; }
 source=$1 name=$2
 shift 2
-(( $# > 0 )) || set -- "$HOME/.bob/skills" "$HOME/.claude/skills" "$HOME/.codex/skills"
+(( $# > 0 )) || set -- "$HOME/.bob/skills" "$HOME/.claude/skills" "${CODEX_HOME:-$HOME/.codex}/skills"
 [[ -f "$source/SKILL.md" ]] || { echo "Missing SKILL.md: $source" >&2; exit 1; }
 
 for target in "$@"; do
@@ -20,6 +20,21 @@ for target in "$@"; do
   fi
   stage="$(mktemp -d "$target/.agent-config.XXXXXX")"
   cp -R -- "$source/." "$stage/"
+  # Codex reads invocation policy from openai.yaml, not Claude frontmatter.
+  # Keep existing upstream metadata as an explicit choice; never merge YAML
+  # with a text substitution that could alter its meaning.
+  if [[ "$target" == "${CODEX_HOME:-$HOME/.codex}/skills" ]] &&
+      awk 'NR == 1 { if ($0 != "---") exit; next }
+        $0 == "---" { exit }
+        /^disable-model-invocation: true[[:space:]]*$/ { found = 1 }
+        END { exit !found }' "$stage/SKILL.md"; then
+    if [[ ! -e "$stage/agents/openai.yaml" ]]; then
+      mkdir -p -- "$stage/agents"
+      printf 'policy:\n  allow_implicit_invocation: false\n' > "$stage/agents/openai.yaml"
+    else
+      echo "Kept existing Codex skill metadata: $name" >&2
+    fi
+  fi
   : > "$stage/.agent-config-managed"
   if [[ -e "$dest" ]]; then rm -rf -- "$dest"; fi
   mv -- "$stage" "$dest"

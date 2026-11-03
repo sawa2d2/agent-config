@@ -12,11 +12,22 @@ curl -fsSL https://raw.githubusercontent.com/sawa2d2/agent-config/main/bootstrap
 
 Clones into `~/agent-config` (override with `AGENT_CONFIG_DIR`) and runs the existing installer. An existing Git checkout is reused without pulling; other existing destinations are not overwritten.
 
-Installs global instructions, agent skills, Spec Kit, rtk, Claude Code CLI and its ACP adapter (via Nix when available), and the Claude Code plugins `ralph-loop` and `pyright-lsp` from the official marketplace (`scripts/install-claude-plugins`). Superpowers is installed as standalone skills for all three agents, without the Claude plugin, whose SessionStart hook injected its `using-superpowers` skill into every session; that skill and `diagnosing-superpowers` are left out, and an earlier plugin install is removed. The other Superpowers skills get `disable-model-invocation: true`, so their forceful descriptions stay out of every session's skill list; invoke them by name (`/brainstorming`) or through `autonomous-development`. `pyright-lsp` needs `pyright-langserver` on `PATH`; an existing one is reused, otherwise Nix adds `pyright`. Re-running skips what is already installed. Existing unmanaged instructions are protected.
+Installs global instructions, agent skills, Spec Kit, rtk, Claude Code CLI and its ACP adapter (via Nix when available), and the Claude Code plugins `ralph-loop` and `pyright-lsp` from the official marketplace (`scripts/install-claude-plugins`). Superpowers is installed as standalone skills for all three agents, without the Claude plugin, whose SessionStart hook injected its `using-superpowers` skill into every session; that skill and `diagnosing-superpowers` are left out, and an earlier plugin install is removed. The other Superpowers skills get `disable-model-invocation: true` for explicit invocation; Codex receives the native policy described below. Invoke them by name or through `autonomous-development`. `pyright-lsp` needs `pyright-langserver` on `PATH`; an existing one is reused, otherwise Nix adds `pyright`. Re-running skips what is already installed. Existing unmanaged instructions are protected.
 
 ## Skills
 
 Skills in `deploy/skills/` are copied to `~/.bob/skills`, `~/.claude/skills` and `~/.codex/skills` by `./install`, alongside upstream skills from `scripts/install-tools`. Copies carry a `.agent-config-managed` marker; a skill of the same name installed some other way is never overwritten.
+
+For Codex (`$CODEX_HOME/skills`, default `~/.codex/skills`), the installer translates
+`disable-model-invocation: true` in frontmatter into
+`policy.allow_implicit_invocation: false` in `agents/openai.yaml` when that file
+is absent. Existing upstream metadata is kept unchanged and reported; inspect
+its invocation policy separately. Claude/Bob copies and source files are unchanged.
+[OpenAI documents explicit `$skill` invocation as supported](https://learn.chatgpt.com/docs/build-skills).
+An isolated Codex 0.160.0 check with `debug prompt-input` confirmed the skill
+disappears from the initial catalog; app-server `skills/list` still reports it
+as enabled. Actual explicit execution and automatic selection were not tested,
+and no runtime token or cost savings were measured.
 
 | Skill | Use |
 | --- | --- |
