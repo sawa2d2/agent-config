@@ -7,9 +7,10 @@ set -euo pipefail
 # scripts/codex-rtk-hook), which rewrites shell commands to rtk equivalents
 # that condense their output to save tokens. For Bob, also register
 # scripts/bob-handoff-suggest, which suggests a handoff once a task has spent
-# half of its cost limit. Entries whose command runs one of these scripts (any
-# checkout path) or the rtk hook are replaced; every other hook and setting is kept. Re-running changes
-# nothing, and the rtk entries go away once rtk is no longer installed.
+# half of its cost limit. For both, also register scripts/agent-approval-marker,
+# which records that the user said "approved" for gfinish. Entries whose
+# command runs one of these scripts (any checkout path) or the rtk hook are
+# replaced; every other hook and setting is kept. Re-running changes nothing, and the rtk entries go away once rtk is no longer installed.
 command -v python3 >/dev/null 2>&1 || {
   echo 'python3 is required to merge agent hooks safely' >&2
   exit 1
@@ -19,7 +20,8 @@ repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 rtk=0
 command -v rtk >/dev/null 2>&1 && rtk=1
 AGENT_TMUX_STATUS="$repo_dir/scripts/agent-tmux-status" CODEX_RTK_HOOK="$repo_dir/scripts/codex-rtk-hook" \
-  BOB_HANDOFF_SUGGEST="$repo_dir/scripts/bob-handoff-suggest" RTK="$rtk" python3 - <<'PY'
+  BOB_HANDOFF_SUGGEST="$repo_dir/scripts/bob-handoff-suggest" \
+  AGENT_APPROVAL_MARKER="$repo_dir/scripts/agent-approval-marker" RTK="$rtk" python3 - <<'PY'
 import json
 import os
 import shlex
@@ -62,15 +64,18 @@ rtk_targets = {
 }
 
 
-# Event -> (matcher, command) registered whether or not rtk is installed.
+# Event -> [(matcher, command)] registered whether or not rtk is installed.
+approval_marker = shlex.quote(os.environ["AGENT_APPROVAL_MARKER"])
 extra_targets = {
     home / ".bob/settings/settings.json": {
-        "UserPromptSubmit": (None, shlex.quote(os.environ["BOB_HANDOFF_SUGGEST"]))},
+        "UserPromptSubmit": [(None, shlex.quote(os.environ["BOB_HANDOFF_SUGGEST"])), (None, approval_marker)]},
+    home / ".claude/settings.json": {"UserPromptSubmit": [(None, approval_marker)]},
 }
 
 
 def managed_command(command):
-    return (any(script in command for script in ("agent-tmux-status", "codex-rtk-hook", "bob-handoff-suggest"))
+    return (any(script in command for script in ("agent-tmux-status", "codex-rtk-hook", "bob-handoff-suggest",
+                                                    "agent-approval-marker"))
             or command == RTK_HOOK)
 
 
@@ -95,7 +100,8 @@ for path in dict.fromkeys([*targets, *rtk_targets]):
     updated = {event: [group for group in groups if not (isinstance(group, dict) and managed(group))]
                for event, groups in hooks.items()}
     entries = [(event, matcher, f"{command} {state}") for event, (matcher, state) in events.items()]
-    entries += [(event, matcher, hook) for event, (matcher, hook) in extra_targets.get(path, {}).items()]
+    entries += [(event, matcher, hook) for event, pairs in extra_targets.get(path, {}).items()
+                for matcher, hook in pairs]
     if os.environ["RTK"] == "1":
         entries += [(event, matcher, hook) for event, (matcher, hook) in rtk_targets.get(path, {}).items()]
     for event, matcher, hook in entries:

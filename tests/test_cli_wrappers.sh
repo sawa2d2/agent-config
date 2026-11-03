@@ -15,10 +15,12 @@ for cli in bob claude codex; do
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "$TEST_ROOT/args"
 printf '%s\n' "$PATH" > "$TEST_ROOT/path"
+printf '%s\n' "${AGENT_APPROVAL_DIR-unset}" > "$TEST_ROOT/approval"
 CLI
   chmod +x "$tmp/real/$cli"
 done
 export TEST_ROOT="$tmp"
+unset AGENT_APPROVAL_DIR
 export PATH="$root/bin:$tmp/real:/usr/bin:/bin"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -35,6 +37,13 @@ expect() {
 
 # Without arguments, resume the latest session in the current directory.
 expect $'chat\n--auto-approve\n--resume\nlatest' bob
+# Bob and Claude mark their process tree as an agent for gfinish; Codex does not.
+for cli in bob claude codex; do
+  XDG_RUNTIME_DIR="$tmp/run" "$cli" new
+  expected="$tmp/run/agent-approval"
+  [[ $cli == codex ]] && expected=unset
+  [[ $(cat "$tmp/approval") == "$expected" ]] || fail "$cli: AGENT_APPROVAL_DIR=$(cat "$tmp/approval")"
+done
 # Claude continues only when this directory has a session; otherwise it starts a new one.
 mkdir -p "$tmp/work.dir"
 cd "$tmp/work.dir"

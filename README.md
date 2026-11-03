@@ -146,6 +146,22 @@ one, keeping the transcript only for details the note lacks.
 The `autonomous-development` skill keeps its progress file,
 `.agent-progress.md`, at the working-tree root for the same reasons.
 
+## Merge approval marker
+
+The `bin/claude` and `bin/bob` wrappers export
+`AGENT_APPROVAL_DIR="${XDG_RUNTIME_DIR:-$HOME/.cache}/agent-approval"` unless
+it is already set; its presence marks the process tree as an agent. `./install`
+and both wrappers register `scripts/agent-approval-marker` as a
+`UserPromptSubmit` hook for Claude Code and Bob. When the whole prompt, trimmed,
+is exactly `approved` (case-sensitive), it touches
+`$AGENT_APPROVAL_DIR/<sha256 of the real path of the session's git top level>`.
+`gfinish` in the dotfiles merges from an agent only with a marker for its
+repository from the last 60 minutes, and deletes it, so a question such as
+`approve 可能？` is no approval. Outside a git repository the hook does nothing,
+and it never blocks the prompt. Both agents pass the prompt and the session's
+`cwd` to the hook, and Bob runs command hooks with its own environment
+(observed in Bob Shell 2.0.9).
+
 ## tmux agent status
 
 `./install` and the `bin/bob` and `bin/claude` wrappers register

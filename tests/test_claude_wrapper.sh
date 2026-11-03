@@ -16,6 +16,7 @@ cat > "$tmp/real/claude" <<'MOCK'
 printf '%s\n' "$@" > "$HOME/claude-args"
 printf '%s\n' "${CLAUDE_CODE_TMUX_TRUECOLOR:-}" > "$HOME/claude-truecolor"
 printf '%s\n' "${CLAUDE_CODE_DISABLE_MOUSE-unset}" > "$HOME/claude-mouse"
+printf '%s\n' "${AGENT_APPROVAL_DIR-unset}" > "$HOME/claude-approval"
 printf '%s\n' "${SSH_CONNECTION-unset}|${SSH_TTY-unset}|${SSH_CLIENT-unset}" > "$HOME/claude-ssh"
 MOCK
 chmod +x "$tmp/real/claude"
@@ -27,6 +28,13 @@ bash "$root/bin/claude" --version
 [[ $(cat "$HOME/claude-mouse") == 1 ]] || { echo "FAIL: mouse not disabled: $(cat "$HOME/claude-mouse")" >&2; exit 1; }
 CLAUDE_CODE_DISABLE_MOUSE=0 bash "$root/bin/claude" --version
 [[ $(cat "$HOME/claude-mouse") == 0 ]] || { echo 'FAIL: caller mouse setting overridden' >&2; exit 1; }
+# The approval directory marks an agent; an explicit value from the caller wins.
+(unset AGENT_APPROVAL_DIR; XDG_RUNTIME_DIR="$tmp/run" bash "$root/bin/claude" --version)
+[[ $(cat "$HOME/claude-approval") == "$tmp/run/agent-approval" ]] || { echo "FAIL: approval dir: $(cat "$HOME/claude-approval")" >&2; exit 1; }
+(unset AGENT_APPROVAL_DIR XDG_RUNTIME_DIR; bash "$root/bin/claude" --version)
+[[ $(cat "$HOME/claude-approval") == "$HOME/.cache/agent-approval" ]] || { echo "FAIL: approval dir without XDG_RUNTIME_DIR: $(cat "$HOME/claude-approval")" >&2; exit 1; }
+AGENT_APPROVAL_DIR="$tmp/mine" bash "$root/bin/claude" --version
+[[ $(cat "$HOME/claude-approval") == "$tmp/mine" ]] || { echo 'FAIL: caller approval dir overridden' >&2; exit 1; }
 old=$(python3 -c 'import json, pathlib; print(json.loads((pathlib.Path.home()/".claude/themes/agent-config-selected.json").read_text())["overrides"]["userMessageBackground"])')
 
 printf '%s\n' orange > "$XDG_CONFIG_HOME/dotfiles/theme"
