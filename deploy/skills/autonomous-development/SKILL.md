@@ -31,14 +31,17 @@ execute, verify.
 
 ## Starting a branch
 
-Inside tmux, run `agent-delegate <new-branch> "<task>"` (Claude Code),
+For new code changes, when `$TMUX` is set, never create the branch here (no
+`git checkout -b`, `git switch -c`, or `git worktree add`); instead run
+`agent-delegate <new-branch> "<task>"` (Claude Code),
 `bob-delegate <new-branch> "<task>"` (Bob Shell), or
 `codex-delegate <new-branch> "<task>"` (Codex) to create the branch in a new
 worktree and start the agent in one new tmux window per branch
-without moving focus; do not create the branch here.
+without moving focus.
 Tell the user the window and branch, and stop working on that task in this
-session. Always preserve the originating agent: Claude to Claude, Bob to Bob,
-and Codex to Codex; never substitute another agent.
+session. Only outside tmux, create the branch here. Always preserve the
+originating agent: Claude to Claude, Bob to Bob, and Codex to Codex; never
+substitute another agent.
 
 ## Branches: independent first, stacked when needed
 
