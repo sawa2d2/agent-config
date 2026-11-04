@@ -1,0 +1,8 @@
+# Codex execpolicy rules linked to ~/.codex/rules/agent-config.rules by ./install.
+
+# gfinish fetches, merges into the primary worktree and writes the shared .git
+# of a linked worktree, all outside the workspace-write sandbox, so it must run
+# outside it. Authorization stays with gfinish: it refuses to merge without the
+# marker that only the user's exact "approved" prompt creates, in a directory
+# the sandboxed agent cannot write.
+prefix_rule(pattern=["gfinish"], decision="allow")
