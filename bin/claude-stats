@@ -32,6 +32,24 @@ WEEKLY_LEGEND = """\
 weighted = input + 1.25*cache_write_5m + 2*cache_write_1h + 0.1*cache_read + 5*output [tokens]
 weights  = Anthropic API price ratios to the input price, the same for every model
 per req  = weighted / requests [tokens]
+read/req = cache_read / requests [tokens], roughly the context each request resends
+read/wr  = cache_read / cache_write (-: no cache_write)
+"""
+EXAMPLES = """\
+--since/--until select sessions by start time. TIME is an ISO 8601 date or
+date-time; without an offset it is local time.
+
+examples:
+  claude-stats                                    last 10 weeks
+  claude-stats --since 2026-10-01                 weeks from Oct 1 (local) to now
+  claude-stats --since 2026-10-01 --until 2026-11-01
+                                                  sessions started in October
+  claude-stats --since 2026-11-03T09:00 --until 2026-11-03T18:00
+                                                  sessions started 9:00-18:00 that day
+  claude-stats --since 2026-10-01T00:00Z          UTC instead of local time
+  claude-stats --window 5h -w 6                   last six 5-hour windows
+  claude-stats --split-commit HEAD~3              per-session stats before/after a commit
+  claude-stats --since 2026-10-01 --json          per-session rows as JSON
 """
 
 
@@ -49,7 +67,7 @@ def commit_time(ref, repo):
 def read_session(path):
     seen = set()
     start = None
-    request_times = []  # (time, weighted) per request
+    request_times = []  # (time, weighted, cache_write, cache_read) per request
     totals = dict.fromkeys(["requests", "input", "write_5m", "write_1h", "read", "output"], 0)
     with open(path, encoding="utf-8") as f:
         for line in f:
@@ -78,7 +96,8 @@ def read_session(path):
             for k, v in request.items():
                 totals[k] += v
             request_times.append((parse_time(ts) if ts else None,
-                                  sum(request[k] * w for k, w in WEIGHTS.items())))
+                                  sum(request[k] * w for k, w in WEIGHTS.items()),
+                                  write_all, request["read"]))
     if not totals["requests"] or start is None:
         return None
     t = totals
@@ -129,28 +148,33 @@ def print_windows(sessions, windows):
     before. Weekly, whole sessions count in the week they started; otherwise
     each request counts in the window of its timestamp."""
     if windows.weekly:
-        entries = [(s["start"], i, s["requests"], s["weighted"]) for i, s in enumerate(sessions)]
+        entries = [(s["start"], i, s["requests"], s["weighted"], s["cache_write"], s["cache_read"])
+                   for i, s in enumerate(sessions)]
     else:
-        entries = [(time or s["start"], i, 1, weighted)
-                   for i, s in enumerate(sessions) for time, weighted in s["request_times"]]
+        entries = [(time or s["start"], i, 1, weighted, write, read)
+                   for i, s in enumerate(sessions)
+                   for time, weighted, write, read in s["request_times"]]
     groups = {}
-    for time, session, requests, weighted in entries:
-        group = groups.setdefault(windows.key(time), [set(), 0, 0])
+    for time, session, *values in entries:
+        group = groups.setdefault(windows.key(time), [set(), 0, 0, 0, 0])
         group[0].add(session)
-        group[1] += requests
-        group[2] += weighted
-    sums = {key: (len(ids), requests, round(weighted), weighted / requests)
-            for key, (ids, requests, weighted) in groups.items()}
+        for i, value in enumerate(values, 1):
+            group[i] += value
+    sums = {key: (len(ids), requests, round(weighted), weighted / requests, read / requests,
+                  f"{read / write:.1f}" if write else "-")
+            for key, (ids, requests, weighted, write, read) in groups.items()}
     print(WEEKLY_LEGEND + windows.vs_prev() + windows.column("session"))
     print(f"{windows.heading:<{windows.width}}{'sessions':>10}{'requests':>10}{'weighted (tok)':>16}"
-          f"{'per req (tok)':>15}{'weighted vs prev':>18}{'per req vs prev':>17}")
-    for key, (n, requests, weighted, per_request) in sorted(sums.items()):
+          f"{'per req (tok)':>15}{'weighted vs prev':>18}{'per req vs prev':>17}"
+          f"{'read/req (tok)':>16}{'read/wr':>9}")
+    for key, (n, requests, weighted, per_request, read_per_request, read_write) in sorted(sums.items()):
         if not windows.shown(key):
             continue
         previous = sums.get(key - windows.step)
         print(f"{windows.label(key)}{n:>10}{requests:>10,}{weighted:>16,}{per_request:>15,.0f}"
               f"{ratio(previous and previous[2], weighted):>18}"
-              f"{ratio(previous and previous[3], per_request):>17}")
+              f"{ratio(previous and previous[3], per_request):>17}"
+              f"{read_per_request:>16,.0f}{read_write:>9}")
 
 
 def window_spec(value):
@@ -206,9 +230,12 @@ class Windows:
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--since", help="only sessions starting at or after this ISO time")
-    parser.add_argument("--until", help="only sessions starting before this ISO time")
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0], epilog=EXAMPLES,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--since", metavar="TIME",
+                        help="only sessions starting at or after this ISO time")
+    parser.add_argument("--until", metavar="TIME",
+                        help="only sessions starting before this ISO time")
     split = parser.add_mutually_exclusive_group()
     split.add_argument("--split", help="ISO time dividing sessions into before/after")
     split.add_argument("--split-commit", metavar="REF",
@@ -220,9 +247,9 @@ def main():
     parser.add_argument("--window", type=window_spec, default="week",
                         help="aggregation window: week (local, from Monday) or a length such as "
                              "5h, 2d, 1w ending now (default: week)")
-    parser.add_argument("-w", "--windows", "--weeks", type=int, default=10,
+    parser.add_argument("-w", "--windows", "--weeks", type=int,
                         help="windows shown without a split, including the current one "
-                             "(0: all; default: 10)")
+                             "(0: all; default: 10, or 0 with --since/--until)")
     parser.add_argument("--json", action="store_true", help="print per-session rows as JSON")
     args = parser.parse_args()
 
@@ -251,7 +278,9 @@ def main():
     elif args.split_commit:
         cut = commit_time(args.split_commit, args.repo)
     else:
-        print_windows(sessions, Windows(args.window, args.windows))
+        # --since/--until already bound the range, so do not also cut it to the last 10.
+        count = args.windows if args.windows is not None else 0 if args.since or args.until else 10
+        print_windows(sessions, Windows(args.window, count))
         return
     print(f"split at {cut.isoformat()}")
     print(SPLIT_LEGEND)

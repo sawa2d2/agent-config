@@ -51,11 +51,14 @@ GIT_COMMITTER_DATE=2026-02-01T00:00:00Z git -C "$tmp/repo" -c user.name=t -c use
 out=$(stats --split-commit HEAD --repo "$tmp/repo")
 grep -q '^split at 2026-02-01T00:00:00' <<< "$out" && grep -qx 'after: 1 sessions' <<< "$out" || fail "split-commit: $out"
 
-# -w 0 sums every week, grouping sessions by the local Monday of their start week.
+# -w 0 sums every week, grouping sessions by the local Monday of their start week,
+# with cache_read per request and cache_read/cache_write.
 out=$(TZ=UTC stats -w 0)
-grep -Eqx '2025-12-29 +1 +2 +625 +31[23] +- +-' <<< "$out" || fail "weekly a: $out"
-grep -Eqx '2026-02-23 +1 +1 +6 +6 +- +-' <<< "$out" || fail "weekly b: $out"
+grep -Eqx '2025-12-29 +1 +2 +625 +31[23] +- +- +1,500 +30.0' <<< "$out" || fail "weekly a: $out"
+grep -Eqx '2026-02-23 +1 +1 +6 +6 +- +- +0 +-' <<< "$out" || fail "weekly b: $out"
 [[ $(TZ=Asia/Tokyo stats --weeks 0 --until 2026-02-01T00:00:00Z | tail -n1) == 2025-12-29* ]] || fail 'weekly local time'
+# --since/--until without -w show every week in range, not only the last 10.
+[[ $(TZ=UTC stats --until 2026-02-01T00:00:00Z | tail -n1) == 2025-12-29* ]] || fail 'until shows old weeks'
 
 # By default only the last 10 weeks show: the old sessions drop out, ones started now and a week ago stay.
 # This week's row shows its ratio to last week's, even when -w 1 hides last week.
@@ -67,7 +70,7 @@ monday=$(date -d "-$(( $(date +%u) - 1 )) days" +%F)
 out=$(stats)
 [[ $(rows <<< "$out") == 2 ]] || fail "default weeks: $out"
 grep -Fqx 'per req  = weighted / requests [tokens]' <<< "$out" || fail "legend: $out"
-grep -Eqx "$monday +1 +1 +6 +6 +50.0% +50.0%" <<< "$out" || fail "ratio: $out"
+grep -Eqx "$monday +1 +1 +6 +6 +50.0% +50.0% +[0-9,]+ +[0-9.-]+" <<< "$out" || fail "ratio: $out"
 [[ $(stats -w 1 | rows) == 1 ]] || fail "-w 1 rows"
 [[ $(stats -w 1 | tail -n1) == "$(tail -n1 <<< "$out")" ]] || fail "ratio with -w 1: $(stats -w 1)"
 [[ $(stats -w 0 | rows) == 4 ]] || fail 'all weeks'
@@ -83,8 +86,8 @@ grep -Eq '^start +sessions ' <<< "$out" || fail "window header: $out"
 grep -Fqx 'vs prev  = this window / previous window * 100 [%] (-: no previous window, or it was 0)' <<< "$out" || fail "window legend: $out"
 grep -Fq 'start    = start (local time) of each 5h window, the last ending now; each' <<< "$out" || fail "window legend: $out"
 [[ $(rows <<< "$out") == 2 ]] || fail "window rows: $out"
-grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +1 +1 +100 +100 +- +-' <<< "$out" || fail "previous window: $out"
-grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +2 +2 +26 +13 +26.0% +13.0%' <<< "$out" || fail "current window: $out"
+grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +1 +1 +100 +100 +- +- +[0-9,]+ +[0-9.-]+' <<< "$out" || fail "previous window: $out"
+grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +2 +2 +26 +13 +26.0% +13.0% +[0-9,]+ +[0-9.-]+' <<< "$out" || fail "current window: $out"
 [[ $(stats --window 5h -w 1 | tail -n1) == "$(tail -n1 <<< "$out")" ]] || fail "window -w 1: $(stats --window 5h -w 1)"
 ! stats --window 5x 2>/dev/null || fail 'invalid window'
 
