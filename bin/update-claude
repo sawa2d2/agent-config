@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Update the CLI without running agent-config's settings-refreshing wrappers.
+if [[ ${1:-} == --help && $# == 1 ]]; then
+  echo 'Usage: update-claude'
+  exit 0
+fi
+if (( $# != 0 )); then
+  echo 'Usage: update-claude' >&2
+  exit 2
+fi
+
+wrapper_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+original_path=$PATH
+PATH=
+IFS=: read -r -a entries <<< "$original_path"
+for entry in "${entries[@]}"; do
+  [[ -n "$entry" ]] || entry=.
+  resolved=$(cd -- "$entry" 2>/dev/null && pwd -P || true)
+  [[ "$resolved" == "$wrapper_dir" ]] && continue
+  PATH="${PATH:+$PATH:}$entry"
+done
+export PATH
+
+real_cli=$(command -v claude || true)
+[[ -n "$real_cli" ]] || { echo 'update-claude: original Claude Code executable not found' >&2; exit 127; }
+# Explicitly select latest rather than the configured stable update channel.
+exec "$real_cli" install latest

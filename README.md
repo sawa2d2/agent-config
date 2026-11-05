@@ -30,6 +30,22 @@ bash scripts/install-bob-ralph                    # experimental Bob Ralph runne
 bash scripts/install-nvim-acp && bash nix/apply   # Neovim CodeCompanion chat (<leader>a)
 ```
 
+## Update agent CLIs
+
+Run `bin/update-bob`, `bin/update-claude`, or `bin/update-codex` without arguments
+(`--help` prints usage). Sourcing `shell/aliases.sh` also exposes these commands.
+They bypass this repository's launch wrappers and managed settings installers.
+
+- `update-bob`: reruns IBM's [recommended installer](https://bob.ibm.com/docs/shell/getting-started/install-and-setup), requiring `curl` and Bash. Unlike `install-bob-shell`, it does not skip an existing installation.
+- `update-claude`: runs the underlying `claude install latest` ([official CLI reference](https://code.claude.com/docs/en/cli-reference)), requiring an existing Claude executable. This installs the native binary and selects the latest release channel, even if stable was previously configured.
+- `update-codex`: reruns the standalone installer with `curl` and `sh`, as documented in [official OpenAI documentation](https://learn.chatgpt.com/docs/codex/cli).
+
+These commands target macOS/Linux installer-managed installations. Use the
+original package manager for Homebrew, npm, or other package-managed installs
+to avoid creating a second installation. Upstream installers may change their
+own installation metadata or update-channel settings; no agent-config settings
+refresh runs. Download and update failures return a nonzero status.
+
 ## Components
 
 Launchers (`bin/`):

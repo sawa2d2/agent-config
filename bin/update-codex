@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Update the CLI without running agent-config's settings-refreshing wrappers.
+if [[ ${1:-} == --help && $# == 1 ]]; then
+  echo 'Usage: update-codex'
+  exit 0
+fi
+if (( $# != 0 )); then
+  echo 'Usage: update-codex' >&2
+  exit 2
+fi
+
+wrapper_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+original_path=$PATH
+PATH=
+IFS=: read -r -a entries <<< "$original_path"
+for entry in "${entries[@]}"; do
+  [[ -n "$entry" ]] || entry=.
+  resolved=$(cd -- "$entry" 2>/dev/null && pwd -P || true)
+  [[ "$resolved" == "$wrapper_dir" ]] && continue
+  PATH="${PATH:+$PATH:}$entry"
+done
+export PATH
+
+command -v curl >/dev/null 2>&1 || { echo 'update-codex: curl is required' >&2; exit 127; }
+
+# Download fully before execution, so a failed transfer cannot run a partial script.
+tmp=$(mktemp)
+trap 'rm -f -- "$tmp"' EXIT
+curl -fsSL https://chatgpt.com/codex/install.sh -o "$tmp"
+sh "$tmp"
