@@ -30,6 +30,10 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 expect() {
   local expected=$1
   shift
+  # Resume stays directory-scoped even when Codex enables linked worktrees.
+  if [[ $1 == codexl || $1 == codexla || ($1 == codex && (${2:-} == resume || $# == 1)) ]]; then
+    expected=${expected/resume/$'-c\nfeatures.worktrees=false\nresume'}
+  fi
   case $1 in
     codex|codexl|codexla) expected=$'--no-alt-screen\n'"$expected" ;;
   esac
@@ -89,6 +93,10 @@ expect $'--approve-for-me\nresume\n--all' codexla
 # All session entry points share the automatic-review default.
 expect $'--approve-for-me\ntwo words' codex 'two words'
 expect $'--approve-for-me\nresume\n--last' codex resume --last
+expect $'--approve-for-me\nresume\n--last\n--all' codex resume --last --all
+expect $'--approve-for-me\nresume\n11111111-1111-4111-8111-111111111111' codex resume 11111111-1111-4111-8111-111111111111
+# An intentional config override follows the directory-scoped default.
+expect $'--approve-for-me\nresume\n-c\nfeatures.worktrees=true' codex resume -c features.worktrees=true
 expect $'--approve-for-me\nfork\n--last' codex fork --last
 expect $'--approve-for-me\nreview\n--uncommitted' codex review --uncommitted
 

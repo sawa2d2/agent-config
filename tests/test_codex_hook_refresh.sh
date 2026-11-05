@@ -73,7 +73,7 @@ assert d['hooks']['PreToolUse'] == [{'matcher': 'Bash', 'hooks': [{'type': 'comm
     {'hooks': [{'type': 'command', 'command': sys.argv[2] + '/scripts/agent-tmux-status working'}]}]
 assert d['description'] == 'user metadata'
 PY
-[[ $(cat "$CODEX_HOME/argv") == $'--no-alt-screen\n--approve-for-me\nresume\n--last' ]] || fail 'default launch changed'
+[[ $(cat "$CODEX_HOME/argv") == $'--no-alt-screen\n--approve-for-me\n-c\nfeatures.worktrees=false\nresume\n--last' ]] || fail 'default launch changed'
 
 for config in "$HOME/.bob/settings/settings.json" "$HOME/.claude/settings.json"; do
   [[ $(cat "$config") == '{invalid' ]] || fail 'unrelated settings modified'

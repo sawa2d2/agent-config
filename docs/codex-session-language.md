@@ -10,6 +10,14 @@ Use the existing launchers and native commands. The
 documents the session commands below; their help was also checked locally.
 Use a session UUID when possible to avoid ambiguous names.
 
+The `codex` wrapper disables `features.worktrees` for `resume` invocations.
+In Codex 0.160.0, that feature expands both `resume --last` and the picker's
+directory filter to all linked worktrees, allowing a newer session from another
+branch to win. Disabling it keeps the default launcher and `codexl` scoped to
+the current directory. `codexla` / `resume --all` still search all directories,
+and explicit session UUIDs still select directly. This changes launch arguments
+only; saved sessions and user configuration are not rewritten.
+
 | Existing workflow | Codex equivalent or limitation |
 | --- | --- |
 | `bobtask resume`, session selection | `codexl` / `codexla` already call native `resume` / `resume --all`; `codex resume <UUID>` selects directly. Native filtering is by working directory, unlike the repository scope of `bobtask -c` and `clauderm`. |

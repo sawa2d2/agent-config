@@ -31,6 +31,13 @@ elif [[ $1 == new ]]; then
   shift
 fi
 
+# Codex's worktrees feature expands resume's cwd filter to every linked
+# checkout. Keep automatic resume and the picker local to this directory;
+# --all still opts into other directories and explicit config can override.
+if [[ ${1:-} == resume ]]; then
+  set -- -c features.worktrees=false "$@"
+fi
+
 # Automatic review keeps the workspace-write sandbox. Explicit permission
 # choices (including profiles and config overrides) must take precedence.
 auto_review=true
