@@ -20,14 +20,30 @@ sudo passwd -l dev                    # no password login; use SSH keys or sudo 
 
 Add no supplementary groups unless a task needs one. `sudo` and `wheel` grant
 sudo, `adm` and `systemd-journal` read system logs, and `disk` gives raw
-block-device access. `docker` is equivalent to root: anyone who can talk to
-the Docker daemon can run `docker run -v /:/host` and write to the host as
+block-device access. Keep dev out of `storage` too. `docker` is equivalent to
+root: anyone who can talk to the Docker daemon can run `docker run -v /:/host` and write to the host as
 root. `libvirt`, `lxd` and `incus` are root-equivalent for the same reason:
 they can start a VM or container with a host disk or directory attached.
 Prefer rootless containers (below) or a user-session VM (`qemu:///session`).
 
+Never add dev to a group that shares data with a human user (for example a
+setgid `/mnt/ssd1gb/shared/local-ai` directory): every member can alter the
+others' files.
+Never run the setup of shared group directories (`mkdir`, `chown`, `chmod g+s`)
+as dev; create them as the administrator or the human owner, so dev does not
+own them.
+
 ```sh
-id dev   # expect only: groups=NNNN(dev)
+id dev                      # expect only its own group: groups=NNNN(dev)
+getent group | grep -w dev   # expect only dev's own group line
+```
+
+Removing a group (`sudo gpasswd -d dev <group>`) affects only new processes.
+Restart every process of dev (agent sessions, tmux server, lingering services)
+and confirm a running one:
+
+```sh
+pid=1234; grep '^Groups:' /proc/"$pid"/status   # replace 1234 with a dev process PID; expect only dev's own GID
 ```
 
 ## 2. Private home directories
@@ -124,7 +140,6 @@ A forwarded agent lets every process of the dev user sign with the client's
 keys while the session is open, so check this from inside the tmux session
 the agents run in, not only from a fresh login. Debian-family `sshd_config`
 ships `X11Forwarding yes`, so the `Match` block is needed even on defaults.
-```
 
 ## 5. Credentials
 
@@ -164,6 +179,20 @@ expose management sockets such as libvirt's TCP listener.
 ```sh
 sudo ss -ltnp                         # review every listener and its owner
 ```
+
+## 8. Files owned by dev outside its home
+
+Files or directories owned by dev elsewhere (such as shared directories it
+created) let it change permissions and tamper with data there. `-xdev` stays
+on one filesystem, so repeat the scan for every other mounted filesystem
+(list them with `findmnt`), for example `/mnt/ssd1gb`:
+
+```sh
+sudo find / -xdev -user dev ! -path "/home/dev/*" 2>/dev/null | head   # expect nothing
+sudo find /mnt/ssd1gb -xdev -user dev 2>/dev/null | head   # expect nothing
+```
+
+If anything is listed, `chown` it to its rightful owner as the administrator.
 
 ## Stronger isolation
 
