@@ -65,7 +65,7 @@ Installed by `./install` (`scripts/`):
 
 - Skills from `deploy/skills/` (`handoff`, `takeover`, `autonomous-development`) plus upstream skills, Spec Kit, rtk and Claude Code plugins (`install-tools`, `install-skill`, `install-rtk`, `install-claude-plugins`).
 - Agent settings and themes (`install-claude-settings`, `install-bob-settings`, `install-bob-theme`, `install-codex-theme`, `install-codex-compaction`, `install-codex-subagent-model`).
-- Codex rules (`deploy/codex/rules/agent-config.rules`, linked to `~/.codex/rules/`): `gfinish` runs outside the workspace-write sandbox, which cannot write a linked worktree's shared `.git`, the primary worktree or the network; gfinish's `approved` marker check still authorizes the merge.
+- Codex rules (`deploy/codex/rules/agent-config.rules`, linked to `~/.codex/rules/`): `gfinish` runs outside the workspace-write sandbox, which cannot write a linked worktree's shared `.git`, the primary worktree or the network; gfinish's `approved` marker check still authorizes the merge. A gfinish chained after other commands still ran in the sandbox, so `deploy/AGENTS.md` also tells Codex to request `require_escalated` for gfinish and for sandbox-blocked Git writes. After gfinish removes the session's worktree, Codex reports `Hook failed: No such file or directory (os error 2)` for the later hooks: it starts hook commands in the session directory, which no longer exists. The merge is unaffected, and no hook change can avoid this.
 - Hooks (`install-agent-hooks`): tmux window status (`agent-tmux-status`), `approved` merge marker (`agent-approval-marker`), handoff suggestions and rtk output compression.
 
 Further documentation:
