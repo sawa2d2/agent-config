@@ -113,6 +113,7 @@ text = config_file.read_text(encoding="utf-8") if config_file.exists() else ""
 lines = text.splitlines(keepends=True)
 section = None
 configured = None
+status_configured = False
 tui_header = None
 for index, line in enumerate(lines):
     header = re.match(r"\s*\[\s*([^\]]+?)\s*\]\s*(#.*)?$", line)
@@ -121,6 +122,8 @@ for index, line in enumerate(lines):
         if section == "tui":
             tui_header = index
         continue
+    if re.match(r'\s*(?:tui\s*\.\s*)?status_line\s*=', line) and (section == "tui" or section is None):
+        status_configured = True
     key = re.match(r"\s*(tui\s*\.\s*)?theme\s*=\s*(.*)$", line)
     if key and (section == "tui" or (section is None and key.group(1))):
         configured = key.group(2).strip()
@@ -137,5 +140,12 @@ if configured is None:
     print(f"Enabled: {name} in {config_file}")
 elif configured.strip("\"'") != name:
     print(f"Kept Codex theme {configured} (select {name} with /theme)")
+if not status_configured:
+    entry = 'status_line = ["model-with-reasoning", "context-remaining", "current-dir", "used-tokens"]\n'
+    # Reuse the table created above; dotted theme settings need a dotted key.
+    text, count = re.subn(r"(?m)^(\s*\[\s*tui\s*\]\s*(?:#.*)?$)", lambda m: m[0] + "\n" + entry.rstrip(), text, count=1)
+    if not count:
+        text = "tui." + entry + text
+    write_atomically(config_file, text.encode("utf-8"))
 print(f"Codex theme: inline code, types and accent {selected} ({theme_file})")
 PY

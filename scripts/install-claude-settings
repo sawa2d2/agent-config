@@ -28,12 +28,14 @@ command -v python3 >/dev/null 2>&1 || {
   exit 1
 }
 
-CLAUDE_SELECTED_COLOR="$selected" python3 - <<'PY'
+repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+CLAUDE_STATUS_SCRIPT="$repo_dir/scripts/claude-session-status" CLAUDE_SELECTED_COLOR="$selected" python3 - <<'PY'
 import colorsys
 import json
 import os
 from pathlib import Path
 import tempfile
+import shlex
 
 home = Path.home()
 theme_file = home / ".claude/themes/agent-config-selected.json"
@@ -88,6 +90,11 @@ settings["theme"] = "custom:agent-config-selected"
 # Inline rendering keeps output in terminal/tmux scrollback for copy mode.
 # setdefault preserves an explicit choice such as /tui fullscreen.
 settings.setdefault("tui", "default")
+# Preserve an existing custom status line.
+settings.setdefault("statusLine", {
+    "type": "command",
+    "command": "python3 " + shlex.quote(os.environ["CLAUDE_STATUS_SCRIPT"]),
+})
 # Every request resends the whole context, so a 1M-context session that grows
 # to several hundred thousand tokens costs that much on each turn. Treat the
 # window as 120k instead; compaction starts below it (about 164k for 200000). An explicit choice is kept, except 200000: it was the

@@ -311,6 +311,22 @@ Managed installed skills need a separate authorized reinstall to receive it;
 repository changes alone do not rewrite real user settings. This does not
 guarantee removal of skill metadata from the initial model context.
 
+## Session token status lines
+
+The existing launch/install settings hooks enable Codex's native `used-tokens`
+footer and Claude's `scripts/claude-session-status` command. Existing custom
+status lines (including a disabled Codex footer) are preserved.
+Codex reports its native session total; Claude sums main-session transcript input,
+cache creation, cache read, and output tokens once per request, excluding subagents.
+These are cumulative session totals, not current context usage or billing totals.
+
+Activate with `bash scripts/install-codex-theme` and
+`bash scripts/install-claude-settings`, then restart the CLIs. These commands modify
+user settings; use them only when ready. Custom footers need manual integration
+(Codex: add `used-tokens` via `/statusline`; Claude: call the script with stdin JSON).
+See [Codex settings](https://learn.chatgpt.com/docs/config-file/config-reference)
+and [Claude status lines](https://code.claude.com/docs/en/statusline).
+
 ## Tests
 
 ```bash

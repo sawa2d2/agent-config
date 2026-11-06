@@ -38,7 +38,7 @@ for rule, original in zip(theme["settings"], base["settings"]):
     else:
         assert rule == original
 PY
-[[ $(cat "$config") == $'[tui]\ntheme = "agent-config-selected"' ]] || fail "config: $(cat "$config")"
+[[ $(sed '/status_line = /d' "$config") == $'[tui]\ntheme = "agent-config-selected"' ]] || fail "config: $(cat "$config")"
 
 # A variant change updates the accent; re-running changes nothing else.
 before=$(cat "$config")
@@ -61,7 +61,7 @@ TOML
 install_theme > /dev/null
 python3 - "$config" <<'PY' || fail "tui insert: $(cat "$config")"
 import sys
-text = open(sys.argv[1]).read()
+text = "".join(line for line in open(sys.argv[1]) if "status_line = " not in line)
 assert text == '''model = "gpt"
 
 [tui]
@@ -76,10 +76,10 @@ PY
 # A theme chosen by the user is kept, in a table or as a dotted key.
 printf '%s\n' '[tui]' 'theme = "dracula"' > "$config"
 out=$(install_theme)
-[[ $(cat "$config") == $'[tui]\ntheme = "dracula"' && $out == *'Kept Codex theme "dracula"'* ]] || fail 'user theme replaced'
+[[ $(sed '/status_line = /d' "$config") == $'[tui]\ntheme = "dracula"' && $out == *'Kept Codex theme "dracula"'* ]] || fail 'user theme replaced'
 printf '%s\n' 'tui.theme = "dracula"' > "$config"
 install_theme > /dev/null
-[[ $(cat "$config") == 'tui.theme = "dracula"' ]] || fail 'dotted user theme replaced'
+[[ $(sed '/status_line = /d' "$config") == 'tui.theme = "dracula"' ]] || fail 'dotted user theme replaced'
 # A theme key of another table does not count.
 printf '%s\n' '[other]' 'theme = "x"' > "$config"
 install_theme > /dev/null
