@@ -70,6 +70,7 @@ Installed by `./install` (`scripts/`):
 
 Further documentation:
 
+- [Project roadmap](ROADMAP.md)
 - [Codex handoff support](deploy/codex/handoff.md)
 - [Codex skill metadata audit](docs/codex-skill-metadata.md)
 - [Codex rtk coverage](docs/codex-rtk-coverage.md)
