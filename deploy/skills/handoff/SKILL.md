@@ -22,5 +22,6 @@ description: Write a handoff note so a new session or another agent can continue
    Point to commits and files instead of copying their content, and leave out
    what Git already records.
 4. Tell the user in one or two lines that the note is ready and how to
-   continue: in Bob Shell, `bobtask handoff`; elsewhere, a new session in this
-   repository, which reads the note first.
+   continue: a new session in this repository started with the `takeover`
+   skill (`/takeover` in Claude Code, `$takeover` in Bob Shell and Codex); in
+   Bob Shell, `bobtask handoff` also works, even without a note.

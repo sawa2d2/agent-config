@@ -33,7 +33,7 @@ documents `/export session.md` (Markdown export after the turn finishes),
 `/rename <name>` (name a chat), and `/new` (start a fresh chat).
 Export is a practical text alternative to `bobtask dump`, not its raw JSON
 database format. For `bobtask handoff`, invoke the existing `handoff` skill to
-write `.agent-handoff.md`, then use `codex new` with a prompt to read that note.
+write `.agent-handoff.md`, then use `codex new '$takeover'` to continue from that note.
 The existing launch/delegation commands remain responsible for pane and worktree
 selection. No Bob cost-limit continuation or clipboard automation is implied.
 

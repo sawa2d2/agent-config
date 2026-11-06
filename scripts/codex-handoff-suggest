@@ -19,7 +19,7 @@ def main():
     json.dump({"systemMessage": (
         "Codex is automatically compacting this conversation. For a fresh-session handoff, "
         "ask the agent to use the handoff skill to write .agent-handoff.md after compaction, "
-        "then start codex new with a prompt to read that note and continue."
+        "then start codex new '$takeover' to continue from that note."
     )}, sys.stdout)
 
 

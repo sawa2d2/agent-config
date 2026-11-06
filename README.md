@@ -63,7 +63,7 @@ Each script except the `claude`, `bob` and `codex` launchers (which pass it to t
 
 Installed by `./install` (`scripts/`):
 
-- Skills from `deploy/skills/` (`handoff`, `autonomous-development`) plus upstream skills, Spec Kit, rtk and Claude Code plugins (`install-tools`, `install-skill`, `install-rtk`, `install-claude-plugins`).
+- Skills from `deploy/skills/` (`handoff`, `takeover`, `autonomous-development`) plus upstream skills, Spec Kit, rtk and Claude Code plugins (`install-tools`, `install-skill`, `install-rtk`, `install-claude-plugins`).
 - Agent settings and themes (`install-claude-settings`, `install-bob-settings`, `install-bob-theme`, `install-codex-theme`, `install-codex-compaction`, `install-codex-subagent-model`).
 - Codex rules (`deploy/codex/rules/agent-config.rules`, linked to `~/.codex/rules/`): `gfinish` runs outside the workspace-write sandbox, which cannot write a linked worktree's shared `.git`, the primary worktree or the network; gfinish's `approved` marker check still authorizes the merge.
 - Hooks (`install-agent-hooks`): tmux window status (`agent-tmux-status`), `approved` merge marker (`agent-approval-marker`), handoff suggestions and rtk output compression.

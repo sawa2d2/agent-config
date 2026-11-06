@@ -21,7 +21,7 @@ payload = {"session_id": "fixture", "cwd": "/fixture", "transcript_path": "",
            "hook_event_name": "PreCompact", "turn_id": "turn", "trigger": "auto"}
 result = json.loads(run(json.dumps(payload)))
 assert set(result) == {"systemMessage"}, result
-assert "handoff" in result["systemMessage"] and ".agent-handoff.md" in result["systemMessage"]
+assert "handoff" in result["systemMessage"] and ".agent-handoff.md" in result["systemMessage"] and "$takeover" in result["systemMessage"]
 for change in ({"trigger": "manual"}, {"trigger": None},
                {"hook_event_name": "Stop"}, {"hook_event_name": "UserPromptSubmit"}):
     assert run(json.dumps(payload | change)) == "", change

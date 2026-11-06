@@ -28,8 +28,12 @@ After compaction, ask the agent to use the handoff skill to write
 and run in the same worktree:
 
 ```sh
-codex new "Read .agent-handoff.md and continue the work described there."
+codex new '$takeover'
 ```
+
+The `takeover` skill reads the note, checks the recorded state against the
+repository and continues. Its description also matches the plain prompt
+that `codex-delegate` sends to continue from a moved note.
 
 `codex new` is this repository's wrapper syntax. `codex resume` continues
 the old conversation; `fork` retains earlier conversation history. Neither
