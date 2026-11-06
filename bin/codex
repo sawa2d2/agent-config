@@ -24,6 +24,12 @@ bash "$wrapper_dir/../scripts/install-codex-theme" >/dev/null
 bash "$wrapper_dir/../scripts/install-codex-compaction" >/dev/null
 bash "$wrapper_dir/../scripts/install-agent-hooks" --codex-only >/dev/null
 
+automatic_handoff=false
+if [[ ${1:-} == auto-handoff ]]; then
+  automatic_handoff=true
+  shift
+fi
+
 if (( $# == 0 )); then
   set -- resume --last
 elif [[ $1 == new ]]; then
@@ -81,5 +87,8 @@ fi
 # Inline mode preserves terminal scrollback and leaves mouse handling to the terminal.
 if $no_alt_screen; then
   set -- --no-alt-screen "$@"
+fi
+if $automatic_handoff; then
+  exec python3 "$wrapper_dir/../scripts/codex-auto-handoff" "$real_cli" "$@"
 fi
 exec "$real_cli" "$@"

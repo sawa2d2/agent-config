@@ -77,7 +77,7 @@ Installed by `./install` (`scripts/`):
 Further documentation:
 
 - [Project roadmap](ROADMAP.md)
-- [Codex handoff support](deploy/codex/handoff.md)
+- [Codex handoff support](deploy/codex/handoff.md): `codex auto-handoff` enables a context-based handoff and fresh-session takeover in an owned interactive TUI.
 - [Codex skill metadata audit](docs/codex-skill-metadata.md)
 - [Codex rtk coverage](docs/codex-rtk-coverage.md)
 - [Codex session management and language tooling](docs/codex-session-language.md)

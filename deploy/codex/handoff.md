@@ -1,87 +1,114 @@
-# Codex budget and context handoff support
+# Automatic Codex context handoff
 
-Checked against installed `codex-cli 0.160.0` and official documentation on
-2026-11-03. All local CLI probes and installation tests use temporary HOME
-and CODEX_HOME directories; no real session or credentials are required.
+`codex auto-handoff new 'Continue the task'` runs the normal interactive TUI
+with automatic handoff enabled. `codex auto-handoff` resumes the last chat in
+the current directory, matching ordinary `codex`. Use `codex auto-handoff
+resume <id>` for a specific chat. Ordinary launches keep their existing
+behavior. Nothing is globally installed or enabled by this feature.
 
-## Implemented boundary
+The integration targets installed `codex-cli 0.167.0` (2026-11-07). Other
+versions fail visibly in this explicit mode rather than guessing protocol or
+terminal behavior. Python's standard library is the only added dependency.
 
-`scripts/codex-handoff-suggest` handles `PreCompact` with `trigger: "auto"`.
-It returns only `systemMessage`, a UI warning offering a handoff after
-compaction. Manual compaction and other events produce no output. Each
-automatic compaction can show a warning; no persistent session tracking is
-needed. The installer preserves unmanaged hooks and is idempotent.
+## Measurement and threshold
 
-The warning does not claim that any fixed percentage or budget has been
-reached. Codex decides when to compact using its model/configuration.
-`model_auto_compact_token_limit` is a compaction threshold, not a spend cap;
-we do not change it or `model_context_window`.
+The launcher observes `thread/tokenUsage/updated` on its own TUI connection.
+It uses **`tokenUsage.last.inputTokens`**, including cached input, as the latest
+measured request context size. It never sums requests, adds cached input again,
+or uses `total`, account quotas, monetary spend, or goal budgets. This is the
+input to the last model request, not an exact live count of all messages and
+tool results currently in memory. Output and newly appended tool results may
+make the next request larger. Compaction can lower the next measurement.
 
-`PreCompact` supports a UI warning but does not document model-visible
-`additionalContext`. Returning `continue: false` would stop compaction;
-we deliberately omit it. A hook cannot make the model write a note before
-this boundary simply by returning instructions. The script neither writes
-a fabricated handoff note nor starts another session.
+The threshold is the smaller of **80,000 input tokens** and **80% of a known
+positive `modelContextWindow`**. Without a window, the absolute threshold is
+used; without valid input usage no handoff occurs. 80,000 leaves 20,000 tokens
+before this repository's existing 100,000 auto-compaction setting, reserving
+room for the handoff turn. This is a practical default, not a guarantee that
+handoff precedes compaction: long turns may compact first. The launcher waits
+for the turn to finish and uses the latest measurement, so it does not stop
+tools or act on a pre-compaction high-water mark. It changes neither model
+context settings nor the compaction threshold.
 
-After compaction, ask the agent to use the handoff skill to write
-`.agent-handoff.md`. To continue with a fresh conversation, exit normally
-and run in the same worktree:
+## Sequence and safety
+
+1. The launcher owns a private Unix socket, an App Server process, and
+   the TUI connected through `--remote unix://…`. It forwards protocol traffic
+   unchanged, including approval requests and responses. Unix transport uses
+   WebSocket framing; the observer decodes it without changing the frames. It does not attach
+   to or try to control an unrelated TUI or shared daemon.
+2. After a matching successful `turn/completed`, if the threshold is met and
+   the user has not typed during the turn, it asks that TUI to execute the
+   handoff skill. The prompt includes a unique freshness marker.
+3. The matching handoff turn must complete successfully. The worktree-root
+   `.agent-handoff.md` must be a regular, updated note containing that marker.
+   Missing, stale, symlinked, failed, interrupted, and unrecognized handoffs
+   disable automation and leave the old conversation in place.
+4. Only then does the launcher submit `/clear` through the owned terminal.
+   It waits for a successful `thread/start` response with a different ID and
+   the same working directory before asking the agent to use the takeover skill. A full sentence avoids
+   leaving the TUI skill-completion menu open on a bare `$takeover`. It never treats
+   a terminal redraw or the existence of a note as proof of a fresh thread.
+5. At most **one rotation per launcher invocation** is allowed, including
+   after a successful takeover. This prevents repeated startup/handoff loops.
+   Relaunch this mode when another automatic rotation is wanted.
+
+User input takes priority. Typing during the handoff sequence cancels further
+automation; the launcher forwards the input normally. A transition timeout
+also disables further actions. If `/clear` has already succeeded, a later
+failure cannot restore the old visible chat automatically: its saved thread
+remains available via `codex resume`. The note is retained for manual recovery.
+The handoff turn itself has no timeout because approvals can take time.
+
+The normal TUI handles sandbox and approval choices; the launcher never
+answers an approval. CLI `-c`/`--config` and feature overrides are also forwarded
+to its owned server. Profiles, explicitly remote endpoints, and `--worktree`
+are rejected in this mode because their equivalent server setup is not
+established. Use ordinary `codex` for those modes. An interactive terminal is
+required. CLI subcommands other than interactive `resume` are not intended
+for automatic handoff.
+
+## Existing hook and manual recovery
+
+`scripts/codex-handoff-suggest` remains a nonblocking `PreCompact` UI warning
+for automatic compaction. It does not inject instructions into the model or
+claim a particular usage threshold. The hook installer preserves unrelated
+hooks. This fallback also applies to normal launches without automatic mode.
+
+To recover manually, ask the active agent to use the handoff skill, then exit
+normally and run in the same worktree:
 
 ```sh
 codex new '$takeover'
 ```
 
-The `takeover` skill reads the note, checks the recorded state against the
-repository and continues. Its description also matches the plain prompt
-that `codex-delegate` sends to continue from a moved note.
+`resume` continues the old conversation; `fork` retains its history. Neither
+provides the fresh context that `/clear` or a new conversation provides.
 
-`codex new` is this repository's wrapper syntax. `codex resume` continues
-the old conversation; `fork` retains earlier conversation history. Neither
-is a replacement for starting a fresh session from a handoff note.
+## Evidence and verification
 
-## Why Bob's budget automation is not copied
+The installed CLI help exposes `--remote unix://PATH`, `app-server --listen unix://PATH`,
+and version 0.167.0. Generated App Server types expose `last.inputTokens`,
+`modelContextWindow`, thread start/resume replies, and turn completion.
 
-| Existing Bob behavior | Codex evidence and outcome |
-| --- | --- |
-| `session.maxCost` in Bobcoins; warnings at 80% | No equivalent normal-session Bobcoin cap is established by Codex CLI help or the official configuration reference. No currency conversion or invented setting. |
-| `bob-handoff-suggest` reads task costs and context size, and warns at half the cap or above a token threshold on `UserPromptSubmit` | Codex's documented prompt hook has no spend or context-remaining fields. We do not parse internal transcripts, whose format the hook docs call unstable. |
-| `bin/bob` detects a task reaching its cost cap after exit and offers `bobtask handoff` | No equivalent normal-session cap-exit contract was established. `bin/codex` keeps its existing exec/session control; no exit-code interpretation or automatic restart is added. |
-| Fresh Bob task reads the handoff note or a compact transcript | Codex can start with a prompt pointing to the shared handoff note. No transcript export or database access is needed. |
-
-## Actual usage signals
-
-`codex app-server generate-ts --out <temporary-directory>` on 0.160.0 exposes:
-
-- `HookEventName`: includes `preCompact` and `postCompact`; does not include
-  `preModelRequest` or `postModelRequest` in this installed version.
-- `ThreadTokenUsage`: `total`, `last`, and nullable `modelContextWindow`.
-  App Server publishes `thread/tokenUsage/updated`; these are protocol
-  notifications, not fields automatically passed to a command hook.
-- `RateLimitWindow`: `usedPercent`, nullable `windowDurationMins` and
-  `resetsAt`. Account quota windows are not a per-session spending cap.
-- `ThreadGoal`: nullable `tokenBudget` and `tokensUsed`. An explicit goal's
-  token budget is distinct from an arbitrary interactive session or Bob's
-  currency limit; this integration does not create or alter goals.
-
-Current hook documentation also describes `PostModelRequest.token_usage`
-(nullable per-attempt counts), with diagnostic-only output. This event is
-absent from the installed CLI's generated hook enum, so this implementation
-does not register it. Summing request input counts would include repeated
-context and would not measure context remaining or establish billed cost.
-
-## Sources and verification limits
-
-- [Official hooks reference](https://learn.chatgpt.com/docs/hooks): event
-  payloads, `auto`/`manual` matchers, UI output, trust, and transcript stability.
-- [Official configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference):
-  compaction and context settings.
 - [Official App Server reference](https://learn.chatgpt.com/docs/app-server):
-  protocol usage notifications.
-- Local evidence: `codex --version`, `codex --help`, and generated App Server
-  types, all with temporary HOME/CODEX_HOME.
+  usage notifications, thread creation and turn lifecycle.
+- [Official slash command reference](https://learn.chatgpt.com/docs/cli/slash-commands):
+  `/clear` creates a fresh chat and is disabled during a running task.
+- [Official hooks reference](https://learn.chatgpt.com/docs/hooks):
+  the existing `PreCompact` warning is distinct from model-visible instructions.
 
-Fixture tests cover hook output, ignored inputs, installer preservation and
-idempotence. A temporary App Server `hooks/list` probe also confirmed the
-installed CLI recognizes the `auto` PreCompact hook without errors and keeps
-its trust status `untrusted`. These checks do not claim a live model reached compaction, wrote a note,
-or continued successfully. No token savings or billing outcome was measured.
+Run deterministic safety and wrapper regression checks with:
+
+```sh
+bash tests/run tests/test_codex_auto_handoff.sh tests/test_codex_handoff_suggest.sh tests/test_codex_hook_refresh.sh tests/test_install_codex_compaction.sh
+```
+
+The optional installed-CLI probe uses temporary HOME/CODEX_HOME, a local
+synthetic Responses provider, and fixture notes; it needs loopback socket
+permission. It does not use real credentials or test model compliance with
+the handoff/takeover skills:
+
+```sh
+python3 tests/codex_auto_handoff_cli_probe.py /absolute/path/to/real/codex
+```

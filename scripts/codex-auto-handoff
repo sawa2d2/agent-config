@@ -1,0 +1,393 @@
+#!/usr/bin/env python3
+"""Own one TUI transport; rotate once only after a verified handoff turn."""
+import errno
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import pty
+import selectors
+import signal
+import socket
+import stat
+import subprocess
+import sys
+import tempfile
+import termios
+import time
+import tty
+import uuid
+
+
+LIMIT = 80000
+TAKEOVER_PROMPT = "Use the takeover skill to read .agent-handoff.md and continue the recorded task."
+
+
+def fingerprint(path):
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None, b""
+    with os.fdopen(descriptor, "rb") as stream:
+        metadata = os.fstat(stream.fileno())
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 1024 * 1024:
+            raise ValueError("handoff note must be a regular file under 1 MiB")
+        data = stream.read(1024 * 1024 + 1)
+        return (metadata.st_ino, metadata.st_mtime_ns, hashlib.sha256(data).digest()), data
+
+
+class Rotation:
+    """Protocol observer. Unknown, interrupted, or stale state never clears a chat."""
+    def __init__(self):
+        self.requests = {}
+        self.thread = None
+        self.turn = None
+        self.cwd = None
+        self.tokens = 0
+        self.window = None
+        self.dirty = True
+        self.phase = "watch"
+        self.action = None
+        self.deadline = None
+        self.note = None
+        self.before = None
+        self.marker = "Automatic handoff: " + uuid.uuid4().hex
+        self.reason = None
+
+    def cancel(self, reason):
+        self.phase = "disabled"
+        self.action = None
+        self.deadline = None
+        self.reason = reason
+
+    def user_input(self):
+        self.dirty = True
+        self.action = None
+        if self.phase not in ("watch", "disabled", "done"):
+            self.cancel("user input interrupted automatic handoff; further automation disabled")
+
+    def client(self, msg):
+        method, params = msg.get("method"), msg.get("params", {})
+        if method in ("thread/start", "thread/resume", "thread/fork") and not params.get("ephemeral"):
+            self.requests[msg["id"]] = method
+        if method == "turn/start" and params.get("threadId") == self.thread:
+            if self.phase == "watch":
+                self.dirty = False
+            elif self.phase == "requested":
+                texts = [item.get("text", "") for item in params.get("input", [])]
+                if any(self.marker in text for text in texts):
+                    self.phase = "handoff"
+                    self.deadline = None  # Approvals may legitimately take a long time.
+                else:
+                    self.cancel("unexpected turn; automatic handoff disabled")
+
+    def server(self, msg):
+        request = self.requests.pop(msg.get("id"), None)
+        if request:
+            result = msg.get("result", {})
+            thread = result.get("thread", {}).get("id")
+            if not thread:
+                if self.phase == "clearing":
+                    self.cancel("fresh thread creation failed")
+                return
+            old = self.thread
+            self.thread = thread
+            self.cwd = result.get("cwd")
+            self.tokens = 0
+            self.window = None
+            if self.phase == "clearing":
+                if request != "thread/start" or old == thread or self.cwd != self.old_cwd:
+                    self.cancel("fresh thread identity or worktree mismatch")
+                else:
+                    self.phase = "done"  # One rotation per launcher prevents startup loops.
+                    self.action = TAKEOVER_PROMPT
+                    self.deadline = None
+            elif self.phase != "watch":
+                self.cancel("active thread changed")
+        params = msg.get("params", {})
+        if params.get("threadId") != self.thread or not self.thread:
+            return
+        method = msg.get("method")
+        if method == "thread/tokenUsage/updated":
+            usage = params.get("tokenUsage", {})
+            value = usage.get("last", {}).get("inputTokens")
+            window = usage.get("modelContextWindow")
+            # Input includes cached tokens. Never add cachedInputTokens or total usage.
+            self.tokens = value if type(value) is int and value >= 0 else 0
+            self.window = window if type(window) is int and window > 0 else None
+        elif method == "turn/started":
+            self.turn = params.get("turn", {}).get("id")
+        elif method == "turn/completed":
+            turn = params.get("turn", {})
+            if not self.turn or turn.get("id") != self.turn:
+                return
+            self.turn = None
+            if turn.get("status") != "completed":
+                if self.phase == "handoff":
+                    self.cancel("handoff turn did not complete successfully")
+                return
+            if self.phase == "handoff":
+                try:
+                    after, data = fingerprint(self.note)
+                    valid = after != self.before and self.marker.encode() in data
+                except (OSError, ValueError):
+                    valid = False
+                if not valid:
+                    self.cancel("handoff note missing, stale, or unverified; chat retained")
+                    return
+                self.phase = "clearing"
+                self.old_cwd = self.cwd
+                self.action = "/clear"
+                self.deadline = time.monotonic() + 15
+            elif self.phase == "watch" and not self.dirty:
+                threshold = min(LIMIT, self.window * 0.8) if self.window else LIMIT
+                if self.tokens >= threshold:
+                    self.prepare()
+
+    def prepare(self):
+        try:
+            root = subprocess.check_output(
+                ["git", "-C", self.cwd, "rev-parse", "--show-toplevel"],
+                stderr=subprocess.DEVNULL, text=True).strip()
+            self.note = Path(root) / ".agent-handoff.md"
+            self.before, _ = fingerprint(self.note)
+        except (OSError, ValueError, TypeError, subprocess.CalledProcessError):
+            self.cancel("cannot establish worktree handoff path")
+            return
+        self.phase = "requested"
+        self.action = (
+            "Use the handoff skill now at this completed task boundary. Write a fresh "
+            ".agent-handoff.md at the worktree root, recording unfinished work and verification. "
+            "Include this exact freshness marker on its own line: " + self.marker +
+            ". Do not start another task or clear the conversation. End this turn once the note "
+            "is ready; the launcher will verify it and start a fresh chat with the takeover skill."
+        )
+        self.deadline = time.monotonic() + 15
+
+
+def server_options(args):
+    """Forward config overrides to the owned server; TUI retains all original options."""
+    result = []
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            break
+        if arg in ("-p", "--profile", "--remote", "--remote-auth-token-env", "--worktree") or arg.startswith(("--profile=", "--remote=", "-p")):
+            raise ValueError("auto-handoff does not support profiles, remote endpoints, or new worktrees")
+        if arg in ("-c", "--config", "--enable", "--disable"):
+            result.extend(args[index:index + 2])
+            index += 2
+            continue
+        if arg.startswith(("--config=", "-c")):
+            result.append(arg)
+        if arg in ("-m", "--model", "-s", "--sandbox", "-a", "--ask-for-approval", "-C", "--cd", "--add-dir", "-i", "--image", "--local-provider"):
+            index += 1
+        index += 1
+    return result
+
+
+class WebSocketObserver:
+    """Decode observed text only; forward original bytes without changing the transport."""
+    def __init__(self):
+        self.buffer = b""
+        self.upgraded = False
+        self.fragment = b""
+
+    def feed(self, data):
+        self.buffer += data
+        if not self.upgraded:
+            if b"\r\n\r\n" not in self.buffer:
+                return []
+            _, self.buffer = self.buffer.split(b"\r\n\r\n", 1)
+            self.upgraded = True
+        messages = []
+        while len(self.buffer) >= 2:
+            first, second = self.buffer[:2]
+            size, offset = second & 127, 2
+            if size in (126, 127):
+                width = 2 if size == 126 else 8
+                if len(self.buffer) < offset + width:
+                    break
+                size = int.from_bytes(self.buffer[offset:offset + width], "big")
+                offset += width
+            if size > 32 * 1024 * 1024 or first & 0x70:
+                raise ValueError("unsupported WebSocket frame")
+            masked = second & 128
+            payload_start = offset + (4 if masked else 0)
+            if len(self.buffer) < payload_start + size:
+                break
+            payload = self.buffer[payload_start:payload_start + size]
+            if masked:
+                mask = self.buffer[offset:offset + 4]
+                payload = bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
+            self.buffer = self.buffer[payload_start + size:]
+            opcode = first & 15
+            if opcode == 1:
+                self.fragment = payload
+            elif opcode == 0:
+                self.fragment += payload
+            elif opcode in (8, 9, 10):
+                continue
+            else:
+                raise ValueError("unsupported WebSocket message")
+            if len(self.fragment) > 32 * 1024 * 1024:
+                raise ValueError("oversized WebSocket message")
+            if first & 128:
+                messages.append(json.loads(self.fragment))
+                self.fragment = b""
+        return messages
+
+
+def run(cli, args):
+    if not os.isatty(0) or not os.isatty(1):
+        raise ValueError("auto-handoff requires an interactive terminal")
+    options = server_options(args)
+    version = subprocess.check_output([cli, "--version"], text=True).strip()
+    if version != "codex-cli 0.167.0":
+        raise ValueError("auto-handoff requires the verified codex-cli 0.167.0; use normal codex otherwise")
+    state = Rotation()
+    with tempfile.TemporaryDirectory(prefix="codex-handoff-") as directory:
+        listener = socket.socket(socket.AF_UNIX)
+        endpoint = directory + "/tui.sock"
+        listener.bind(endpoint)
+        listener.listen(1)
+        listener.setblocking(False)
+        log = open(directory + "/server.log", "w+")
+        backend_path = directory + "/server.sock"
+        server = subprocess.Popen([cli, *options, "app-server", "--listen", "unix://" + backend_path],
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=log)
+        backend = socket.socket(socket.AF_UNIX)
+        for attempt in range(100):
+            try:
+                backend.connect(backend_path)
+                break
+            except (FileNotFoundError, ConnectionRefusedError):
+                if server.poll() is not None or attempt == 99:
+                    server.terminate()
+                    server.wait()
+                    log.seek(0)
+                    raise RuntimeError("owned App Server failed to start: " + log.read()[-2000:])
+                time.sleep(0.05)
+        master, slave = pty.openpty()
+        saved = termios.tcgetattr(0)
+        def resize(*_):
+            fcntl.ioctl(master, termios.TIOCSWINSZ, fcntl.ioctl(0, termios.TIOCGWINSZ, b"\0" * 8))
+        resize()
+        previous = signal.signal(signal.SIGWINCH, resize)
+        child = subprocess.Popen([cli, "--remote", "unix://" + endpoint, *args],
+                                 stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
+        os.close(slave)
+        selector = selectors.DefaultSelector()
+        for file, name in ((listener, "listen"), (backend, "server"), (master, "terminal"), (0, "input")):
+            selector.register(file, selectors.EVENT_READ, name)
+        connection = None
+        observers = {"client": WebSocketObserver(), "server": WebSocketObserver()}
+        observing = True
+        outgoing = []
+        pending = None
+        def terminate(*_):
+            raise SystemExit(143)
+        previous_terminate = signal.signal(signal.SIGTERM, terminate)
+        try:
+            tty.setraw(0)
+            while child.poll() is None:
+                events = selector.select(0.05)
+                # Physical input wins over automation in the same event batch.
+                events.sort(key=lambda event: event[0].data != "input")
+                for key, _ in events:
+                    kind = key.data
+                    if kind == "listen":
+                        connection, _ = listener.accept()
+                        selector.unregister(listener)
+                        selector.register(connection, selectors.EVENT_READ, "client")
+                        for data in outgoing:
+                            connection.sendall(data)
+                        outgoing.clear()
+                        continue
+                    try:
+                        data = os.read(key.fd, 65536)
+                    except OSError as error:
+                        if kind == "terminal" and error.errno == errno.EIO:
+                            return child.wait()
+                        raise
+                    if not data:
+                        if kind in ("client", "terminal"):
+                            return child.wait(timeout=5)
+                        raise RuntimeError("owned App Server or terminal input closed")
+                    if kind == "input":
+                        state.user_input()
+                        pending = None
+                        os.write(master, data)
+                    elif kind == "terminal":
+                        os.write(1, data)
+                    else:
+                        if kind == "client":
+                            backend.sendall(data)
+                        elif connection:
+                            connection.sendall(data)
+                        else:
+                            outgoing.append(data)
+                        if observing:
+                            try:
+                                for msg in observers[kind].feed(data):
+                                    if kind == "client":
+                                        state.client(msg)
+                                    else:
+                                        state.server(msg)
+                            except (ValueError, KeyError, TypeError, AttributeError):
+                                state.cancel("unrecognized protocol data; automation disabled")
+                                observing = False
+                                observers.clear()
+                now = time.monotonic()
+                if state.reason:
+                    os.write(1, ("\r\n[codex auto-handoff] " + state.reason + "\r\n").encode())
+                    state.reason = None
+                if state.deadline and now >= state.deadline:
+                    state.cancel("handoff transition timed out; no further automation")
+                    pending = None
+                if state.phase == "disabled":
+                    pending = None
+                if state.action:
+                    pending = (now + 0.5, state.action, False)
+                    state.action = None
+                if pending and now >= pending[0]:
+                    command, submit = pending[1:]
+                    if submit:
+                        os.write(master, b"\r")
+                        pending = None
+                    else:
+                        # Separate Enter from text so TUI paste-burst detection cannot
+                        # turn a slash-command submission into a composer newline.
+                        data = command.encode() if command == "/clear" else b"\x1b[200~" + command.encode() + b"\x1b[201~"
+                        os.write(master, data)
+                        pending = (now + 0.2, command, True)
+            return child.returncode
+        finally:
+            termios.tcsetattr(0, termios.TCSADRAIN, saved)
+            signal.signal(signal.SIGWINCH, previous)
+            signal.signal(signal.SIGTERM, previous_terminate)
+            selector.close()
+            for process in (child, server):
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+            if connection:
+                connection.close()
+            backend.close()
+            listener.close()
+            os.close(master)
+            log.close()
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(run(sys.argv[1], sys.argv[2:]))
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        print("codex auto-handoff: " + str(error), file=sys.stderr)
+        sys.exit(1)
