@@ -15,7 +15,7 @@ worktrees, pull requests or merge choices), skip those steps.
 
 | Objective | Use |
 | --- | --- |
-| Unclear requirements or design | superpowers `brainstorming` first (asks questions until the design is settled); `grill-me` to stress-test a proposal |
+| Unclear requirements or design | superpowers `brainstorming` first (asks questions until the design is settled); `grilling` to stress-test a proposal |
 | Settled design, several steps | superpowers `writing-plans`, then `executing-plans` (or `subagent-driven-development` where subagents exist) |
 | Large feature whose specification should be kept as documents | Spec Kit: `specify init` in the repository, then `/speckit.specify`, `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement` |
 | Mechanically checkable end state (all tests pass, lint clean) | `ralph-loop` (Claude Code only) with an explicit completion condition and an iteration limit |
@@ -31,22 +31,9 @@ execute, verify.
 
 ## Starting a branch
 
-For new code changes, when `$TMUX` is set, never create the branch here (no
-`git checkout -b`, `git switch -c`, or `git worktree add`); instead run
-`agent-delegate <new-branch> "<task>"` (Claude Code),
-`bob-delegate <new-branch> "<task>"` (Bob Shell), or
-`codex-delegate <new-branch> "<task>"` (Codex) to create the branch in a new
-worktree and start the agent in one new tmux window per branch
-without moving focus.
-When the target repository is explicitly named, use
-`codex-delegate --repo "<path>" <new-branch> "<task>"`; use the same `--repo`
-selection for repository-scoped `--list` and `--status`. Without it, cwd is the
-default. Claude's `agent-delegate` and `bob-delegate` have no `--repo` option;
-run those commands from the target checkout.
-Tell the user the window and branch, and stop working on that task in this
-session. Only outside tmux, create the branch here. Always preserve the
-originating agent: Claude to Claude, Bob to Bob, and Codex to Codex; never
-substitute another agent.
+Follow the global Git workflow and its authoritative delegation procedures
+at `$HOME/.local/share/agent-config/operations/delegation.md` for branch
+creation, agent identity, repository selection, and coordinator/worker behavior.
 
 ## Branches: independent first, stacked when needed
 
