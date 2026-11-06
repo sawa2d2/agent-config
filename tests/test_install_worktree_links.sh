@@ -96,6 +96,10 @@ for dest, source in links.items():
     path = home / dest
     for target in (foreign / source, primary / 'custom' / source,
                    base / 'unregistered' / source, Path('relative-custom-target')):
+        # Unrelated targets are protected while they exist.
+        resolved = path.parent / target
+        if not resolved.exists():
+            resolved.mkdir(parents=True)
         path.unlink()
         path.symlink_to(target)
         install(refused='symlink: ' + str(path))
@@ -120,16 +124,13 @@ install(linked)
 shutil.rmtree(linked)
 install()
 
-# Once registration is removed, dangling targets cannot be safely attributed.
+# Removing a worktree also removes its registration; dangling links are repaired.
 git('worktree', 'prune', '--expire=now')
-for dest, source in links.items():
-    path = home / dest
-    path.unlink()
-    path.symlink_to(linked / source)
-    install(refused='symlink: ' + str(path))
-    assert path.readlink() == linked / source, path
-    path.unlink()
-    path.symlink_to(primary / source)
+git('worktree', 'add', '-q', str(linked), 'linked')
+install(linked)
+git('worktree', 'remove', str(linked))
+assert str(linked) not in git('worktree', 'list', '--porcelain')
+install()
 
 # Without Git metadata, exact-current-source installs still work.
 archive = base / 'archive'

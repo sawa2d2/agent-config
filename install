@@ -29,7 +29,7 @@ link_managed() {
       printf 'SKIP: %s\n' "$dest"
       return
     fi
-    if ! is_managed_source "$target" "$relative" &&
+    if [[ -e "$dest" ]] && ! is_managed_source "$target" "$relative" &&
        { [[ -z "$legacy" ]] || ! is_managed_source "$target" "$legacy"; }; then
       printf 'Refusing to replace existing symlink: %s\n' "$dest" >&2
       return 1
