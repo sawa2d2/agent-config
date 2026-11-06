@@ -9,10 +9,13 @@ These govern all coding and maintenance work and override the process any skill,
 - Read the relevant code, interfaces, tests, and conventions first; verify behavior from the repository or a command instead of guessing.
 - Clarify ambiguous requirements with meaningful consequences; otherwise state the assumption briefly and proceed.
 
-### Simplicity first
-- Make the smallest change that fully solves the problem: no speculative abstractions, broad refactoring, unnecessary dependencies, or premature generalization.
-- Reuse existing patterns and utilities where they fit, but not at the cost of clarity.
-- Add compatibility paths, fallbacks, or configuration options only for a concrete need.
+### Keep changes minimal
+- Make the smallest change that satisfies the user request and fixes confirmed defects.
+- When a few edits to existing code solve the problem, do not introduce a new mechanism.
+- Do not add defenses against hypothetical problems, generalization, fallbacks, or unrelated cleanup.
+- Keep tests focused on the behavior changed in this task and prefer existing verification methods.
+- When delegating, do not expand the user request or add cases for the worker to handle.
+- Remove changes from the final diff that are unnecessary for the current request.
 
 ### Surgical changes
 - Preserve existing behavior and files outside the requested scope.
