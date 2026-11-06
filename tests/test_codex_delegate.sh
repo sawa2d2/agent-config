@@ -12,7 +12,6 @@ import concurrent.futures
 import json
 import os
 from pathlib import Path
-import shlex
 import shutil
 import subprocess
 import sys
@@ -50,7 +49,7 @@ elif name == 'codex':
 else:
     with (base / 'tmux.log').open('a') as f: f.write(json.dumps(a) + '\\n')
     if os.environ.get('FAIL_TMUX') == a[0]:
-        print('fixture permission denied', file=sys.stderr)
+        print(os.environ.get('TMUX_ERROR', 'fixture permission denied'), file=sys.stderr)
         sys.exit(1)
     if a[0] == 'display-message':
         if a[-1] == '#{session_id}': print('$7')
@@ -112,6 +111,12 @@ def launch(branch, prompt='Task', *options, cwd=primary, **kw):
 def report(task, state, *options, ok=True, cwd=None):
     return call('--report', task['id'], state, *options, cwd=cwd or task['worktree'], ok=ok)
 
+def shell_words(command):
+    assert '\n' not in command and '\r' not in command, repr(command)
+    # JSON avoids subprocess text mode normalizing CRLF inside arguments.
+    capture = '; python3 -c \'import json, sys; print(json.dumps(sys.argv[1:]))\' "$@"'
+    return json.loads(run('bash', '-c', 'set -- ' + command + capture).stdout)
+
 git('init', '-qb', 'main')
 git('-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'initial', '--allow-empty')
 config = (Path(env['HOME']) / '.codex/config.toml').read_bytes()
@@ -141,21 +146,29 @@ marker.write_text('different-task')
 assert status(first)['pane_observation'] == 'identity-mismatch'
 marker.unlink()
 assert status(first)['pane_observation'] == 'inaccessible'
+denied = status(first, extra={'FAIL_TMUX': 'display-message', 'TMUX_ERROR': 'Operation not permitted'})
+assert denied['pane_observation'] == 'inaccessible'
+assert denied['pane_observation_error'] == 'Operation not permitted'
 
 # Shell quoting, -m aliases, handoff prompt and wrapper argument compatibility.
-prompt = "fix the build; $(touch injected) `touch injected2` 'quotes'\nsecond line\r\t\x1b[31m\x7f\\end"
+prompt = "fix the build; $(touch injected) `touch injected2` 'quotes'\nsecond line\r\n日本語 \\n literal\n"
+prompt += "\t\x1b[31m\x7f\\end"
 model = "model;$(touch injected3) with spaces"
 second = launch('feat/quote;literal', prompt, '-m', model, cwd=worker)
 commands = [json.loads(line) for line in (base / 'tmux.log').read_text().splitlines()]
 keys = [a[-1] for a in commands if a[:1] == ['send-keys'] and '-l' in a]
 keys = [key for key in keys if "codex" in key]
-assert all("\n" not in key and "\r" not in key for key in keys)
-assert '--report ' + second['id'] in keys[-1]
+assert shell_words(keys[0])[:2] == ['codex', 'new']
+assert shell_words(keys[0])[-1].startswith('Read .agent-handoff.md and continue the work it describes.')
+assert shell_words(keys[-1])[:4] == ['codex', 'new', '--model', model]
+assert shell_words(keys[-1])[-1].startswith(prompt)
+assert '--report ' + second['id'] in shell_words(keys[-1])[-1]
 # Execute recorded input against the real launch wrapper with only a fake paid CLI.
 run('bash', '-c', keys[-1], extra={'PATH': str(root / 'bin') + ':' + env['PATH']})
 arguments = json.loads((base / 'codex.args').read_text())
 assert arguments[:4] == ['--no-alt-screen', '--approve-for-me', '--model', model]
 assert arguments[-1].startswith(prompt)
+assert arguments[-1] == shell_words(keys[-1])[-1]
 assert not any(primary.glob('injected*'))
 third = launch('feat/model', '--status is a literal prompt', '--model', 'gpt-6-luna')
 assert json.loads((base / 'codex.args').read_text())[:3] == ['new', '--model', 'gpt-6-luna']

@@ -159,7 +159,9 @@ submission; task acceptance and progress remain unverified. Each tmux operation
 has a five-second timeout; no user startup files or CLI settings are changed by
 the startup checks.
 A pane token plus tmux server identity detects stale/reused panes; even a matching
-live pane proves neither progress nor success. Missing tmux/panes or deleted
+live pane proves neither progress nor success. Failed pane queries are reported
+as `inaccessible` with the query error; sandbox denial is not proof of a missing
+pane. Missing tmux/panes or deleted
 worktrees do not erase reports. Git refs may also disappear; status shows this
 separately. Status does not capture terminal output or authenticate worker claims.
 
