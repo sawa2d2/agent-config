@@ -1,37 +1,289 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env python3
+"""Launch Codex workers and inspect repository-scoped, explicitly reported results."""
 
-# Hand the current work to a new Codex session on a new branch: create a
-# worktree with gwt-path (dotfiles), move .agent-handoff.md from this working
-# tree into it, and start codex there in a new tmux window. Focus stays in the
-# current pane. -m passes a model to codex, e.g. a cheaper one for routine tasks.
-usage() { echo 'Usage: codex-delegate [-m|--model <model>] <new-branch> [prompt]' >&2; exit 2; }
-model=
-if [[ ${1:-} == -m || ${1:-} == --model ]]; then
-  [[ -n ${2:-} ]] || usage
-  model=$2
-  shift 2
-fi
-(($# == 1 || $# == 2)) && [[ -n $1 && $1 != -* ]] || usage
-branch=$1
-prompt=${2:-}
+import argparse
+from contextlib import contextmanager
+from datetime import datetime, timezone
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+import uuid
 
-[[ -n ${TMUX:-} ]] || { echo 'codex-delegate: run it inside tmux' >&2; exit 1; }
-command -v gwt-path >/dev/null || { echo 'codex-delegate: gwt-path not found' >&2; exit 127; }
-note="$(git rev-parse --show-toplevel)/.agent-handoff.md"
-if [[ -z $prompt ]]; then
-  [[ -f $note ]] || { echo 'codex-delegate: no .agent-handoff.md here; write one or pass a prompt' >&2; exit 1; }
-  prompt='Read .agent-handoff.md and continue the work it describes.'
-fi
 
-dir=$(gwt-path -b "$branch")
-# Move rather than copy, so this working tree does not keep a stale note.
-[[ -f $note ]] && mv -- "$note" "$dir/.agent-handoff.md"
-session=$(tmux display-message -p -t "${TMUX_PANE:-}" '#{session_id}')
-pane=$(tmux new-window -d -t "$session" -n "$branch" -c "$dir" -P -F '#{pane_id}')
-# Typed into the pane's interactive shell, so codex resolves as it does for
-# the user (the agent-config wrapper first in PATH); the shell reads it once
-# it starts. The wrapper supplies automatic review unless explicitly overridden.
-tmux send-keys -t "$pane" -l "codex new ${model:+--model $(printf '%q' "$model") }$(printf '%q' "$prompt")"
-tmux send-keys -t "$pane" Enter
-echo "codex-delegate: codex started in window for $branch (pane $pane) at $dir"
+def run(*args, cwd=None):
+    return subprocess.check_output(args, cwd=cwd, stderr=subprocess.PIPE, text=True).rstrip("\n")
+
+
+def git(*args, cwd=None):
+    return run("git", *args, cwd=cwd)
+
+
+def repository():
+    # Same original-root validation as agent-backlog; never guess a local fallback.
+    common = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).resolve()
+    records = subprocess.check_output(["git", "worktree", "list", "--porcelain", "-z"]).split(b"\0\0")
+    fields = records[0].split(b"\0")
+    if b"bare" in fields:
+        raise ValueError("a bare repository has no original working-tree root")
+    root = Path(os.fsdecode(fields[0].removeprefix(b"worktree ")))
+    if not root.is_dir():
+        raise ValueError(f"original working tree is unavailable: {root}")
+    top = Path(git("rev-parse", "--show-toplevel", cwd=root)).resolve()
+    actual = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=root)).resolve()
+    if actual != common or top != root.resolve():
+        raise ValueError("Git metadata does not identify the original checkout; refusing to guess its root")
+    worktrees = [Path(os.fsdecode(r.split(b"\0")[0][9:])) for r in records if r]
+    return root, common, worktrees
+
+
+def now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def no_symlink(path):
+    if path.is_symlink():
+        raise ValueError(f"refusing symlink: {path}")
+
+
+def read(path):
+    no_symlink(path.parent)
+    no_symlink(path)
+    return json.loads(path.read_text())
+
+
+def replace(path, data):
+    no_symlink(path)
+    fd, temporary = tempfile.mkstemp(prefix=".task-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(data, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+@contextmanager
+def writing(root, common, worktrees):
+    lock_path = common / "codex-delegate.lock"
+    no_symlink(lock_path)
+    with lock_path.open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        state = root / ".codex-tasks"
+        no_symlink(state)
+        # Unavailable stale worktree entries cannot contain newly tracked files.
+        for worktree in worktrees:
+            if worktree.is_dir() and git("ls-files", "--", ".codex-tasks", cwd=worktree):
+                raise ValueError(f".codex-tasks is tracked in {worktree}; resolve explicitly before writing")
+        exclude = common / "info" / "exclude"
+        no_symlink(exclude)
+        data = exclude.read_bytes() if exclude.exists() else b""
+        if data.splitlines()[-1:] != [b"/.codex-tasks/"]:
+            exclude.parent.mkdir(exist_ok=True)
+            with exclude.open("ab") as stream:
+                stream.write((b"\n" if data and not data.endswith(b"\n") else b"") + b"/.codex-tasks/\n")
+        state.mkdir(mode=0o700, exist_ok=True)
+        yield state
+
+
+def update(context, task_id, **fields):
+    with writing(*context) as state:
+        path = state / f"{task_id}.json"
+        data = read(path)
+        data.update(fields, updated_at=now())
+        replace(path, data)
+
+
+def observe(data, root):
+    result = dict(data)
+    directory = data.get("worktree")
+    result["worktree_exists"] = bool(directory and Path(directory).is_dir())
+    result["pane_observation"] = "unavailable"
+    if data.get("pane") and shutil.which("tmux"):
+        try:
+            identity = run("tmux", "display-message", "-p", "-t", data["pane"],
+                           "#{pid}\t#{@codex_delegate_task}\t#{pane_dead}")
+            server, token, dead = identity.split("\t")
+            if server != data["tmux_server"] or token != data["id"]:
+                result["pane_observation"] = "identity-mismatch"
+            else:
+                result["pane_observation"] = "dead" if dead == "1" else "present (not proof of worker activity)"
+        except (OSError, ValueError, subprocess.CalledProcessError):
+            result["pane_observation"] = "missing or unreachable"
+    # Read branch results from the surviving original checkout, not the worker.
+    try:
+        result["branch_head"] = git("rev-parse", "--verify", "refs/heads/" + data["branch"], cwd=root)
+    except subprocess.CalledProcessError:
+        result["branch_head"] = None
+    result["reported_commits_on_branch"] = {}
+    for commit in (data.get("report") or {}).get("commits", []):
+        check = subprocess.run(["git", "merge-base", "--is-ancestor", commit,
+                                "refs/heads/" + data["branch"]], cwd=root, capture_output=True)
+        result["reported_commits_on_branch"][commit] = check.returncode == 0
+    return result
+
+
+def worker_prompt(prompt, task_id):
+    command = f"codex-delegate --report {task_id}"
+    return prompt + f"""
+
+Delegated Codex task ID: {task_id}
+Work on this assigned branch/worktree; do not delegate branch creation again.
+The originating Codex agent continues coordinating. You own this task's branch
+Git operations (commit and push verified changes), unless the task says otherwise.
+Never commit to the default branch or merge it without the exact required approval.
+Report explicitly from this worktree using these concrete commands:
+  {command} running --summary 'Work started; next step ...'
+  {command} needs-input --summary 'Blocked by ...; need ...'
+  {command} completed --summary 'Changes and remaining limitations ...' --checks 'Exact commands and actual outcomes ...' --commit FULL_COMMIT_SHA
+  {command} failed --summary 'Failure and remaining work ...' --checks 'Checks run and failures, or why no checks ran ...'
+Use repeated --commit for multiple commits; if no commit was needed, explain why
+in the summary. Terminal reports require --checks. Report running when starting,
+needs-input when blocked, and completed or failed before ending; also give the
+final outcome in this tmux session. Reporting is explicit, not automatic. Delegate
+test runs as instructed. Never claim unrun checks passed. For sandbox-denied
+state writes to the original root/shared Git metadata, request supported
+require_escalated approval for the exact authorized report command; never change
+sandbox/auto-approval controls or use a local fallback. If approval is denied,
+explain the missing report in the session. Pane presence does not prove progress.
+"""
+
+
+def launch(args, context):
+    root, common, worktrees = context
+    if not os.environ.get("TMUX"):
+        raise ValueError("run it inside tmux")
+    for executable in ("gwt-path", "tmux"):
+        if not shutil.which(executable):
+            raise ValueError(f"{executable} not found")
+    git("check-ref-format", "--branch", args.branch)
+    note = Path(git("rev-parse", "--show-toplevel")) / ".agent-handoff.md"
+    prompt = args.prompt
+    if not prompt:
+        if not note.is_file():
+            raise ValueError("no .agent-handoff.md here; write one or pass a prompt")
+        prompt = "Read .agent-handoff.md and continue the work it describes."
+    task_id = uuid.uuid4().hex
+    data = dict(id=task_id, branch=args.branch, prompt=prompt, worktree=None,
+                session=None, pane=None, tmux_server=None, launch="starting", report=None,
+                created_at=now(), updated_at=now())
+    with writing(*context) as state:
+        replace(state / f"{task_id}.json", data)
+    print(f"codex-delegate: task {task_id}", flush=True)
+    try:
+        directory = run("gwt-path", "-b", args.branch)
+        update(context, task_id, worktree=directory)
+        if note.is_file():
+            destination = Path(directory) / ".agent-handoff.md"
+            if destination.exists():
+                raise ValueError(f"refusing to overwrite {destination}")
+            shutil.move(str(note), destination)
+        session = run("tmux", "display-message", "-p", "-t", os.environ.get("TMUX_PANE", ""), "#{session_id}")
+        server = run("tmux", "display-message", "-p", "-t", session, "#{pid}")
+        update(context, task_id, session=session, tmux_server=server)
+        pane = run("tmux", "new-window", "-d", "-t", session, "-n", args.branch,
+                   "-c", directory, "-P", "-F", "#{pane_id}")
+        update(context, task_id, pane=pane)
+        run("tmux", "set-option", "-p", "-t", pane, "@codex_delegate_task", task_id)
+        command = ["codex", "new"]
+        if args.model:
+            command += ["--model", args.model]
+        command.append(worker_prompt(prompt, task_id))
+        # The interactive shell still resolves the user's Codex wrapper. Quote
+        # every argument for Bash/Zsh; no prompt/model/branch text becomes code.
+        run("tmux", "send-keys", "-t", pane, "-l", shlex.join(command))
+        run("tmux", "send-keys", "-t", pane, "Enter")
+        update(context, task_id, launch="sent")
+        print(f"codex-delegate: launch input sent to window for {args.branch} (pane {pane}) at {directory}")
+    except (OSError, ValueError, subprocess.CalledProcessError, KeyboardInterrupt) as error:
+        detail = str(error)
+        if isinstance(error, subprocess.CalledProcessError) and error.stderr:
+            detail += ": " + error.stderr.strip()
+        update(context, task_id, launch="failed", launch_error=detail)
+        raise ValueError(f"task {task_id}: partial launch failed: {detail}; inspect --status; retained worktree/window/handoff are not removed") from error
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, epilog="Status reads never write state. Worker reports and pane liveness are independent; verify Git results before accepting completion.")
+    parser.add_argument("-m", "--model")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--list", action="store_true", help="list stored tasks as JSON, without tmux")
+    mode.add_argument("--status", metavar="ID", help="inspect stored result, Git refs and on-demand pane identity")
+    mode.add_argument("--report", metavar="ID", help="worker report: ID {running,needs-input,completed,failed} --summary TEXT [--checks TEXT] [--commit SHA ...]")
+    parser.add_argument("--summary")
+    parser.add_argument("--checks")
+    parser.add_argument("--commit", action="append", default=[])
+    parser.add_argument("branch", nargs="?", help="new branch, or worker state with --report")
+    parser.add_argument("prompt", nargs="?")
+    # Preserve the original launch grammar, including a prompt beginning with
+    # '-' that happens to resemble one of the new management options.
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("-m", "--model"):
+        if len(argv) < 3 or not argv[1]:
+            parser.error("model and new branch are required")
+        argv = ["--model=" + argv[1], "--", *argv[2:]]
+    elif argv and not argv[0].startswith("-"):
+        argv = ["--", *argv]
+    args = parser.parse_args(argv)
+    if args.report:
+        if args.branch not in ("running", "needs-input", "completed", "failed") or not args.summary or not args.summary.strip() or args.prompt:
+            parser.error("report needs a valid state and nonempty --summary")
+        if args.branch in ("completed", "failed") and (not args.checks or not args.checks.strip()):
+            parser.error("completed/failed reports require nonempty --checks")
+    elif args.summary is not None or args.checks is not None or args.commit:
+        parser.error("report fields require --report")
+    if (args.list or args.status) and (args.branch or args.prompt or args.model):
+        parser.error("read commands do not take launch arguments")
+    if args.report and args.model:
+        parser.error("--model applies only to launch")
+    if not (args.list or args.status or args.report) and (not args.branch or args.branch.startswith("-")):
+        parser.error("a new branch is required")
+    context = repository()
+    root, common, worktrees = context
+    state = root / ".codex-tasks"
+    no_symlink(state)
+    if args.list:
+        print(json.dumps([read(path) for path in sorted(state.glob("*.json"))], ensure_ascii=False, indent=2))
+    elif args.status or args.report:
+        task_id = args.status or args.report
+        if not re.fullmatch(r"[0-9a-f]{32}", task_id):
+            raise ValueError("invalid task ID")
+        data = read(state / f"{task_id}.json")
+        if args.status:
+            print(json.dumps(observe(data, root), ensure_ascii=False, indent=2))
+        else:
+            if not data["worktree"] or Path(git("rev-parse", "--show-toplevel")).resolve() != Path(data["worktree"]).resolve():
+                raise ValueError("report must run from the assigned worker worktree")
+            if git("symbolic-ref", "--short", "HEAD") != data["branch"]:
+                raise ValueError("worker is no longer on its assigned branch")
+            for commit in args.commit:
+                if not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", commit):
+                    raise ValueError("--commit requires a full commit SHA")
+                git("cat-file", "-e", commit + "^{commit}")
+            update(context, task_id, report=dict(state=args.branch, summary=args.summary,
+                   checks=args.checks, commits=args.commit, reported_at=now()))
+            print(f"codex-delegate: {task_id} reported {args.branch}")
+    else:
+        launch(args, context)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"codex-delegate: {error}", file=sys.stderr)
+        if isinstance(error, subprocess.CalledProcessError) and error.stderr:
+            print(error.stderr.strip(), file=sys.stderr)
+        if isinstance(error, PermissionError) or isinstance(error.__cause__, PermissionError):
+            print("Request supported require_escalated approval for this exact authorized operation; never weaken the sandbox or use a worktree-local fallback.", file=sys.stderr)
+        sys.exit(1)

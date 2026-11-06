@@ -79,6 +79,75 @@ Further documentation:
 - [Claude Code 1-hour cache writes](docs/claude-cache-writes.md)
 - [Isolating agent work under a dedicated user](docs/dev-user-isolation.md)
 
+## Codex task coordination
+
+The originating Codex agent can stay in its original checkout on `main`, launch
+workers, and inspect their results on demand. Claude/Bob delegation is unchanged.
+Existing launch and handoff behavior remains: `-m`/`--model` selects the model;
+without a prompt, `.agent-handoff.md` is required and moved into the new worktree.
+No installed settings or approval rules are changed by these commands.
+
+```bash
+codex-delegate -m gpt-6.1-sol feat/fix 'Fix the bug; run relevant checks and commit/push'
+codex-delegate --list
+codex-delegate --status TASK_ID
+```
+
+Launch prints a unique task ID. `--list` returns stored JSON without contacting
+tmux; `--status` adds on-demand pane identity, worktree presence, current branch
+head and whether reported commits remain ancestors of that branch. Both reads
+are read-only, require no tmux installation, and work from any linked worktree.
+Check actual diffs and test evidence before accepting a worker's completion:
+
+```bash
+git log --oneline main..feat/fix
+git diff main...feat/fix
+```
+
+The worker prompt includes concrete reporting instructions. From its assigned
+worktree and branch, the worker must explicitly run commands like these (replace
+TASK_ID and FULL_COMMIT_SHA with the launch ID and a full commit SHA):
+
+```bash
+codex-delegate --report TASK_ID running --summary 'Investigating the failure'
+codex-delegate --report TASK_ID needs-input --summary 'Need a decision about expected behavior'
+codex-delegate --report TASK_ID completed --summary 'Fixed the bug; no remaining work' --checks 'tests/run tests/test_example.sh: passed' --commit FULL_COMMIT_SHA
+codex-delegate --report TASK_ID failed --summary 'Dependency unavailable; implementation unfinished' --checks 'Test command failed: dependency missing'
+```
+
+Completed/failed reports require actual check commands/outcomes (or why checks
+were not run); repeat `--commit` for multiple commits. Explain when no commit is
+needed. Invalid reports fail without updating the stored result. Only the latest
+report is stored; these are explicit agent statements, not automatic telemetry.
+The launch prompt delegates branch commits/pushes unless the task overrides it.
+Workers also leave a final outcome in their tmux session if reporting is blocked.
+
+Records persist in the original checkout's untracked `.codex-tasks/`, shared
+across linked worktrees and retained after a worker worktree is deleted. Root
+validation follows `agent-backlog`; unsupported bare/separate-Git-directory
+layouts are rejected. Writes use a common Git metadata lock and atomic record
+replacement, and append `/.codex-tasks/` to common `info/exclude`; tracked task
+state blocks writes. Use the CLI for all writers. Launch/report writes from a
+linked worktree may need supported `require_escalated` approval after a sandbox
+denial. Request approval for that exact authorized command; automatic review
+still applies. Never change sandbox settings, broaden allow rules or fall back
+to worktree-local state. Reads never create files or change exclusions.
+
+Launch state (`starting`, `sent`, `failed`), worker report, and pane observation
+are independent. `sent` means input was sent, not that Codex started successfully.
+A pane token plus tmux server identity detects stale/reused panes; even a matching
+live pane proves neither progress nor success. Missing tmux/panes or deleted
+worktrees do not erase reports. Git refs may also disappear; status shows this
+separately. Status does not capture terminal output or authenticate worker claims.
+
+On partial launch failure the command exits nonzero, retains its record with
+an error, and leaves any created worktree/window and moved handoff in place for
+inspection. A crash can leave `starting`; report/storage permission failure may
+prevent the final launch update. Inspect the recorded paths and tmux before any
+manual recovery; do not blindly relaunch the same branch. Worker reports must be
+made before deleting the worker checkout. No daemon, polling, follow-up injection,
+automatic resume, cross-agent management, or automatic merge is provided.
+
 ## Shared future tasks
 
 From the primary checkout or any linked worktree:
