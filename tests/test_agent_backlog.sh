@@ -144,17 +144,36 @@ PY
 
 # Run the real installer/distribution in an isolated package and HOME. Stub
 # only unrelated settings/network installers; do not touch installed user data.
-package="$tmp/package"
-mkdir -p "$package/scripts" "$package/bin"
+python3 "$root/scripts/render-codex-instructions" --check
+package="$tmp/package with spaces"
+mkdir -p "$package/scripts" "$package/bin" "$package/lib"
 cp "$root/install" "$package/install"
 cp -R "$root/deploy" "$package/deploy"
 cp "$root/scripts/install-skill" "$package/scripts/"
+cp "$root/scripts/render-codex-instructions" "$package/scripts/"
+cp "$root/lib/skill_metadata.py" "$package/lib/"
 cp "$root/bin/agent-backlog" "$package/bin/"
+# A stale rendered file fails the check without rewriting it; regeneration
+# updates only the repository artifact, with no agent startup hook involved.
+printf '\nFixture instruction.\n' >> "$package/deploy/AGENTS.md"
+python3 "$package/scripts/render-codex-instructions" --check > /dev/null 2>&1 && {
+  echo 'stale Codex instructions accepted' >&2; exit 1;
+}
+cmp "$root/deploy/codex/AGENTS.md" "$package/deploy/codex/AGENTS.md"
+python3 "$package/scripts/render-codex-instructions"
+python3 "$package/scripts/render-codex-instructions" --check
+grep -q '^Fixture instruction\.$' "$package/deploy/codex/AGENTS.md"
+cp "$root/deploy/AGENTS.md" "$package/deploy/AGENTS.md"
+cp "$root/deploy/codex/AGENTS.md" "$package/deploy/codex/AGENTS.md"
 for script in install-rtk install-claude-settings install-bob-theme install-codex-theme \
   install-codex-compaction install-codex-subagent-model install-bob-settings \
   install-agent-hooks install-tools install-nix-tools install-claude-plugins; do
   printf '#!/usr/bin/env bash\nexit 0\n' > "$package/scripts/$script"
 done
+# An existing managed shared Codex link migrates to the Codex-specific file.
+mkdir -p "$HOME/.codex"
+ln -s "$package/deploy/AGENTS.md" "$HOME/.codex/AGENTS.md"
+bash "$package/install" > /dev/null
 bash "$package/install" > /dev/null
 for agent in .bob .claude .codex; do
   cmp "$root/deploy/skills/backlog/SKILL.md" "$HOME/$agent/skills/backlog/SKILL.md"
@@ -162,7 +181,53 @@ for agent in .bob .claude .codex; do
 done
 cmp "$root/deploy/AGENTS.md" "$HOME/.bob/rules/agent-config.md"
 cmp "$root/deploy/AGENTS.md" "$HOME/.claude/CLAUDE.md"
-cmp "$root/deploy/AGENTS.md" "$HOME/.codex/AGENTS.md"
+cmp "$root/deploy/codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
+[[ $(readlink "$HOME/.codex/AGENTS.md") == "$package/deploy/codex/AGENTS.md" ]]
+# Every mandatory reference resolves through the installed HOME path from
+# arbitrary repositories and linked worktrees, independently of agent/CWD.
+python3 - "$HOME" "$root" "$tmp/original with spaces False" "$tmp/original with spaces False linked" <<'PY'
+import os, pathlib, re, sys
+home, root, *repositories = map(pathlib.Path, sys.argv[1:])
+for repository in repositories:
+    os.chdir(repository)
+    for global_path in ('.bob/rules/agent-config.md', '.claude/CLAUDE.md', '.codex/AGENTS.md'):
+        text = (home / global_path).read_text()
+        references = re.findall(r'`\$HOME/([^`]+\.md)`', text)
+        codex = global_path.startswith('.codex/')
+        assert len(references) == (3 if codex else 1), references
+        shared = (root / 'deploy/AGENTS.md').read_text()
+        if codex:
+            assert text.startswith(shared.rstrip() + '\n\n')
+            assert 'only a user message exactly `approved`' in text
+            assert 'codex-deleted-worktree.md' in text
+        else:
+            assert text == shared
+            assert '## Codex' not in text
+            assert 'codex-git.md' not in text
+            assert 'codex-deleted-worktree.md' not in text
+        for reference in references:
+            installed = home / reference
+            assert installed.read_bytes() == (root / 'deploy/operations' / installed.name).read_bytes()
+    assert not (repository / '.local/share/agent-config/operations').exists()
+PY
+# Unknown Codex instruction links remain untouched, including broken links.
+codex_global="$HOME/.codex/AGENTS.md"
+rm "$codex_global"
+ln -s "$tmp/foreign-codex" "$codex_global"
+bash "$package/install" > /dev/null 2>&1 && { echo 'foreign Codex global link overwritten' >&2; exit 1; }
+[[ $(readlink "$codex_global") == "$tmp/foreign-codex" ]]
+rm "$codex_global"
+ln -s "$package/deploy/codex/AGENTS.md" "$codex_global"
+# Refuse to take over an existing reference installation from another source.
+references="$HOME/.local/share/agent-config/operations"
+rm "$references"
+ln -s "$tmp/foreign" "$references"
+bash "$package/install" > /dev/null 2>&1 && { echo 'foreign reference symlink overwritten' >&2; exit 1; }
+[[ $(readlink "$references") == "$tmp/foreign" ]]
+rm "$references"
+mkdir "$references"
+bash "$package/install" > /dev/null 2>&1 && { echo 'foreign reference directory overwritten' >&2; exit 1; }
+[[ -d "$references" && ! -L "$references" ]]
 [[ -x "$HOME/.local/bin/agent-backlog" ]]
 (cd "$tmp/original with spaces False linked" && PATH="$HOME/.local/bin:$PATH" agent-backlog add 'Installed CLI task')
 [[ $(tail -1 "$tmp/original with spaces False/.backlog.md") == '- [ ] Installed CLI task' ]]

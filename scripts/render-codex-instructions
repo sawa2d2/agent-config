@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Render Codex's global instructions; installation links the tracked result."""
+
+from pathlib import Path
+import sys
+
+root = Path(__file__).resolve().parent.parent
+shared = root / "deploy/AGENTS.md"
+specific = root / "deploy/codex/instructions.md"
+output = root / "deploy/codex/AGENTS.md"
+rendered = shared.read_text().rstrip() + "\n\n" + specific.read_text()
+
+if sys.argv[1:] == ["--check"]:
+    if not output.is_file() or output.read_text() != rendered:
+        sys.exit("Codex instructions are stale; run python3 scripts/render-codex-instructions")
+elif sys.argv[1:]:
+    sys.exit("Usage: render-codex-instructions [--check]")
+else:
+    output.write_text(rendered)

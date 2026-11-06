@@ -18,11 +18,28 @@ for source in "$repo_dir/deploy/skills"/*/; do
   bash "$repo_dir/scripts/install-skill" "$source" "${source##*/}"
 done
 
-# Link shared global instructions and Codex rules so repository updates take effect immediately.
+# Operational references live outside auto-loaded instruction/skill directories.
+# Their fixed HOME path works from any repository, including linked worktrees.
+dest="$HOME/.local/share/agent-config/operations"
+source="$repo_dir/deploy/operations"
+[[ -d "$source" ]] || { printf 'Missing operational references: %s\n' "$source" >&2; exit 1; }
+mkdir -p -- "${dest%/*}"
+if [[ -L "$dest" ]]; then
+  [[ "$(readlink "$dest")" == "$source" ]] || {
+    printf 'Refusing to replace existing symlink: %s\n' "$dest" >&2; exit 1;
+  }
+elif [[ -e "$dest" ]]; then
+  printf 'Refusing to replace existing path: %s\n' "$dest" >&2
+  exit 1
+else
+  ln -s -- "$source" "$dest"
+fi
+
+# Link shared/agent-specific globals and Codex rules for immediate repository updates.
 # Bob Shell reliably loads global instructions from ~/.bob/rules/.
 # Codex loads every *.rules file in ~/.codex/rules/.
 for link in "$HOME/.bob/rules/agent-config.md:AGENTS.md" "$HOME/.claude/CLAUDE.md:AGENTS.md" \
-  "$HOME/.codex/AGENTS.md:AGENTS.md" "$HOME/.codex/rules/agent-config.rules:codex/rules/agent-config.rules"; do
+  "$HOME/.codex/AGENTS.md:codex/AGENTS.md" "$HOME/.codex/rules/agent-config.rules:codex/rules/agent-config.rules"; do
   dest=${link%%:*}
   source="$repo_dir/deploy/${link#*:}"
   mkdir -p -- "${dest%/*}"
@@ -31,8 +48,13 @@ for link in "$HOME/.bob/rules/agent-config.md:AGENTS.md" "$HOME/.claude/CLAUDE.m
       printf 'SKIP: %s\n' "$dest"
       continue
     fi
-    printf 'Refusing to replace existing symlink: %s\n' "$dest" >&2
-    exit 1
+    # Migrate only this installer's former shared Codex instruction link.
+    if [[ "$dest" == "$HOME/.codex/AGENTS.md" && "$(readlink "$dest")" == "$repo_dir/deploy/AGENTS.md" ]]; then
+      rm -- "$dest"
+    else
+      printf 'Refusing to replace existing symlink: %s\n' "$dest" >&2
+      exit 1
+    fi
   fi
   if [[ -e "$dest" ]]; then
     [[ -f "$dest" ]] || { printf 'Refusing to replace non-file: %s\n' "$dest" >&2; exit 1; }

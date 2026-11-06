@@ -72,6 +72,8 @@ done
 fixture="$tmp/repo"
 mkdir -p "$fixture/deploy/skills" "$fixture/scripts" "$fixture/bin"
 cp "$root/install" "$fixture/install"
+cp -R "$root/deploy/operations" "$fixture/deploy/"
+cp -R "$root/deploy/codex" "$fixture/deploy/"
 printf 'fixture instructions\n' > "$fixture/deploy/AGENTS.md"
 cp "$root/bin/codex-ralph" "$fixture/bin/"
 for name in install-rtk install-claude-settings install-bob-theme install-codex-theme install-codex-compaction install-codex-subagent-model install-bob-settings install-agent-hooks install-tools install-nix-tools install-claude-plugins; do

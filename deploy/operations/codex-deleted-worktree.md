@@ -1,0 +1,3 @@
+# Deleted session worktree hook failure
+
+- Codex: only after operation results establish successful authorized deletion of the active session worktree (`gfinish` or explicit branch/worktree discard), treat subsequent `Hook failed: No such file or directory (os error 2)` as the known missing-session-cwd hook launch failure. This message alone requires no extra checks: do not investigate or retry deletion/merge, recreate the directory, or change/disable hooks because of it. Handle actual failed Git commands, unrelated hook errors, errors before deletion, and remaining explicitly authorized cleanup normally; run required remaining commands with an existing original-root workdir.

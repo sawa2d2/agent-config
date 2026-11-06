@@ -1,12 +1,17 @@
 # agent-config
 
 Shared configuration and tooling for Bob, Claude Code, and Codex: global
-instructions (`deploy/AGENTS.md`), skills, settings, hooks and CLI launchers.
+instructions (`deploy/AGENTS.md` and the Codex variant), skills, settings,
+hooks and CLI launchers.
 No dotfiles dependency.
 
 ## Install
 
-Requires Git; most scripts also need Python 3.
+Requires Git; most scripts also need Python 3. Merging an invocation default
+into an existing Codex skill `agents/openai.yaml` additionally requires PyYAML
+for that Python (`python3 -m pip install PyYAML`, or the OS package equivalent).
+The installer reports a missing parser and stops rather than editing YAML as
+text or silently leaving the policy unset. It does not install Python packages.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sawa2d2/agent-config/main/bootstrap.sh | bash
@@ -66,7 +71,7 @@ Installed by `./install` (`scripts/`):
 
 - Skills from `deploy/skills/` (`handoff`, `takeover`, `backlog`, `autonomous-development`) plus upstream skills, Spec Kit, rtk and Claude Code plugins (`install-tools`, `install-skill`, `install-rtk`, `install-claude-plugins`).
 - Agent settings and themes (`install-claude-settings`, `install-bob-settings`, `install-bob-theme`, `install-codex-theme`, `install-codex-compaction`, `install-codex-subagent-model`).
-- Codex rules (`deploy/codex/rules/agent-config.rules`, linked to `~/.codex/rules/`): `gfinish` runs outside the workspace-write sandbox, which cannot write a linked worktree's shared `.git`, the primary worktree or the network; gfinish's `approved` marker check still authorizes the merge. A gfinish chained after other commands still ran in the sandbox, so `deploy/AGENTS.md` also tells Codex to request `require_escalated` for gfinish and for sandbox-blocked Git writes. Only after operation results establish successful authorized deletion of the active session worktree (`gfinish` or explicit branch/worktree discard), subsequent `Hook failed: No such file or directory (os error 2)` is the known missing-session-cwd hook launch failure: Codex starts hooks in the deleted session directory. This message alone calls for no extra checks, deletion/merge investigation or retries, directory recreation, or hook changes/disabling. Actual failed Git commands, unrelated hook errors, errors before deletion, and remaining explicitly authorized cleanup still need ordinary handling; required remaining commands must use an existing original-root workdir.
+- Codex rules (`deploy/codex/rules/agent-config.rules`, linked to `~/.codex/rules/`): `gfinish` runs outside the workspace-write sandbox; its `approved` marker still authorizes the merge. Detailed Git approval, conflict recovery, sandbox and deleted-worktree hook procedures are in [on-demand operations](deploy/operations/).
 - Hooks (`install-agent-hooks`): tmux window status (`agent-tmux-status`), `approved` merge marker (`agent-approval-marker`), handoff suggestions and rtk output compression.
 
 Further documentation:
@@ -247,8 +252,57 @@ Bob subagents (`spawn_subagent`), Claude Code subagents, or Codex subagents
 The parent defines commands and scope, reviews results, and handles fixes and
 Git operations; the child runs checks directly and reports exit statuses and
 failure evidence. Unavailable delegation or missing results never count as a pass.
-`./install` links the shared rules to `~/.bob/rules/agent-config.md`,
-`~/.claude/CLAUDE.md`, and `~/.codex/AGENTS.md`; no installer changes are needed.
+All three installed variants contain the same shared Verification section.
+
+## On-demand global procedures
+
+`deploy/AGENTS.md` keeps shared engineering principles, test delegation and
+safety rules always loaded. Bob and Claude load that shared file; Codex loads
+it plus `deploy/codex/instructions.md`, rendered into `deploy/codex/AGENTS.md`.
+Codex's approval, Git escalation, coordinator and deleted-worktree triggers
+therefore reach only Codex. All agents retain the mandatory delegation
+procedure trigger. Backlog storage/consultation and handoff creation/resumption
+require the existing `backlog`, `handoff` and `takeover` skills only at their
+respective triggers; storage, permission and note-lifecycle details stay there.
+
+| Installed path | Linked repository file |
+| --- | --- |
+| `~/.bob/rules/agent-config.md` | `deploy/AGENTS.md` |
+| `~/.claude/CLAUDE.md` | `deploy/AGENTS.md` |
+| `~/.codex/AGENTS.md` | `deploy/codex/AGENTS.md` |
+
+After editing either instruction source, run
+`python3 scripts/render-codex-instructions` and commit the rendered file too.
+The distribution test checks that it is current. These tracked files keep the
+existing immediate-update symlink behavior without startup rendering or a
+new always-on workflow. Rerun `./install` once to migrate Codex's former shared
+link; only the exact legacy target from this checkout is migrated, and foreign
+symlinks remain untouched. The rendering command only writes repository files.
+
+Mandatory triggers direct agents to read only the applicable operational
+reference before delegation/coordination/reporting, Codex finalization/Git
+escalation, or the confirmed deleted-worktree hook failure. These references
+are not a new skill or automatically invoked workflow.
+
+`./install` links `deploy/operations/` to
+`$HOME/.local/share/agent-config/operations/`, outside all agents' auto-loaded
+instruction and skill directories. This fixed path works from arbitrary
+repositories and linked worktrees; it does not depend on the session CWD or
+resolving the global instruction symlink. Existing foreign links/directories
+are refused. Rerun the installer after updating to create this link before
+using the shortened global instructions; repair a missing reference rather
+than skipping its mandatory procedure.
+
+For skills with `disable-model-invocation: true`, `install-skill` fills an
+unspecified Codex `policy.allow_implicit_invocation` with `false`, including
+upstream metadata that contains only `interface` fields. Other parsed YAML
+fields are preserved; an explicit policy choice is left byte-for-byte intact.
+When adding the default, YAML comments/formatting may change. Invalid YAML,
+duplicate keys or a non-mapping policy fail before replacing that Codex copy.
+Bob/Claude copies and upstream sources are unchanged by the conversion.
+Managed installed skills need a separate authorized reinstall to receive it;
+repository changes alone do not rewrite real user settings. This does not
+guarantee removal of skill metadata from the initial model context.
 
 ## Tests
 

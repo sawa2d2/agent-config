@@ -63,6 +63,85 @@ printf 'policy:\n  allow_implicit_invocation: true\n' > "$tmp/src/demo/agents/op
 install_skill "$tmp/src/demo" demo > /dev/null
 cmp "$tmp/src/demo/agents/openai.yaml" "$HOME/.codex/skills/demo/agents/openai.yaml" || fail 'explicit metadata changed'
 
+# Display-only upstream metadata gets the policy while retaining nested fields.
+cat > "$tmp/src/demo/agents/openai.yaml" <<'YAML'
+interface:
+  display_name: "Demo: # quoted"
+  short_description: |
+    Keep this description.
+    And this line.
+  brand_color: '#123456'
+dependencies:
+  tools:
+    - type: mcp
+      value: demo
+      description: "A tool"
+extra: [one, {two: 2}]
+YAML
+install_skill "$tmp/src/demo" demo > /dev/null
+python3 - "$tmp/src/demo/agents/openai.yaml" "$HOME/.codex/skills/demo/agents/openai.yaml" <<'PY'
+import pathlib, sys, yaml
+source, installed = [yaml.safe_load(pathlib.Path(p).read_text()) for p in sys.argv[1:]]
+assert 'policy' not in source
+assert installed.pop('policy') == {'allow_implicit_invocation': False}
+assert installed == source
+PY
+cp "$HOME/.codex/skills/demo/agents/openai.yaml" "$tmp/first.yaml"
+install_skill "$tmp/src/demo" demo > /dev/null
+cmp "$tmp/first.yaml" "$HOME/.codex/skills/demo/agents/openai.yaml" || fail 'repeat installation changed metadata'
+# A missing parser fails clearly without modifying existing metadata. New
+# metadata needs no external parser, including on a minimal Python install.
+python3 -S "$root/lib/skill_metadata.py" "$tmp/first.yaml" > "$tmp/parser-error" 2>&1 && fail 'missing parser accepted'
+grep -q 'requires PyYAML' "$tmp/parser-error" || fail 'missing parser not explained'
+cmp "$tmp/first.yaml" "$HOME/.codex/skills/demo/agents/openai.yaml" || fail 'parser failure changed metadata'
+python3 -S "$root/lib/skill_metadata.py" "$tmp/no-parser/openai.yaml"
+[[ $(cat "$tmp/no-parser/openai.yaml") == $'policy:\n  allow_implicit_invocation: false' ]] || fail 'new metadata requires parser'
+cmp "$tmp/src/demo/agents/openai.yaml" "$HOME/.bob/skills/demo/agents/openai.yaml" || fail 'Bob metadata changed'
+cmp "$tmp/src/demo/agents/openai.yaml" "$HOME/.claude/skills/demo/agents/openai.yaml" || fail 'Claude metadata changed'
+
+# Existing policy fields survive; explicit true/false choices remain byte-identical.
+printf 'interface: {display_name: Demo}\npolicy: {other: keep}\n' > "$tmp/src/demo/agents/openai.yaml"
+install_skill "$tmp/src/demo" demo > /dev/null
+python3 - "$HOME/.codex/skills/demo/agents/openai.yaml" <<'PY'
+import pathlib, sys, yaml
+assert yaml.safe_load(pathlib.Path(sys.argv[1]).read_text()) == {
+    'interface': {'display_name': 'Demo'},
+    'policy': {'other': 'keep', 'allow_implicit_invocation': False},
+}
+PY
+# Aliases and merge keys retain their unrelated values; adding to an aliased
+# policy must not mutate the defaults it shares with another field.
+for policy in '*defaults' '{<<: *defaults, extra: preserved}'; do
+  printf 'defaults: &defaults {other: keep}\npolicy: %s\n' "$policy" > "$tmp/src/demo/agents/openai.yaml"
+  install_skill "$tmp/src/demo" demo > /dev/null
+  python3 - "$HOME/.codex/skills/demo/agents/openai.yaml" <<'PY'
+import pathlib, sys, yaml
+metadata = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text())
+assert metadata['defaults'] == {'other': 'keep'}
+assert metadata['policy']['other'] == 'keep'
+assert metadata['policy']['allow_implicit_invocation'] is False
+if 'extra' in metadata['policy']:
+    assert metadata['policy']['extra'] == 'preserved'
+PY
+done
+for choice in true false; do
+  printf '# Preserve explicit choice\ninterface: {display_name: Demo}\npolicy: {allow_implicit_invocation: %s, other: keep}\n' "$choice" > "$tmp/src/demo/agents/openai.yaml"
+  install_skill "$tmp/src/demo" demo > /dev/null
+  install_skill "$tmp/src/demo" demo > /dev/null
+  cmp "$tmp/src/demo/agents/openai.yaml" "$HOME/.codex/skills/demo/agents/openai.yaml" || fail "explicit $choice changed"
+done
+
+# Invalid/ambiguous YAML fails before replacing the installed Codex copy and
+# cleans staging directories; no unsafe parser fallback drops upstream data.
+cp "$HOME/.codex/skills/demo/agents/openai.yaml" "$tmp/last-good.yaml"
+for metadata in 'interface: [' 'policy: nope' 'interface: first\ninterface: second'; do
+  printf '%b\n' "$metadata" > "$tmp/src/demo/agents/openai.yaml"
+  install_skill "$tmp/src/demo" demo "$HOME/.codex/skills" > /dev/null 2>&1 && fail 'invalid metadata accepted'
+  cmp "$tmp/last-good.yaml" "$HOME/.codex/skills/demo/agents/openai.yaml" || fail 'installed copy changed on failure'
+  [[ -z $(find "$HOME/.codex/skills" -maxdepth 1 -name '.agent-config.*' -print) ]] || fail 'staging directory leaked'
+done
+printf 'policy:\n  allow_implicit_invocation: true\n' > "$tmp/src/demo/agents/openai.yaml"
+
 # Custom Codex homes receive the same policy; body examples are not frontmatter.
 export CODEX_HOME="$tmp/custom-codex"
 install_skill "$tmp/src/demo" demo > /dev/null
@@ -71,8 +150,14 @@ mkdir -p "$tmp/src/explicit"
 printf -- '---\nname: explicit\ndescription: d\ndisable-model-invocation: true\n---\nbody\n' > "$tmp/src/explicit/SKILL.md"
 install_skill "$tmp/src/explicit" explicit > /dev/null
 [[ $(cat "$CODEX_HOME/skills/explicit/agents/openai.yaml") == $'policy:\n  allow_implicit_invocation: false' ]] || fail 'custom home policy missing'
+install_skill "$tmp/src/explicit" explicit > /dev/null
+[[ $(cat "$CODEX_HOME/skills/explicit/agents/openai.yaml") == $'policy:\n  allow_implicit_invocation: false' ]] || fail 'repeat no-metadata installation changed policy'
 mkdir -p "$tmp/src/body"
 printf -- '---\nname: body\ndescription: d\n---\ndisable-model-invocation: true\n' > "$tmp/src/body/SKILL.md"
 install_skill "$tmp/src/body" body > /dev/null
 [[ ! -e "$CODEX_HOME/skills/body/agents/openai.yaml" ]] || fail 'body treated as frontmatter'
+mkdir -p "$tmp/src/body/agents"
+printf 'interface: {display_name: Body}\n' > "$tmp/src/body/agents/openai.yaml"
+install_skill "$tmp/src/body" body > /dev/null
+cmp "$tmp/src/body/agents/openai.yaml" "$CODEX_HOME/skills/body/agents/openai.yaml" || fail 'unrestricted metadata changed'
 echo 'PASS: install-skill'

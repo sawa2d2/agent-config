@@ -45,8 +45,18 @@ No Office/browser override is installed: there are no matching targets, and
 rewriting unmanaged plugin caches or disabling skills would not preserve the
 requested ownership and explicit-invocation boundaries. If matching skills are
 introduced later, review their ownership and existing invocation policy before
-adding a targeted default. Superpowers policy conversion belongs to the
-separate `scripts/install-skill` / `scripts/install-tools` work.
+adding a targeted default.
+
+`scripts/install-tools` already marks upstream skills explicit-only and
+excludes `using-superpowers`/`diagnosing-superpowers`. `scripts/install-skill`
+now translates that frontmatter even when an upstream `agents/openai.yaml`
+already contains display metadata: it preserves parsed fields and fills only
+an unspecified `policy.allow_implicit_invocation` with `false`. Explicit
+existing choices remain unchanged. This requires PyYAML when metadata exists;
+see [installation and rollout](../README.md#on-demand-global-procedures).
+The previously installed display-only metadata for `domain-modeling`,
+`grill-me` and `grilling` needs a separate authorized reinstall. Fixture tests
+do not update those real installed copies or prove runtime policy enforcement.
 
 ## Verification and limits
 
