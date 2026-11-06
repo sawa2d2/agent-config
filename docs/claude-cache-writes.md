@@ -2,7 +2,7 @@
 
 Assessment of the week starting 2026-11-02 (JST), Claude Code 2.1.289, from
 `~/.claude/projects/**/*.jsonl` (85 transcripts, about 2,500 requests). Weighted
-as in `bin/claude-stats`: 1-hour cache writes were 29% of weighted tokens, cache
+as in `ai-stats claude`: 1-hour cache writes were 29% of weighted tokens, cache
 reads 53%, output 18%, 5-minute writes and uncached input about 0%.
 
 ## Method

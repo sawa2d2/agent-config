@@ -8,7 +8,7 @@ export HOME="$tmp/home" TZ=UTC
 fail() { echo "FAIL: $*" >&2; exit 1; }
 rows() { grep -Ec '^[0-9]{4}-[0-9]{2}-[0-9]{2} '; } # week rows, after the legend and header
 
-[[ $("$root/bin/bob-stats" 2>&1) == 'bob-stats: database not found: '* ]] || fail 'missing database'
+[[ $("$root/bin/ai-stats" bob 2>&1) == 'ai-stats bob: database not found: '* ]] || fail 'missing database'
 
 # Subset of Bob Shell's schema (observed in 2.0.9). Tasks a and d were created now, c a week
 # ago, b on 2026-01-01 (week of 2025-12-29). Subagent s of a was created a week ago but counts
@@ -21,7 +21,7 @@ import json, os, sqlite3, time
 db = sqlite3.connect(os.environ["DB"])
 db.executescript("""
 CREATE TABLE tasks (id TEXT PRIMARY KEY, parent_id TEXT, costs TEXT, created_at INTEGER NOT NULL,
-  task_type TEXT NOT NULL DEFAULT 'normal', env TEXT);
+  task_type TEXT NOT NULL DEFAULT 'normal', env TEXT, directory TEXT NOT NULL DEFAULT '');
 CREATE TABLE messages (id TEXT PRIMARY KEY, task_id TEXT NOT NULL, role TEXT NOT NULL, data TEXT NOT NULL,
   created_at INTEGER NOT NULL);
 """)
@@ -30,7 +30,7 @@ week = 7 * 86400000
 def task(id, created, cost, parent=None, type="normal", model=None):
     costs = None if cost is None else json.dumps({"cost": cost, "contextTokens": 0})
     env = json.dumps({"id": id, **({"model": model} if model else {})})
-    db.execute("INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?)", (id, parent, costs, created, type, env))
+    db.execute("INSERT INTO tasks (id, parent_id, costs, created_at, task_type, env) VALUES (?, ?, ?, ?, ?, ?)", (id, parent, costs, created, type, env))
 premium = {"id": "premium-ide", "contextWindow": 270000, "maxOutputTokens": 64000}
 task("a", now, 0.6, model=premium)
 task("b", 1767225600000, 0.05)
@@ -57,7 +57,7 @@ monday=$(date -d "-$(( $(date +%u) - 1 )) days" +%F)
 # By default the last 10 weeks show; only assistant messages with spend count.
 # This week's row shows cost and cost per request as a percentage of last week's, even when -w 1 hides it,
 # then the median, 90th percentile and maximum of the task costs 0.2 (d), 0.6 (a and s) and 1.0 (t).
-out=$("$root/bin/bob-stats")
+out=$("$root/bin/ai-stats" bob)
 grep -Fqx 'per req  = cost / requests' <<< "$out" || fail "legend: $out"
 grep -Fqx 'task p50, task p90, task max' <<< "$out" || fail "legend: $out"
 grep -Eqx "$monday +3 +5 +21,800 +1.80 +0.360 +225.0% +45.0% +0.60 +0.92 +1.00" <<< "$out" || fail "this week: $out"
@@ -71,12 +71,12 @@ grep -Fqx 'model: premium-ide, contextWindow 270,000 (tasks: 2)' <<< "$out" || f
 grep -Fqx 'model: other, contextWindow 128,000 (tasks: 1)' <<< "$out" || fail "model: $out"
 grep -Fqx 'model: not recorded (tasks: 2)' <<< "$out" || fail "model: $out"
 [[ $(rows <<< "$out") == 4 ]] || fail "default weeks: $out"
-out1=$("$root/bin/bob-stats" -w 1)
+out1=$("$root/bin/ai-stats" bob -w 1)
 [[ $(rows <<< "$out1") == 2 ]] || fail "-w 1 rows: $out1"
 grep -Fx "$(grep -m1 "^$monday" <<< "$out")" <<< "$out1" >/dev/null || fail "ratio with -w 1: $out1"
 grep -Fqx 'model: not recorded (tasks: 1)' <<< "$out1" || fail "-w 1 model: $out1"
 # -w 0 shows every week.
-out=$("$root/bin/bob-stats" -w 0)
+out=$("$root/bin/ai-stats" bob -w 0)
 grep -Eqx '2025-12-29 +1 +1 +500 +0.05 +0.050 +- +- +0.05 +0.05 +0.05' <<< "$out" || fail "all weeks: $out"
 grep -Eqx '2025-12-29 +500 +500 +500 +0.0% +0.0% +0' <<< "$out" || fail "all weeks: $out"
 [[ $(rows <<< "$out") == 6 ]] || fail "all weeks: $out"
@@ -91,14 +91,14 @@ import json, os, sqlite3, time
 db = sqlite3.connect(os.environ["DB"])
 now = int(time.time() * 1000)
 hour = 3600000
-db.execute("INSERT INTO tasks VALUES ('e', NULL, ?, ?, 'normal', NULL)", (json.dumps({"cost": 0.6}), now - 7 * hour))
+db.execute("INSERT INTO tasks (id, parent_id, costs, created_at, task_type, env) VALUES ('e', NULL, ?, ?, 'normal', NULL)", (json.dumps({"cost": 0.6}), now - 7 * hour))
 for id, created, meta in [("e1", now - 7 * hour, {"spend": {"cost": 0.5, "contextTokens": 5000}}),
                           ("e2", now - hour, {"spend": {"cost": 0.1, "contextTokens": 1000}}),
                           ("e3", now - hour, {"summary": True})]:
     db.execute("INSERT INTO messages VALUES (?, 'e', 'assistant', ?, ?)", (id, json.dumps({"_meta": meta}), created))
 db.commit()
 PY
-out=$("$root/bin/bob-stats" --window 5h -w 2)
+out=$("$root/bin/ai-stats" bob --window 5h -w 2)
 grep -Eq '^start +tasks ' <<< "$out" || fail "window header: $out"
 grep -Fq 'start    = start (local time) of each 5h window, the last ending now; each' <<< "$out" || fail "window legend: $out"
 [[ $(rows <<< "$out") == 4 ]] || fail "window rows: $out"
@@ -106,4 +106,4 @@ grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +1 +1 +5,000 +0.50 +0.500 +- +- +0.60 +0
 grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +1 +1 +1,000 +0.10 +0.100 +20.0% +20.0% +0.60 +0.60 +0.60' <<< "$out" || fail "current window: $out"
 grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +1,000 +1,000 +1,000 +0.0% +0.0% +1' <<< "$out" || fail "context current window: $out"
 
-echo 'PASS: bob-stats'
+echo 'PASS: ai-stats bob'

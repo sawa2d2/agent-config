@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Weekly token usage and cost from Bob Shell tasks.
 
 Reads ~/.bob/db/bob.db read-only. Bob stores, per model request, the cost and
@@ -22,18 +21,19 @@ the percentage applies to. Bob 2.0.9 keeps the "Compacted N messages" text only
 in telemetry, but each compaction stores one assistant message marked
 _meta.summary, which later compactions keep.
 """
-import argparse
 import json
-import re
+import math
 import sqlite3
-import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
+
+from . import ratio
 
 DB_PATH = Path.home() / ".bob/db/bob.db"
 COMPACT_TARGET = 100_000  # tokens; the context size every agent is set to compact at
 LEGEND = """\
-cost     = sum of spend.cost over requests [as recorded by Bob]
+cost     = sum of spend.cost over requests [as recorded by Bob; not an invoice]
+unknown  = measurement not recorded; input/output/cache/reasoning are unavailable
 per req  = cost / requests
 ctx/req  = sum of spend.contextTokens / requests [tokens]
 {vs_prev}task p50, task p90, task max
@@ -50,18 +50,22 @@ model    = tasks.env model id and contextWindow [tokens], with the tasks recordi
            of contextWindow
 {column}"""
 
+SPLIT_ROWS = [("requests", "requests"), ("cost", "recorded"),
+              ("context", "tokens"), ("context_per_request", "tokens"),
+              ("context_p50", "tokens"), ("context_p90", "tokens"), ("context_max", "tokens"),
+              ("compactions", "count")]
+SPLIT_LEGEND = ("values are per session (budget-owning task, subagents included); "
+                "unknown means not recorded")
+
 
 def local_time(ms):
     return datetime.fromtimestamp(ms / 1000).astimezone()
 
 
-def ratio(previous, current):
-    """This window as a percentage of the previous one; '-' without one or from zero."""
-    return "-" if not previous else f"{current / previous * 100:.1f}%"
-
-
 def percentile(values, fraction):
     """Linear interpolation between the closest ranks of the sorted values."""
+    if not values or any(not math.isfinite(v) for v in values):
+        return float("nan")
     position = (len(values) - 1) * fraction
     low = int(position)
     high = min(low + 1, len(values) - 1)
@@ -69,7 +73,7 @@ def percentile(values, fraction):
 
 
 def share(part, whole):
-    return "-" if not whole else f"{part / whole * 100:.1f}%"
+    return "-" if not whole or not math.isfinite(whole) or not math.isfinite(part) else f"{part / whole * 100:.1f}%"
 
 
 def recorded_cost(costs):
@@ -77,73 +81,25 @@ def recorded_cost(costs):
         cost = json.loads(costs)["cost"]
     except (TypeError, ValueError, KeyError):
         return None
-    return cost if isinstance(cost, (int, float)) else None
+    return cost if isinstance(cost, (int, float)) and math.isfinite(cost) else None
 
 
-def window_spec(value):
-    """argparse type: 'week' or a length such as 5h, 2d or 1w."""
-    if value != "week" and not re.fullmatch(r"[1-9][0-9]*[hdw]", value):
-        raise argparse.ArgumentTypeError(f"expected week or a length such as 5h, 2d, 1w: {value!r}")
-    return value
+def measured(value):
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) else float("nan")
 
 
-class Windows:
-    """Local weeks from Monday ('week'), or consecutive windows of a fixed
-    length, the last ending now; `count` of them are shown (0: all)."""
-
-    def __init__(self, spec, count):
-        self.spec, self.count = spec, count
-        self.weekly = spec == "week"
-        now = datetime.now().astimezone()
-        if self.weekly:
-            self.step, self.unit, self.heading, self.width = timedelta(weeks=1), "week", "week", 12
-            today = now.date()
-            self.first = today - timedelta(days=today.weekday(), weeks=count - 1)
-        else:
-            units = {"h": "hours", "d": "days", "w": "weeks"}
-            self.step = timedelta(**{units[spec[-1]]: int(spec[:-1])})
-            self.unit, self.heading, self.width = "window", "start", 18
-            self.end = now
-            self.first = now - self.step * count
-
-    def key(self, time):
-        """The week's Monday, or the start time of the window containing `time`."""
-        if self.weekly:
-            day = time.astimezone().date()
-            return day - timedelta(days=day.weekday())
-        return self.end - self.step * ((self.end - time) // self.step + 1)
-
-    def shown(self, key):
-        return not self.count or key >= self.first
-
-    def label(self, key):
-        return f"{key.isoformat() if self.weekly else key.astimezone().strftime('%Y-%m-%d %H:%M'):<{self.width}}"
-
-    def vs_prev(self):
-        u = self.unit
-        return f"vs prev  = this {u} / previous {u} * 100 [%] (-: no previous {u}, or it was 0)\n"
-
-    def column(self, item, event="started"):
-        """Legend line defining the first column and what counts in it."""
-        if self.weekly:
-            return f"week     = Monday (local time) of the week each {item} {event}\n"
-        return (f"start    = start (local time) of each {self.spec} window, the last ending now; each\n"
-                f"           request counts in the window of its timestamp, and each {item} in\n"
-                f"           every window it has requests in\n")
+def known(value):
+    return value if math.isfinite(value) else None
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--window", type=window_spec, default="week",
-                        help="aggregation window: week (local, from Monday) or a length such as "
-                             "5h, 2d, 1w ending now (default: week)")
-    parser.add_argument("-w", "--windows", "--weeks", type=int, default=10,
-                        help="windows shown, including the current one (0: all; default: 10)")
-    args = parser.parse_args()
+def fmt(value, spec=",.0f"):
+    return format(value, spec) if math.isfinite(value) else "unknown"
+
+
+def read_sessions():
     if not DB_PATH.is_file():
-        sys.exit(f"bob-stats: database not found: {DB_PATH}")
+        raise SystemExit(f"ai-stats bob: database not found: {DB_PATH}")
 
-    windows = Windows(args.window, args.windows)
     db = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     tasks = {task_id: (parent, task_type, created, costs, env) for task_id, parent, task_type, created, costs, env
              in db.execute("SELECT id, parent_id, task_type, created_at, costs, env FROM tasks")}
@@ -154,25 +110,76 @@ def main():
             task_id = tasks[task_id][0]
         return task_id
 
+    projects = dict(db.execute("SELECT id, directory FROM tasks"))
+    sessions = {}
+    for task_id, data, created in db.execute(
+            "SELECT task_id, data, created_at FROM messages WHERE role = 'assistant' "
+            "AND task_id IN (SELECT id FROM tasks)"):
+        try:
+            meta = json.loads(data).get("_meta", {})
+        except (ValueError, AttributeError):
+            continue
+        if not isinstance(meta, dict):
+            continue
+        owner = limited(task_id)
+        row = sessions.setdefault(owner, {"id": owner, "start": local_time(tasks[owner][2]),
+            "project": projects.get(owner) or "", "requests": 0, "cost": 0.0,
+            "context": 0, "contexts": [], "compactions": 0, "models": [],
+            "request_times": [], "_models": [],
+            "input": None, "output": None, "cache_read": None, "cache_write": None,
+            "reasoning": None, "task_cost": recorded_cost(tasks[owner][3])})
+        if meta.get("summary") is True:
+            row["compactions"] += 1
+        spend = meta.get("spend")
+        if isinstance(spend, dict):
+            row["requests"] += 1
+            row["cost"] += measured(spend.get("cost"))
+            context = measured(spend.get("contextTokens"))
+            row["context"] += context
+            row["contexts"].append(context)
+        row["request_times"].append((meta, created))
+    for task_id, (_, _, _, _, env) in tasks.items():
+        row = sessions.get(limited(task_id))
+        if row is None:
+            continue
+        try:
+            model = json.loads(env).get("model")
+        except (ValueError, TypeError, AttributeError):
+            model = None
+        model = ({"id": model.get("id"), "contextWindow": model.get("contextWindow")}
+                 if isinstance(model, dict) else {"id": None, "contextWindow": None})
+        row["_models"].append(model)
+        if model not in row["models"]:
+            row["models"].append(model)
+    for row in sessions.values():
+        contexts = sorted(row.pop("contexts"))
+        row["context_p50"] = known(percentile(contexts, .5))
+        row["context_p90"] = known(percentile(contexts, .9))
+        row["context_max"] = known(percentile(contexts, 1))
+        row["cost"] = known(row["cost"])
+        row["context"] = known(row["context"])
+        row["context_per_request"] = (row["context"] / row["requests"]
+                                      if row["context"] is not None and row["requests"] else None)
+    db.close()
+    return sessions.values()
+
+
+def print_windows(sessions, windows):
+    sessions = {row["id"]: row for row in sessions}
     weeks = {}
     compactions = {}
-    rows = db.execute("SELECT task_id, data, created_at FROM messages WHERE role = 'assistant' "
-                      "AND task_id IN (SELECT id FROM tasks)")
-    for task_id, data, created in rows:
-        try:
-            meta = json.loads(data)["_meta"]
-        except (json.JSONDecodeError, KeyError, TypeError):
-            continue
-        task_id = limited(task_id)
-        week = windows.key(local_time(tasks[task_id][2] if windows.weekly else created))
+    messages = ((row["id"], meta, created) for row in sessions.values()
+                for meta, created in row["request_times"])
+    for task_id, meta, created in messages:
+        week = windows.key(sessions[task_id]["start"] if windows.weekly else local_time(created))
         if meta.get("summary") is True:
             compactions[week] = compactions.get(week, 0) + 1
-        if "spend" not in meta:
+        if not isinstance(meta.get("spend"), dict):
             continue
         spend = meta["spend"]
         w = weeks.setdefault(week, {"tasks": {}, "requests": 0, "context": 0, "cost": 0.0, "contexts": []})
-        cost = spend.get("cost", 0) or 0
-        context = spend.get("contextTokens", 0) or 0
+        cost = measured(spend.get("cost"))
+        context = measured(spend.get("contextTokens"))
         w["tasks"][task_id] = w["tasks"].get(task_id, 0) + cost
         w["requests"] += 1
         w["context"] += context
@@ -180,7 +187,7 @@ def main():
         w["cost"] += cost
     for w in weeks.values():
         # Summed message spend stands in when Bob recorded no task cost.
-        w["task costs"] = sorted(c if (c := recorded_cost(tasks[task_id][3])) is not None else summed
+        w["task costs"] = sorted(c if (c := sessions[task_id]["task_cost"]) is not None else summed
                                  for task_id, summed in w["tasks"].items())
 
     print(LEGEND.format(unit=windows.unit, vs_prev=windows.vs_prev(), column=windows.column("task", "was created")))
@@ -193,10 +200,10 @@ def main():
         per_request = w["cost"] / w["requests"]
         costs = w["task costs"]
         print(f"{windows.label(week)}{len(w['tasks']):>8}{w['requests']:>10,}"
-              f"{w['context'] / w['requests']:>15,.0f}{w['cost']:>10.2f}{per_request:>10.3f}"
+              f"{fmt(w['context'] / w['requests']):>15}{fmt(w['cost'], '.2f'):>10}{fmt(per_request, '.3f'):>10}"
               f"{ratio(previous and previous['cost'], w['cost']):>14}"
               f"{ratio(previous and previous['cost'] / previous['requests'], per_request):>17}"
-              f"{percentile(costs, 0.5):>10.2f}{percentile(costs, 0.9):>10.2f}{costs[-1]:>10.2f}")
+              f"{fmt(percentile(costs, 0.5), '.2f'):>10}{fmt(percentile(costs, 0.9), '.2f'):>10}{fmt(percentile(costs, 1), '.2f'):>10}")
 
     print()
     print(f"{windows.heading:<{windows.width}}{'ctx p50':>10}{'ctx p90':>10}{'ctx max':>10}{'>100k req':>11}{'>100k ctx':>11}{'compacts':>10}")
@@ -205,21 +212,18 @@ def main():
             continue
         contexts = sorted(w["contexts"])
         above = [c for c in contexts if c > COMPACT_TARGET]
-        print(f"{windows.label(week)}{percentile(contexts, 0.5):>10,.0f}{percentile(contexts, 0.9):>10,.0f}"
-              f"{contexts[-1]:>10,}{share(len(above), len(contexts)):>11}"
+        print(f"{windows.label(week)}{fmt(percentile(contexts, 0.5)):>10}{fmt(percentile(contexts, 0.9)):>10}"
+              f"{fmt(percentile(contexts, 1)):>10}{(share(len(above), len(contexts)) if all(math.isfinite(c) for c in contexts) else '-'):>11}"
               f"{share(sum(above), w['context']):>11}{compactions.get(week, 0):>10}")
 
     # Bob picks the model; the compaction percentage only means something against its window.
     models = {}
-    for task_id, (_, _, _, _, env) in tasks.items():
-        if not windows.shown(windows.key(local_time(tasks[limited(task_id)][2]))):
+    for row in sessions.values():
+        if not windows.shown(windows.key(row["start"])):
             continue
-        try:
-            model = json.loads(env)["model"]
-            key = (str(model["id"]), model.get("contextWindow"))
-        except (TypeError, ValueError, KeyError, AttributeError):
-            key = None
-        models[key] = models.get(key, 0) + 1
+        for model in row["_models"]:
+            key = (str(model["id"]), model["contextWindow"]) if model["id"] is not None else None
+            models[key] = models.get(key, 0) + 1
     print()
     for key, count in sorted(models.items(), key=lambda item: -item[1]):
         if key is None:
@@ -227,6 +231,3 @@ def main():
         else:
             window = f"{key[1]:,}" if isinstance(key[1], int) else "-"
             print(f"model: {key[0]}, contextWindow {window} (tasks: {count})")
-
-if __name__ == "__main__":
-    main()

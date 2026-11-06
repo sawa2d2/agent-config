@@ -7,7 +7,7 @@ trap 'rm -rf -- "$tmp"' EXIT
 export CODEX_HOME="$tmp/codex" TZ=UTC
 fail() { echo "FAIL: $*" >&2; exit 1; }
 rows() { grep -Ec '^[0-9]{4}-[0-9]{2}-[0-9]{2} '; } # week rows, after the legend and header
-stats() { "$root/bin/codex-stats" "$@"; }
+stats() { "$root/bin/ai-stats" codex "$@"; }
 record() { # timestamp response_id input cached output
   printf '{"timestamp":"%s","type":"token_usage_record","payload":{"response_id":"%s","usage":{"input_tokens":%d,"cached_input_tokens":%d,"cache_write_input_tokens":0,"output_tokens":%d,"reasoning_output_tokens":0,"total_tokens":%d}}}\n' \
     "$1" "$2" "$3" "$4" "$5" $(($3 + $5))
@@ -63,4 +63,4 @@ grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +1 +1 +100 +100 +- +-' <<< "$out" || fai
 grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +2 +2 +20 +10 +20.0% +10.0%' <<< "$out" || fail "current window: $out"
 ! stats --window 0h 2>/dev/null || fail 'invalid window'
 
-echo 'PASS: codex-stats'
+echo 'PASS: ai-stats codex'
