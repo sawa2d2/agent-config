@@ -276,8 +276,9 @@ After editing either instruction source, run
 The distribution test checks that it is current. These tracked files keep the
 existing immediate-update symlink behavior without startup rendering or a
 new always-on workflow. Rerun `./install` once to migrate Codex's former shared
-link; only the exact legacy target from this checkout is migrated, and foreign
-symlinks remain untouched. The rendering command only writes repository files.
+link; the exact legacy target from any registered checkout of this repository
+is migrated, and foreign symlinks remain untouched. The rendering command only
+writes repository files.
 
 Mandatory triggers direct agents to read only the applicable operational
 reference before delegation/coordination/reporting, Codex finalization/Git
@@ -289,7 +290,13 @@ are not a new skill or automatically invoked workflow.
 instruction and skill directories. This fixed path works from arbitrary
 repositories and linked worktrees; it does not depend on the session CWD or
 resolving the global instruction symlink. Existing foreign links/directories
-are refused. Rerun the installer after updating to create this link before
+are refused. Reinstalling from another registered worktree of this repository
+retargets operations, global instruction/rule links and CLI links to that checkout.
+Deleted worktrees are recognized while their Git registration remains. After
+`git worktree remove` or pruning, their dangling links are refused because their
+origin can no longer be verified; review and remove those links manually before
+reinstalling. Regular files and unrelated symlinks are preserved.
+Rerun the installer after updating to create this link before
 using the shortened global instructions; repair a missing reference rather
 than skipping its mandatory procedure.
 

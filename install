@@ -2,6 +2,47 @@
 set -euo pipefail
 
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# Only registered checkouts establish ownership of another checkout's links.
+# Missing worktrees remain recognizable until Git prunes their registration.
+worktree_records=""
+if [[ "$(git -C "$repo_dir" rev-parse --show-toplevel 2>/dev/null)" == "$repo_dir" ]]; then
+  worktree_records=$(git -C "$repo_dir" worktree list --porcelain)
+fi
+
+is_managed_source() {
+  local target=$1 relative=$2 record
+  [[ "$target" == "$repo_dir/$relative" ]] && return 0
+  while IFS= read -r record; do
+    [[ "$record" == "worktree "* ]] || continue
+    [[ "$target" == "${record#worktree }/$relative" ]] && return 0
+  done <<< "$worktree_records"
+  return 1
+}
+
+link_managed() {
+  local dest=$1 relative=$2 legacy=${3:-} target
+  local source="$repo_dir/$relative"
+  mkdir -p -- "${dest%/*}"
+  if [[ -L "$dest" ]]; then
+    target=$(readlink "$dest")
+    if [[ "$target" == "$source" ]]; then
+      printf 'SKIP: %s\n' "$dest"
+      return
+    fi
+    if ! is_managed_source "$target" "$relative" &&
+       { [[ -z "$legacy" ]] || ! is_managed_source "$target" "$legacy"; }; then
+      printf 'Refusing to replace existing symlink: %s\n' "$dest" >&2
+      return 1
+    fi
+    rm -- "$dest"
+  elif [[ -e "$dest" ]]; then
+    printf 'Refusing to replace existing path: %s\n' "$dest" >&2
+    return 1
+  fi
+  ln -s -- "$source" "$dest"
+  printf 'Linked: %s -> %s\n' "$dest" "$source"
+}
+
 # The engineering guidelines once copied to the agents' rules directories as
 # karpathy.md are now part of deploy/AGENTS.md; remove the stale copies.
 for stale in "$HOME/.bob/rules/karpathy.md" "$HOME/.claude/rules/karpathy.md"; do
@@ -23,17 +64,7 @@ done
 dest="$HOME/.local/share/agent-config/operations"
 source="$repo_dir/deploy/operations"
 [[ -d "$source" ]] || { printf 'Missing operational references: %s\n' "$source" >&2; exit 1; }
-mkdir -p -- "${dest%/*}"
-if [[ -L "$dest" ]]; then
-  [[ "$(readlink "$dest")" == "$source" ]] || {
-    printf 'Refusing to replace existing symlink: %s\n' "$dest" >&2; exit 1;
-  }
-elif [[ -e "$dest" ]]; then
-  printf 'Refusing to replace existing path: %s\n' "$dest" >&2
-  exit 1
-else
-  ln -s -- "$source" "$dest"
-fi
+link_managed "$dest" deploy/operations
 
 # Link shared/agent-specific globals and Codex rules for immediate repository updates.
 # Bob Shell reliably loads global instructions from ~/.bob/rules/.
@@ -41,41 +72,17 @@ fi
 for link in "$HOME/.bob/rules/agent-config.md:AGENTS.md" "$HOME/.claude/CLAUDE.md:AGENTS.md" \
   "$HOME/.codex/AGENTS.md:codex/AGENTS.md" "$HOME/.codex/rules/agent-config.rules:codex/rules/agent-config.rules"; do
   dest=${link%%:*}
-  source="$repo_dir/deploy/${link#*:}"
-  mkdir -p -- "${dest%/*}"
-  if [[ -L "$dest" ]]; then
-    if [[ "$(readlink "$dest")" == "$source" ]]; then
-      printf 'SKIP: %s\n' "$dest"
-      continue
-    fi
-    # Migrate only this installer's former shared Codex instruction link.
-    if [[ "$dest" == "$HOME/.codex/AGENTS.md" && "$(readlink "$dest")" == "$repo_dir/deploy/AGENTS.md" ]]; then
-      rm -- "$dest"
-    else
-      printf 'Refusing to replace existing symlink: %s\n' "$dest" >&2
-      exit 1
-    fi
-  fi
-  if [[ -e "$dest" ]]; then
-    [[ -f "$dest" ]] || { printf 'Refusing to replace non-file: %s\n' "$dest" >&2; exit 1; }
-    rm -- "$dest"
-  fi
-  ln -s -- "$source" "$dest"
-  printf 'Linked: %s -> %s\n' "$dest" "$source"
+  # Migrate only this installer's former shared Codex instruction link.
+  legacy=""
+  [[ "$dest" != "$HOME/.codex/AGENTS.md" ]] || legacy=deploy/AGENTS.md
+  link_managed "$dest" "deploy/${link#*:}" "$legacy"
 done
 
 # Agent utilities need PATH entries in non-interactive shells, which
 # lack the aliases from shell/aliases.sh.
 for bin_name in agent-delegate bob-delegate codex-delegate codex-ralph agent-backlog; do
   dest="$HOME/.local/bin/$bin_name"
-  source="$repo_dir/bin/$bin_name"
-  mkdir -p -- "${dest%/*}"
-  if [[ -e "$dest" && ! -L "$dest" ]]; then
-    printf 'Refusing to replace non-symlink: %s\n' "$dest" >&2
-    exit 1
-  fi
-  ln -sfn -- "$source" "$dest"
-  printf 'Linked: %s -> %s\n' "$dest" "$source"
+  link_managed "$dest" "bin/$bin_name"
 done
 
 # Preserve legacy Bob AGENTS.md; it may contain user-managed instructions.
