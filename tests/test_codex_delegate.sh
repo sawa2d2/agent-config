@@ -41,24 +41,45 @@ if name == 'gwt-path':
     print(directory)
 elif name == 'codex':
     (base / 'codex.args').write_text(json.dumps(a))
+    if os.environ.get('AUTO_REPORT') and not os.environ.get('NO_REPORT'):
+        import re
+        task = re.search(r'Delegated Codex task ID: ([0-9a-f]{32})', a[-1]).group(1)
+        subprocess.run([os.environ['TEST_CLI'], '--report', task,
+                        os.environ.get('WORKER_REPORT', 'running'), '--summary', 'Fixture worker acknowledged',
+                        '--checks', 'fixture startup'], check=True)
 else:
     with (base / 'tmux.log').open('a') as f: f.write(json.dumps(a) + '\\n')
-    if os.environ.get('FAIL_TMUX') == a[0]: sys.exit(1)
+    if os.environ.get('FAIL_TMUX') == a[0]:
+        print('fixture permission denied', file=sys.stderr)
+        sys.exit(1)
     if a[0] == 'display-message':
         if a[-1] == '#{session_id}': print('$7')
         elif a[-1] == '#{pid}': print('123')
+        elif a[-1] == '#{pane_dead}': print(os.environ.get('DEAD', '0'))
+        elif a[-1] == '#{@delegate_ready}': print((base / 'ready').read_text() if (base / 'ready').exists() else '')
         else:
             pane = a[a.index('-t') + 1]
             token = (base / ('pane-' + pane)).read_text()
             print(os.environ.get('SERVER', '123') + '\\t' + token + '\\t' + os.environ.get('DEAD', '0'))
-    elif a[0] == 'new-window': print('%' + uuid.uuid4().hex)
+    elif a[0] == 'new-window':
+        pane = '%' + uuid.uuid4().hex
+        (base / ('dir-' + pane)).write_text(a[a.index('-c') + 1])
+        print(pane)
     elif a[0] == 'set-option':
-        (base / ('pane-' + a[a.index('-t') + 1])).write_text(a[-1])
+        (base / ('ready' if a[-2] == '@delegate_ready' else 'pane-' + a[a.index('-t') + 1])).write_text(a[-1])
+    elif a[0] == 'send-keys':
+        pane = a[a.index('-t') + 1]
+        keys = base / ('keys-' + pane)
+        if '-l' in a:
+            keys.write_text(a[-1])
+        elif a[-1] == 'Enter':
+            subprocess.run(['bash', '-c', keys.read_text()], cwd=(base / ('dir-' + pane)).read_text(),
+                           env=dict(os.environ, AUTO_REPORT='1'), check=True)
 ''')
 stub.chmod(0o755)
 for name in ('gwt-path', 'tmux', 'codex'):
     (fake / name).symlink_to(stub)
-env = dict(os.environ, PATH=str(fake) + ':' + os.environ['PATH'], TEST_ROOT=str(base), TMUX='fake', TMUX_PANE='%1')
+env = dict(os.environ, PATH=str(fake) + ':' + os.environ['PATH'], TEST_ROOT=str(base), TEST_CLI=cli, TMUX='fake', TMUX_PANE='%1')
 primary = base / 'original $(touch injected) with spaces'
 primary.mkdir()
 
@@ -81,7 +102,9 @@ def status(task, **kw):
 
 def launch(branch, prompt='Task', *options, cwd=primary, **kw):
     before = {t['id'] for t in listing(cwd)}
-    call(*options, branch, prompt, cwd=cwd, **kw)
+    result = call(*options, branch, prompt, cwd=cwd, **kw)
+    if kw.get('ok', True):
+        assert 'launch input sent' in result.stdout and 'verified worker startup' in result.stdout
     tasks = [t for t in listing(cwd) if t['id'] not in before]
     assert len(tasks) == 1
     return tasks[0]
@@ -107,7 +130,7 @@ first = listing()[0]
 worker = Path(first['worktree'])
 assert not (primary / '.agent-handoff.md').exists()
 assert (worker / '.agent-handoff.md').read_text() == 'handoff content'
-assert first['launch'] == 'sent' and first['report'] is None
+assert first['launch'] == 'verified' and first['report']['state'] == 'running'
 assert first['session'] == '$7' and first['tmux_server'] == '123'
 assert status(first)['pane_observation'].startswith('present')
 assert status(first, extra={'DEAD': '1'})['pane_observation'] == 'dead'
@@ -117,19 +140,17 @@ marker = base / ('pane-' + first['pane'])
 marker.write_text('different-task')
 assert status(first)['pane_observation'] == 'identity-mismatch'
 marker.unlink()
-assert status(first)['pane_observation'] == 'missing or unreachable'
+assert status(first)['pane_observation'] == 'inaccessible'
 
 # Shell quoting, -m aliases, handoff prompt and wrapper argument compatibility.
-prompt = "fix the build; $(touch injected) `touch injected2` 'quotes'\nsecond line"
+prompt = "fix the build; $(touch injected) `touch injected2` 'quotes'\nsecond line\r\t\x1b[31m\x7f\\end"
 model = "model;$(touch injected3) with spaces"
 second = launch('feat/quote;literal', prompt, '-m', model, cwd=worker)
 commands = [json.loads(line) for line in (base / 'tmux.log').read_text().splitlines()]
 keys = [a[-1] for a in commands if a[:1] == ['send-keys'] and '-l' in a]
-assert shlex.split(keys[0])[:2] == ['codex', 'new']
-assert shlex.split(keys[0])[-1].startswith('Read .agent-handoff.md and continue the work it describes.')
-assert shlex.split(keys[-1])[:4] == ['codex', 'new', '--model', model]
-assert shlex.split(keys[-1])[-1].startswith(prompt)
-assert '--report ' + second['id'] in shlex.split(keys[-1])[-1]
+keys = [key for key in keys if "codex" in key]
+assert all("\n" not in key and "\r" not in key for key in keys)
+assert '--report ' + second['id'] in keys[-1]
 # Execute recorded input against the real launch wrapper with only a fake paid CLI.
 run('bash', '-c', keys[-1], extra={'PATH': str(root / 'bin') + ':' + env['PATH']})
 arguments = json.loads((base / 'codex.args').read_text())
@@ -137,8 +158,7 @@ assert arguments[:4] == ['--no-alt-screen', '--approve-for-me', '--model', model
 assert arguments[-1].startswith(prompt)
 assert not any(primary.glob('injected*'))
 third = launch('feat/model', '--status is a literal prompt', '--model', 'gpt-6-luna')
-assert shlex.split([json.loads(l)[-1] for l in (base / 'tmux.log').read_text().splitlines()
-                    if json.loads(l)[:1] == ['send-keys'] and '-l' in json.loads(l)][-1])[:4] == ['codex', 'new', '--model', 'gpt-6-luna']
+assert json.loads((base / 'codex.args').read_text())[:3] == ['new', '--model', 'gpt-6-luna']
 
 # Launching itself never installs or changes settings (wrapper fixture above
 # may refresh its isolated HOME, so use a fresh baseline).
@@ -154,7 +174,7 @@ report(first, 'completed', '--summary', summary, '--checks', 'fixture checks: pa
 completed = status(first)
 assert completed['report']['summary'] == summary
 assert all(completed['reported_commits_on_branch'].values())
-assert status(second)['report'] is None
+assert status(second)['report']['state'] == 'running'
 snapshot = (primary / '.codex-tasks' / (first['id'] + '.json')).read_bytes()
 for args in [('bogus', '--summary', 'x'), ('failed', '--summary', 'x'),
              ('running', '--summary', ' '), ('completed', '--summary', 'x', '--checks', ' '),

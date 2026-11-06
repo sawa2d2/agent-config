@@ -7,8 +7,7 @@ trap 'rm -rf -- "$tmp"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # Fake gwt-path creates the worktree directory; fake tmux records its calls and
-# returns the input box marker (❯) on capture-pane so the background waiter
-# does not block.
+# acknowledges shell readiness and returns a ready Bob input box.
 mkdir -p "$tmp/fake"
 cat > "$tmp/fake/gwt-path" <<'SH'
 #!/usr/bin/env bash
@@ -19,16 +18,33 @@ SH
 cat > "$tmp/fake/tmux" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$TEST_ROOT/tmux.log"
-if [[ $1 == display-message ]]; then echo '$7'; exit 0; fi
-if [[ $1 == new-window ]]; then
-  echo %9
-elif [[ $1 == capture-pane && $2 == -p ]]; then
-  # Return the Bob input prompt so the background waiter exits immediately.
-  echo '❯'
-fi
-exit 0
+case $1 in
+  display-message)
+    case ${!#} in
+      '#{session_id}') echo '$7' ;;
+      '#{pane_dead}') echo 0 ;;
+      '#{pane_pid}') echo 100 ;;
+      '#{@delegate_ready}') cat "$TEST_ROOT/ready" ;;
+    esac ;;
+  new-window) echo %9 ;;
+  send-keys)
+    if [[ ${!#} == *'@delegate_ready'* ]]; then
+      printf '%s' "${!#}" > "$TEST_ROOT/probe"
+    elif [[ ${!#} == Enter && -f $TEST_ROOT/probe ]]; then
+      bash -c "$(cat "$TEST_ROOT/probe")"
+      rm "$TEST_ROOT/probe"
+    fi ;;
+  set-option) printf '%s\n' "${!#}" > "$TEST_ROOT/ready" ;;
+  capture-pane) echo '❯' ;;
+  load-buffer) cat > "$TEST_ROOT/pasted" ;;
+esac
 SH
-chmod +x "$tmp/fake/gwt-path" "$tmp/fake/tmux"
+cat > "$tmp/fake/ps" <<'SH'
+#!/usr/bin/env bash
+echo '100 1 bash bash'
+echo '101 100 bob bob'
+SH
+chmod +x "$tmp/fake/gwt-path" "$tmp/fake/tmux" "$tmp/fake/ps"
 export TEST_ROOT="$tmp" PATH="$tmp/fake:$PATH" TMUX=/tmp/fake,1,0 TMUX_PANE=%1
 # A fake home keeps the trust entry out of the real ~/.bob/trustedFolders.json.
 mkdir -p "$tmp/home/.bob"
@@ -45,14 +61,12 @@ if "$root/bin/bob-delegate" feat/x 2>/dev/null; then fail 'ran without a note or
 # prompt is typed into the pane.
 echo note > .agent-handoff.md
 "$root/bin/bob-delegate" feat/x > /dev/null
-# Wait briefly for the background subshell to send the prompt.
-sleep 1
 [[ ! -e .agent-handoff.md && $(cat "$tmp/worktrees/feat/x/.agent-handoff.md") == note ]] || fail 'note was not moved'
 grep -qx "new-window -d -t \$7 -n feat/x -c $tmp/worktrees/feat/x -P -F #{pane_id}" "$tmp/tmux.log" || fail "window: $(cat "$tmp/tmux.log")"
-grep -qx 'send-keys -t %9 -l bob new' "$tmp/tmux.log" || fail "bob new: $(cat "$tmp/tmux.log")"
+grep -Fqx "send-keys -t %9 -l \$'bob' \$'new'" "$tmp/tmux.log" || fail "bob new: $(cat "$tmp/tmux.log")"
 grep -qx 'send-keys -t %9 Enter' "$tmp/tmux.log" || fail 'Enter was not sent'
 # The handoff prompt is typed after the input box appears.
-grep -qx 'send-keys -t %9 -l Read .agent-handoff.md and continue the work it describes.' "$tmp/tmux.log" || fail "prompt: $(cat "$tmp/tmux.log")"
+[[ $(cat "$tmp/pasted") == "Read .agent-handoff.md and continue the work it describes." ]] || fail "prompt: $(cat "$tmp/tmux.log")"
 
 # The new worktree is trusted; the existing entries are kept.
 jq -e --arg dir "$tmp/worktrees/feat/x" \
@@ -69,8 +83,11 @@ jq -e --arg dir "$tmp/worktrees/feat/w" \
 # An explicit prompt works without a note.
 : > "$tmp/tmux.log"
 "$root/bin/bob-delegate" feat/y "fix the build" > /dev/null
-sleep 1
-grep -qx 'send-keys -t %9 -l fix the build' "$tmp/tmux.log" || fail "explicit prompt: $(cat "$tmp/tmux.log")"
+[[ $(cat "$tmp/pasted") == "fix the build" ]] || fail "explicit prompt: $(cat "$tmp/tmux.log")"
+
+# A leading dash and multiline content remain literal through helper/paste.
+"$root/bin/bob-delegate" feat/literal $'--literal\nsecond line' > /dev/null
+[[ $(cat "$tmp/pasted") == $'--literal\nsecond line' ]] || fail 'multiline prompt changed'
 
 # Outside tmux it refuses.
 if TMUX= "$root/bin/bob-delegate" feat/z "x" 2>/dev/null; then fail 'ran outside tmux'; fi

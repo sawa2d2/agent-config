@@ -35,18 +35,7 @@ jq --arg dir "$(cd -- "$dir" && pwd -P)" \
 mv -- "$trusted.bob-delegate.tmp" "$trusted"
 session=$(tmux display-message -p -t "${TMUX_PANE:-}" '#{session_id}')
 pane=$(tmux new-window -d -t "$session" -n "$branch" -c "$dir" -P -F '#{pane_id}')
-# Bob's chat takes no initial prompt argument; type the message once the input
-# box (❯) appears. Keys sent before then are lost, and starting takes a few
-# seconds, so wait up to 30 seconds.
-(
-  for _ in {1..60}; do
-    tmux capture-pane -p -t "$pane" | grep -q '❯' && break
-    sleep 0.5
-  done
-  tmux send-keys -t "$pane" -l "$prompt"
-  tmux send-keys -t "$pane" Enter
-) &
-# bob new = bob chat --auto-approve (the bin/bob wrapper intercepts "new").
-tmux send-keys -t "$pane" -l 'bob new'
-tmux send-keys -t "$pane" Enter
-echo "bob-delegate: bob started in window for $branch (pane $pane) at $dir"
+# Resolve the helper relative to the installed script, including symlinks.
+helper="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/../lib/delegate_startup.py"
+echo "bob-delegate: window for $branch (pane $pane) at $dir; checking startup"
+exec python3 "$helper" -- "$pane" bob "$prompt"

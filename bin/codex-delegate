@@ -9,16 +9,19 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 import uuid
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+from delegate_startup import pane_alive, submit, wait_for
+
 
 def run(*args, cwd=None):
-    return subprocess.check_output(args, cwd=cwd, stderr=subprocess.PIPE, text=True).rstrip("\n")
+    return subprocess.check_output(args, cwd=cwd, stderr=subprocess.PIPE, text=True,
+                                   timeout=5 if args[0] == "tmux" else None).rstrip("\n")
 
 
 def git(*args, cwd=None):
@@ -118,8 +121,9 @@ def observe(data, root):
                 result["pane_observation"] = "identity-mismatch"
             else:
                 result["pane_observation"] = "dead" if dead == "1" else "present (not proof of worker activity)"
-        except (OSError, ValueError, subprocess.CalledProcessError):
-            result["pane_observation"] = "missing or unreachable"
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            result["pane_observation"] = "inaccessible"
+            result["pane_observation_error"] = str(getattr(error, "stderr", None) or error).strip()
     # Read branch results from the surviving original checkout, not the worker.
     try:
         result["branch_head"] = git("rev-parse", "--verify", "refs/heads/" + data["branch"], cwd=root)
@@ -143,10 +147,12 @@ The originating Codex agent continues coordinating. You own this task's branch
 Git operations (commit and push verified changes), unless the task says otherwise.
 Never commit to the default branch or merge it without the exact required approval.
 Report explicitly from this worktree using these concrete commands:
-  {command} running --summary 'Work started; next step ...'
+  {command} running --summary 'Describe your actual first action here'
   {command} needs-input --summary 'Blocked by ...; need ...'
   {command} completed --summary 'Changes and remaining limitations ...' --checks 'Exact commands and actual outcomes ...' --commit FULL_COMMIT_SHA
   {command} failed --summary 'Failure and remaining work ...' --checks 'Checks run and failures, or why no checks ran ...'
+Replace all example summaries/checks with your own concrete facts; never execute
+these examples verbatim. Send the starting report first, before investigation.
 Use repeated --commit for multiple commits; if no commit was needed, explain why
 in the summary. Terminal reports require --checks. Report running when starting,
 needs-input when blocked, and completed or failed before ending; also give the
@@ -199,18 +205,26 @@ def launch(args, context):
         if args.model:
             command += ["--model", args.model]
         command.append(worker_prompt(prompt, task_id))
-        # The interactive shell still resolves the user's Codex wrapper. Quote
-        # every argument for Bash/Zsh; no prompt/model/branch text becomes code.
-        run("tmux", "send-keys", "-t", pane, "-l", shlex.join(command))
-        run("tmux", "send-keys", "-t", pane, "Enter")
+        submit(pane, command)
         update(context, task_id, launch="sent")
-        print(f"codex-delegate: launch input sent to window for {args.branch} (pane {pane}) at {directory}")
-    except (OSError, ValueError, subprocess.CalledProcessError, KeyboardInterrupt) as error:
+        print(f"codex-delegate: launch input sent (pane {pane}); waiting up to 90s for worker report", flush=True)
+
+        def acknowledged():
+            pane_alive(pane)
+            report = read(root / ".codex-tasks" / f"{task_id}.json").get("report")
+            if report and report["state"] in ("failed", "needs-input"):
+                raise ValueError(f"worker reported {report['state']}: {report['summary']}")
+            return bool(report and report["state"] in ("running", "completed"))
+
+        wait_for(acknowledged, 90, "the worker's explicit running/completed report")
+        update(context, task_id, launch="verified")
+        print(f"codex-delegate: verified worker startup in window for {args.branch} (pane {pane}) at {directory}; review --status for progress/results")
+    except (OSError, ValueError, subprocess.SubprocessError, KeyboardInterrupt) as error:
         detail = str(error)
         if isinstance(error, subprocess.CalledProcessError) and error.stderr:
             detail += ": " + error.stderr.strip()
         update(context, task_id, launch="failed", launch_error=detail)
-        raise ValueError(f"task {task_id}: partial launch failed: {detail}; inspect --status; retained worktree/window/handoff are not removed") from error
+        raise ValueError(f"task {task_id}: partial launch failed: {detail}; inspect --status; retained worktree/window/handoff are not removed. No automatic retry: inspect --status and the pane before retrying to avoid duplicate agents") from error
 
 
 def main():
@@ -280,7 +294,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(f"codex-delegate: {error}", file=sys.stderr)
         if isinstance(error, subprocess.CalledProcessError) and error.stderr:
             print(error.stderr.strip(), file=sys.stderr)

@@ -82,7 +82,7 @@ Further documentation:
 ## Codex task coordination
 
 The originating Codex agent can stay in its original checkout on `main`, launch
-workers, and inspect their results on demand. Claude/Bob delegation is unchanged.
+workers, and inspect their results on demand.
 Existing launch and handoff behavior remains: `-m`/`--model` selects the model;
 without a prompt, `.agent-handoff.md` is required and moved into the new worktree.
 No installed settings or approval rules are changed by these commands.
@@ -133,8 +133,31 @@ denial. Request approval for that exact authorized command; automatic review
 still applies. Never change sandbox settings, broaden allow rules or fall back
 to worktree-local state. Reads never create files or change exclusions.
 
-Launch state (`starting`, `sent`, `failed`), worker report, and pane observation
-are independent. `sent` means input was sent, not that Codex started successfully.
+All three delegates first wait up to 10 seconds for the interactive shell to
+acknowledge readiness. Bash/Zsh arguments are serialized onto one physical line;
+multiline prompt contents, quotes and control characters remain literal. The
+user's shell still resolves the existing CLI wrappers and model arguments.
+No launch is automatically retried: ambiguous delivery can leave a running agent.
+On failure, inspect the retained pane/worktree before deciding whether to retry.
+A tmux access denial is reported as inaccessible, never as proof of a missing pane.
+
+Codex launch waits up to 90 seconds after submission for an explicit worker
+`running` or `completed` report. A `failed`/`needs-input` report, lost pane,
+inaccessible tmux, or timeout exits nonzero with the task ID and inspection advice.
+Launch state (`starting`, `sent`, `verified`, `failed`), worker report, and pane
+observation are independent. `sent` only confirms input submission; `verified`
+confirms the worker reported startup, not that its implementation is correct.
+The starting report must describe the worker's actual first action; never submit
+example summaries verbatim. If reporting is denied, request supported escalation
+for the exact report command first.
+
+Claude/Bob wait up to 30 seconds for a stable agent process in the pane's process
+tree. Bob additionally waits up to 30 seconds for its input box before submitting
+the prompt via a named bracketed-paste buffer. Timeouts never send the prompt to
+a shell or an unready UI. Their success message confirms process startup and
+submission; task acceptance and progress remain unverified. Each tmux operation
+has a five-second timeout; no user startup files or CLI settings are changed by
+the startup checks.
 A pane token plus tmux server identity detects stale/reused panes; even a matching
 live pane proves neither progress nor success. Missing tmux/panes or deleted
 worktrees do not erase reports. Git refs may also disappear; status shows this

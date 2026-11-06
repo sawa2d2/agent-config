@@ -37,9 +37,7 @@ if [[ -f $config ]]; then
 fi
 session=$(tmux display-message -p -t "${TMUX_PANE:-}" '#{session_id}')
 pane=$(tmux new-window -d -t "$session" -n "$branch" -c "$dir" -P -F '#{pane_id}')
-# Typed into the pane's interactive shell, so claude resolves as it does for
-# the user (the agent-config wrapper first in PATH); the shell reads it once
-# it starts.
-tmux send-keys -t "$pane" -l "claude ${model:+--model $(printf '%q' "$model") }$(printf '%q' "$prompt")"
-tmux send-keys -t "$pane" Enter
-echo "agent-delegate: claude started in window for $branch (pane $pane) at $dir"
+# Resolve the helper relative to the installed script, including symlinks.
+helper="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/../lib/delegate_startup.py"
+echo "agent-delegate: window for $branch (pane $pane) at $dir; checking startup"
+exec python3 "$helper" -- "$pane" claude "$prompt" "$model"
