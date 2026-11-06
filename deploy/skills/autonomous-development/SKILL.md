@@ -38,6 +38,11 @@ For new code changes, when `$TMUX` is set, never create the branch here (no
 `codex-delegate <new-branch> "<task>"` (Codex) to create the branch in a new
 worktree and start the agent in one new tmux window per branch
 without moving focus.
+When the target repository is explicitly named, use
+`codex-delegate --repo "<path>" <new-branch> "<task>"`; use the same `--repo`
+selection for repository-scoped `--list` and `--status`. Without it, cwd is the
+default. Claude's `agent-delegate` and `bob-delegate` have no `--repo` option;
+run those commands from the target checkout.
 Tell the user the window and branch, and stop working on that task in this
 session. Only outside tmux, create the branch here. Always preserve the
 originating agent: Claude to Claude, Bob to Bob, and Codex to Codex; never

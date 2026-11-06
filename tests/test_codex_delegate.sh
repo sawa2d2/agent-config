@@ -282,5 +282,97 @@ for separate in (False, True):
         git('init', '--bare', '-q', cwd=directory)
     call('--list', cwd=directory, ok=False)
     assert not (directory / '.codex-tasks').exists()
-print('PASS: Codex delegation launch, explicit lifecycle, shared state and failures (fake agents/tmux)')
+# Explicit selection isolates every mutation from the originating repository.
+target = base / 'target repo with spaces'; target.mkdir()
+git('init', '-qb', 'main', cwd=target)
+(target / 'target-only').write_text('target commit')
+git('add', 'target-only', cwd=target)
+git('-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'target', cwd=target)
+target_head = git('rev-parse', 'HEAD', cwd=target)
+(primary / '.agent-handoff.md').write_text('origin must retain this note')
+
+def snapshot(directory):
+    return {str(p.relative_to(directory)): (p.read_bytes(), p.stat().st_mtime_ns)
+            if p.is_file() else None for p in directory.rglob('*')}
+
+origin_before = snapshot(primary)
+target_before = snapshot(target)
+assert json.loads(call('--repo', str(target), '--list').stdout) == []
+assert snapshot(target) == target_before
+# Missing, empty, file, non-Git and unsupported paths fail before any writes.
+nonrepo = base / 'not a repository'; nonrepo.mkdir()
+invalid_paths = ['', str(base / 'missing repo'), str(target / 'target-only'),
+                 str(nonrepo), str(base / 'unsupported False'), str(base / 'unsupported True')]
+tmux_before = (base / 'tmux.log').read_bytes()
+for path in invalid_paths:
+    for operation in [('feat/invalid-repo', 'Task'), ('--list',),
+                      ('--status', second['id']),
+                      ('--report', second['id'], 'running', '--summary', 'invalid')]:
+        call('--repo', path, *operation, ok=False)
+call('--repo', ok=False)
+call('--repo=', 'feat/empty-repo', 'Task', ok=False)
+assert (base / 'tmux.log').read_bytes() == tmux_before
+assert snapshot(target) == target_before
+assert not any(nonrepo.iterdir())
+
+# A note in the origin cannot satisfy a missing target handoff.
+call('--repo', str(target), 'feat/target-missing-note', ok=False)
+assert snapshot(target) == target_before
+(target / '.agent-handoff.md').write_text('target handoff')
+target_nested = target / 'nested directory'; target_nested.mkdir()
+call('--repo', os.path.relpath(target_nested, primary), 'feat/target-handoff')
+selected = listing(target)[0]
+selected_worker = Path(selected['worktree'])
+assert git('rev-parse', 'HEAD', cwd=selected_worker) == target_head
+assert (selected_worker / 'target-only').read_text() == 'target commit'
+assert (selected_worker / '.agent-handoff.md').read_text() == 'target handoff'
+assert not (target / '.agent-handoff.md').exists()
+assert (target / '.git/codex-delegate.lock').is_file()
+assert git('check-ignore', '.codex-tasks/test', cwd=target) == '.codex-tasks/test'
+assert json.loads(call('--repo', str(target), '--list').stdout) == listing(target)
+assert json.loads(call('--repo', str(target), '--status', selected['id']).stdout)['branch_head'] == target_head
+call('--status', selected['id'], ok=False)
+call('--repo', str(target), '--status', second['id'], ok=False)
+
+# Reporting still validates the selected worker and branch, even from elsewhere.
+record = target / '.codex-tasks' / (selected['id'] + '.json')
+record_before = record.read_bytes()
+call('--repo', str(target), '--report', selected['id'], 'running', '--summary', 'wrong checkout', ok=False)
+call('--repo', second['worktree'], '--report', selected['id'], 'running', '--summary', 'wrong repo', ok=False)
+assert record.read_bytes() == record_before
+selected_nested = selected_worker / 'worker subdirectory'; selected_nested.mkdir()
+call('--repo', str(selected_nested), '--report', selected['id'], 'completed',
+     '--summary', 'selected worker', '--checks', 'fixture checks passed', '--commit', target_head, cwd=nonrepo)
+assert status(selected, cwd=target)['reported_commits_on_branch'] == {target_head: True}
+git('switch', '-qc', 'feat/selected-wrong', cwd=selected_worker)
+call('--repo', str(selected_worker), '--report', selected['id'], 'running', '--summary', 'wrong branch', ok=False)
+git('switch', '-q', selected['branch'], cwd=selected_worker)
+
+# Both option orders and model spellings retain literal option-like prompts.
+for index, options in enumerate([
+    ['--repo', str(target), '-m', model],
+    ['-m', model, '--repo', str(target)],
+    ['--repo', str(target), '--model', model],
+    ['--model', model, '--repo', str(target)],
+    ['--repo=' + str(target), '--model=' + model],
+]):
+    literal = '--repo /ignored --status --model literal prompt'
+    call(*options, f'feat/selected-grammar-{index}', literal)
+    command = [json.loads(line)[-1] for line in (base / 'tmux.log').read_text().splitlines()
+               if json.loads(line)[:1] == ['send-keys'] and '-l' in json.loads(line)][-1]
+    assert shlex.split(command)[:4] == ['codex', 'new', '--model', model]
+    assert shlex.split(command)[-1].startswith(literal)
+
+# A selected linked checkout supplies its own HEAD and note, not the main root.
+git('-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'worker commit', '--allow-empty', cwd=selected_worker)
+linked_head = git('rev-parse', 'HEAD', cwd=selected_worker)
+(target / '.agent-handoff.md').write_text('main note stays')
+call('--repo', str(selected_nested), 'feat/selected-linked')
+linked = next(t for t in listing(target) if t['branch'] == 'feat/selected-linked')
+assert git('rev-parse', 'HEAD', cwd=linked['worktree']) == linked_head
+assert (Path(linked['worktree']) / '.agent-handoff.md').read_text() == 'target handoff'
+assert (target / '.agent-handoff.md').read_text() == 'main note stays'
+assert not (selected_worker / '.codex-tasks').exists()
+assert snapshot(primary) == origin_before
+print('PASS: Codex delegation launch, explicit repository selection, lifecycle, shared state and failures (fake agents/tmux)')
 PY

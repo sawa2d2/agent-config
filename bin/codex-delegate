@@ -230,6 +230,7 @@ def launch(args, context):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, epilog="Status reads never write state. Worker reports and pane liveness are independent; verify Git results before accepting completion.")
     parser.add_argument("-m", "--model")
+    parser.add_argument("--repo", metavar="PATH", help="use this repository directory instead of cwd (reports require the assigned worktree)")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--list", action="store_true", help="list stored tasks as JSON, without tmux")
     mode.add_argument("--status", metavar="ID", help="inspect stored result, Git refs and on-demand pane identity")
@@ -242,13 +243,22 @@ def main():
     # Preserve the original launch grammar, including a prompt beginning with
     # '-' that happens to resemble one of the new management options.
     argv = sys.argv[1:]
-    if argv and argv[0] in ("-m", "--model"):
-        if len(argv) < 3 or not argv[1]:
-            parser.error("model and new branch are required")
-        argv = ["--model=" + argv[1], "--", *argv[2:]]
-    elif argv and not argv[0].startswith("-"):
-        argv = ["--", *argv]
-    args = parser.parse_args(argv)
+    prefix = []
+    while argv:
+        if argv[0] in ("-m", "--model", "--repo"):
+            option = "--model" if argv[0] == "-m" else argv[0]
+            if len(argv) < 2 or not argv[1]:
+                parser.error(f"{option} requires a nonempty value")
+            prefix.append(option + "=" + argv[1])
+            argv = argv[2:]
+        elif argv[0].startswith(("--model=", "--repo=")):
+            prefix.append(argv[0])
+            argv = argv[1:]
+        else:
+            if not argv[0].startswith("-"):
+                argv = ["--", *argv]
+            break
+    args = parser.parse_args(prefix + argv)
     if args.report:
         if args.branch not in ("running", "needs-input", "completed", "failed") or not args.summary or not args.summary.strip() or args.prompt:
             parser.error("report needs a valid state and nonempty --summary")
@@ -262,6 +272,12 @@ def main():
         parser.error("--model applies only to launch")
     if not (args.list or args.status or args.report) and (not args.branch or args.branch.startswith("-")):
         parser.error("a new branch is required")
+    if args.repo is not None:
+        if not args.repo:
+            parser.error("--repo requires a nonempty value")
+        # All Git, handoff and worktree operations use the selected checkout,
+        # including report identity checks. Validate before any state writes.
+        os.chdir(args.repo)
     context = repository()
     root, common, worktrees = context
     state = root / ".codex-tasks"

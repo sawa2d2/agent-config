@@ -91,7 +91,25 @@ No installed settings or approval rules are changed by these commands.
 codex-delegate -m gpt-6.1-sol feat/fix 'Fix the bug; run relevant checks and commit/push'
 codex-delegate --list
 codex-delegate --status TASK_ID
+codex-delegate --repo '/path/to/target repo' -m gpt-6.1-sol feat/fix 'Fix the target repository'
+codex-delegate --repo '/path/to/target repo' --list
+codex-delegate --repo '/path/to/target repo' --status TASK_ID
 ```
+
+Use `--repo <path>` when the target repository is explicitly named; otherwise
+the current directory remains the default. Put it before the branch (before or
+after `-m`/`--model`). Relative paths resolve from the caller's directory; paths
+may name a checkout or a subdirectory, including a linked worktree. The selected
+checkout supplies the starting commit and handoff note, and its repository owns
+the task records, lock and exclusions. The originating repository is untouched.
+Invalid or unsupported repository paths fail before mutations. For `--report`,
+`--repo` must select the assigned worker worktree (or a subdirectory), preserving
+the worktree/branch identity checks. A prompt after the branch remains literal,
+even when it starts with `--repo` or another option.
+
+Claude's command is `agent-delegate`, not `claude-delegate`. Neither
+`agent-delegate` nor `bob-delegate` supports `--repo`; run those commands from the
+target checkout. Their implementations are unchanged.
 
 Launch prints a unique task ID. `--list` returns stored JSON without contacting
 tmux; `--status` adds on-demand pane identity, worktree presence, current branch
