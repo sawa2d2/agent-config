@@ -44,7 +44,7 @@ done
 
 # Agent utilities need PATH entries in non-interactive shells, which
 # lack the aliases from shell/aliases.sh.
-for bin_name in agent-delegate bob-delegate codex-delegate codex-ralph; do
+for bin_name in agent-delegate bob-delegate codex-delegate codex-ralph agent-backlog; do
   dest="$HOME/.local/bin/$bin_name"
   source="$repo_dir/bin/$bin_name"
   mkdir -p -- "${dest%/*}"

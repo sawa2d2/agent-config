@@ -5,6 +5,10 @@ description: Continue earlier work from the handoff note (.agent-handoff.md) wri
 
 # Takeover
 
+The note belongs to this worktree's active task. The original-root `.backlog.md`
+is a separate shared list of future tasks (see `backlog`); it is not a fallback
+handoff note and does not authorize starting other work.
+
 1. Read `.agent-handoff.md` at the root of the working tree
    (`git rev-parse --show-toplevel`). If it is absent, say so and stop.
 2. Check the recorded state against the repository: current branch, last

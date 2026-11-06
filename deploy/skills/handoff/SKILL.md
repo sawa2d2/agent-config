@@ -5,6 +5,10 @@ description: Write a handoff note so a new session or another agent can continue
 
 # Handoff
 
+Keep this note local to the current worktree and focused on its active task.
+Use the `backlog` skill for user-authorized future tasks shared across worktrees;
+do not move the handoff note to the original repository root for sharing.
+
 1. Commit and push finished work first, following the Git rules; the note
    records state, it does not replace commits.
 2. Write `.agent-handoff.md` at the root of the working tree

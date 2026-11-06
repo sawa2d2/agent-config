@@ -49,6 +49,8 @@ These govern all coding and maintenance work and override the process any skill,
 - When a multi-step command sequence recurs, propose a script so later runs cost one call.
 
 ## Handoff
+- For user-authorized future tasks, use the `backlog` skill and `agent-backlog` CLI. `.backlog.md` is untracked at the original repository root, shared across branches and linked worktrees through Git common metadata; never use a worktree-local fallback. The CLI serializes writes and adds the common `info/exclude` entry without changing tracked `.gitignore`. For sandbox-blocked writes, Codex must request `require_escalated` for the authorized command; Bob and Claude Code use their normal approval workflows. Never weaken permissions or silently untrack an existing file.
+- Keep `.agent-handoff.md` local to the current worktree for active-task resumption; reading the shared backlog does not authorize starting its tasks.
 - Every turn resends the whole conversation: when a task is finished and the next request is unrelated, suggest a new session.
 - Keep work state in the repository (commits, plan files) so another agent or session can continue without the transcript.
 - Write a handoff note with the `handoff` skill when the user asks for or accepts one, and before stopping with work unfinished (nearly full context, user ending the session, turn or cost limit warning): note first, then wrap up.

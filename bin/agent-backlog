@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Shared, untracked future tasks for all worktrees of a repository."""
+
+import argparse
+import fcntl
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+
+def git(*args, cwd=None):
+    return subprocess.check_output(["git", *args], cwd=cwd, stderr=subprocess.PIPE)
+
+
+def repository():
+    common = Path(os.fsdecode(git("rev-parse", "--path-format=absolute", "--git-common-dir")).rstrip("\n")).resolve()
+    records = git("worktree", "list", "--porcelain", "-z").split(b"\0\0")
+    # Git lists the main worktree first, even when invoked in a linked one.
+    fields = records[0].split(b"\0")
+    if b"bare" in fields:
+        raise ValueError("a bare repository has no original working-tree root")
+    root = Path(os.fsdecode(fields[0].removeprefix(b"worktree ")))
+    if not root.is_dir():
+        raise ValueError(f"original working tree is unavailable: {root}")
+    if git("rev-parse", "--is-inside-work-tree", cwd=root).strip() != b"true":
+        raise ValueError("Git metadata does not identify the original checkout; refusing to guess its root")
+    top = Path(os.fsdecode(git("rev-parse", "--show-toplevel", cwd=root)).rstrip("\n")).resolve()
+    actual = Path(os.fsdecode(git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=root)).rstrip("\n")).resolve()
+    if actual != common or top != root.resolve():
+        raise ValueError("original working tree does not match the common Git directory")
+    worktrees = [Path(os.fsdecode(r.split(b"\0")[0][9:])) for r in records if r]
+    return root / ".backlog.md", common, worktrees
+
+
+def read_file(path):
+    if path.is_symlink():
+        raise ValueError(f"refusing symlink: {path}")
+    return path.read_bytes() if path.exists() else b""
+
+
+def replace_file(path, data):
+    fd, temporary = tempfile.mkstemp(prefix=f"{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            if path.exists():
+                os.fchmod(stream.fileno(), path.stat().st_mode & 0o777)
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("path", help="print the original-root backlog path without writing")
+    sub.add_parser("list", help="read future tasks without writing")
+    for command in ("add", "remove"):
+        child = sub.add_parser(command, help=f"{command} an exact single-line task")
+        child.add_argument("task")
+    args = parser.parse_args()
+    path, common, worktrees = repository()
+    if args.command == "path":
+        print(path)
+        return
+    if args.command == "list":
+        sys.stdout.buffer.write(read_file(path))
+        return
+    if not args.task.strip() or any(c in args.task for c in "\r\n\0"):
+        raise ValueError("task must be a nonempty single line")
+    # A stable lock in common metadata serializes all helper writers, including
+    # exclusion updates. Never lock the file replaced by the atomic rename.
+    with (common / "agent-backlog.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        for worktree in worktrees:
+            if not worktree.is_dir():
+                raise ValueError(f"cannot check tracked backlog in unavailable worktree: {worktree}")
+            if git("ls-files", "--", ".backlog.md", cwd=worktree):
+                raise ValueError(f".backlog.md is tracked in {worktree}; resolve explicitly before writing")
+        data = read_file(path)
+        entry = b"- [ ] " + args.task.encode("utf-8")
+        lines = data.splitlines(keepends=True)
+        matches = [i for i, line in enumerate(lines) if line.rstrip(b"\r\n") == entry]
+        if args.command == "remove":
+            if not matches:
+                raise ValueError("exact task not found; legacy content must be preserved")
+            del lines[matches[0]]
+            updated = b"".join(lines)
+        else:
+            updated = data if matches else data + (b"\n" if data and not data.endswith(b"\n") else b"") + entry + b"\n"
+        exclude = common / "info" / "exclude"
+        exclusions = read_file(exclude)
+        if exclusions.splitlines()[-1:] != [b"/.backlog.md"]:
+            exclude.parent.mkdir(exist_ok=True)
+            # Append only: preserve existing exclude bytes and ordering.
+            with exclude.open("ab") as stream:
+                stream.write((b"\n" if exclusions and not exclusions.endswith(b"\n") else b"") + b"/.backlog.md\n")
+        replace_file(path, updated)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"agent-backlog: {error}", file=sys.stderr)
+        if isinstance(error, PermissionError):
+            print("Request the agent's supported approval for this exact operation; never use a worktree-local fallback or weaken the sandbox.", file=sys.stderr)
+        sys.exit(1)

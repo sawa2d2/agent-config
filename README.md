@@ -58,12 +58,13 @@ Launchers (`bin/`):
 - `codexrm`: delete Codex sessions of the current repository (with their subagent threads).
 - `claude-stats`, `codex-stats`, `bob-stats`: token/cost usage per week or per fixed window (`--window`).
 - `codex-ralph`: bounded loop of fresh `codex exec` runs until a check passes.
+- `agent-backlog`: list, add, or remove untracked future tasks shared by all worktrees (see below).
 
 Each script except the `claude`, `bob` and `codex` launchers (which pass it to the real CLI) prints its usage with `--help`; header comments in `bin/` and `scripts/` document the details.
 
 Installed by `./install` (`scripts/`):
 
-- Skills from `deploy/skills/` (`handoff`, `takeover`, `autonomous-development`) plus upstream skills, Spec Kit, rtk and Claude Code plugins (`install-tools`, `install-skill`, `install-rtk`, `install-claude-plugins`).
+- Skills from `deploy/skills/` (`handoff`, `takeover`, `backlog`, `autonomous-development`) plus upstream skills, Spec Kit, rtk and Claude Code plugins (`install-tools`, `install-skill`, `install-rtk`, `install-claude-plugins`).
 - Agent settings and themes (`install-claude-settings`, `install-bob-settings`, `install-bob-theme`, `install-codex-theme`, `install-codex-compaction`, `install-codex-subagent-model`).
 - Codex rules (`deploy/codex/rules/agent-config.rules`, linked to `~/.codex/rules/`): `gfinish` runs outside the workspace-write sandbox, which cannot write a linked worktree's shared `.git`, the primary worktree or the network; gfinish's `approved` marker check still authorizes the merge. A gfinish chained after other commands still ran in the sandbox, so `deploy/AGENTS.md` also tells Codex to request `require_escalated` for gfinish and for sandbox-blocked Git writes. After gfinish removes the session's worktree, Codex reports `Hook failed: No such file or directory (os error 2)` for the later hooks: it starts hook commands in the session directory, which no longer exists. The merge is unaffected, and no hook change can avoid this.
 - Hooks (`install-agent-hooks`): tmux window status (`agent-tmux-status`), `approved` merge marker (`agent-approval-marker`), handoff suggestions and rtk output compression.
@@ -77,6 +78,54 @@ Further documentation:
 - [Codex session management and language tooling](docs/codex-session-language.md)
 - [Claude Code 1-hour cache writes](docs/claude-cache-writes.md)
 - [Isolating agent work under a dedicated user](docs/dev-user-isolation.md)
+
+## Shared future tasks
+
+From the primary checkout or any linked worktree:
+
+```bash
+agent-backlog path
+agent-backlog add 'Investigate the slow startup; compare cold and warm runs'
+agent-backlog list
+agent-backlog remove 'Investigate the slow startup; compare cold and warm runs'
+```
+
+The Python 3 CLI uses Git's common directory and worktree metadata to find the
+original checkout and validates that it is a working-tree root. Tasks
+live in that checkout's `.backlog.md`, independent of the current branch. For
+this repository that is `/home/dev/agent-config/.backlog.md`, even when working
+under `/home/dev/worktrees/`. Bare repositories have no original checkout and
+are rejected, as are separate-Git-directory layouts where Git's worktree list
+reports the metadata directory instead of the checkout. Reads do not create
+files. Writes use a shared advisory lock and
+atomic replacement; use the CLI for all writers to avoid lost updates. Existing
+content is preserved, additions are single-line checklist entries, and removal
+matches exact task text. Legacy prose is never removed implicitly.
+
+On writes the CLI appends `/.backlog.md` to the common `info/exclude`, preserving
+existing exclusions. It never changes tracked `.gitignore` or untracks files;
+a tracked backlog in any registered worktree blocks writes pending an explicit
+migration decision. `.agent-handoff.md` stays local to each worktree for the
+current task. Reading future tasks does not authorize executing them.
+
+`./install` distributes the `backlog` skill to Bob, Claude Code, and Codex and
+links `agent-backlog` into `~/.local/bin` for noninteractive use. The shared
+instructions discover it through the existing global instruction links;
+`shell/aliases.sh` also exposes the CLI in interactive shells. Invoke the skill
+as `/backlog` in Claude Code or `$backlog` in Bob and Codex.
+
+Codex's linked-worktree sandbox may deny writes to the original checkout and
+common Git directory. For an authorized backlog write, request the supported
+`require_escalated` execution after a sandbox denial; automatic approval review
+still applies. Bob and Claude Code use their normal tool approvals. A denial
+must be reported, with no local backlog fallback, broad allow rule, or sandbox
+change. Installing this feature does not modify these permissions or create a
+backlog in existing repositories.
+
+`tests/test_agent_backlog.sh` verifies CLI behavior and installation/discovery
+in temporary fixtures. These checks do not prove actual Bob/Claude/Codex skill
+selection or sandbox approval end to end; those require authorized sessions in
+each agent. No installed user settings or data are needed for these tests.
 
 ## Test delegation
 
