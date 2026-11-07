@@ -39,6 +39,21 @@ if name == 'gwt-path':
     subprocess.run(['git', 'worktree', 'add', '-qb', a[1], str(directory)], check=True)
     print(directory)
 elif name == 'codex':
+    if a == ['app-server']:
+        for line in sys.stdin:
+            message = json.loads(line)
+            if message['method'] == 'initialize':
+                print(json.dumps({'id': 1, 'result': {}}), flush=True)
+            elif message['method'] == 'config/value/write':
+                assert message['params']['value'] == 'trusted'
+                assert message['params']['mergeStrategy'] == 'replace'
+                if os.environ.get('FAIL_TRUST'):
+                    print(json.dumps({'id': 2, 'error': {'message': 'fixture trust denied'}}), flush=True)
+                else:
+                    with (base / 'trust.log').open('a') as f:
+                        f.write(json.dumps(message['params']) + '\\n')
+                    print(json.dumps({'id': 2, 'result': {'status': 'ok'}}), flush=True)
+        sys.exit(0)
     (base / 'codex.args').write_text(json.dumps(a))
     if os.environ.get('AUTO_REPORT') and not os.environ.get('NO_REPORT'):
         import re
@@ -61,6 +76,9 @@ else:
             token = (base / ('pane-' + pane)).read_text()
             print(os.environ.get('SERVER', '123') + '\\t' + token + '\\t' + os.environ.get('DEAD', '0'))
     elif a[0] == 'new-window':
+        directory = str(Path(a[a.index('-c') + 1]).resolve())
+        assert any(json.loads(line)['keyPath'] == 'projects.' + json.dumps(directory, ensure_ascii=False) + '.trust_level'
+                   for line in (base / 'trust.log').read_text().splitlines())
         pane = '%' + uuid.uuid4().hex
         (base / ('dir-' + pane)).write_text(a[a.index('-c') + 1])
         print(pane)
@@ -236,6 +254,11 @@ assert not all(status(first)['reported_commits_on_branch'].values())
 (fake / 'tmux.off').rename(fake / 'tmux')
 
 # Partial failure retains identifiable state and moved handoff, never cleanup.
+tmux_before = (base / 'tmux.log').read_bytes()
+failed = launch('feat/fail-trust', extra={'FAIL_TRUST': '1'}, ok=False)
+assert failed['launch'] == 'failed' and failed['pane'] is None and Path(failed['worktree']).is_dir()
+assert 'fixture trust denied' in failed['launch_error']
+assert (base / 'tmux.log').read_bytes() == tmux_before
 failed = launch('feat/fail-window', extra={'FAIL_TMUX': 'new-window'}, ok=False)
 assert failed['launch'] == 'failed' and failed['pane'] is None and Path(failed['worktree']).is_dir()
 (primary / '.agent-handoff.md').write_text('retained on failure')

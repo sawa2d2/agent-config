@@ -9,10 +9,12 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
@@ -165,6 +167,71 @@ explain the missing report in the session. Pane presence does not prove progress
 """
 
 
+def trust_worktree(directory):
+    # Use Codex's TOML editor to preserve unrelated settings and comments,
+    # bypassing our interactive wrapper and its settings refreshers.
+    wrapper = Path(launcher("codex")).resolve()
+    executable = next((str(candidate) for entry in os.get_exec_path()
+                       if (candidate := Path(entry or ".") / "codex").is_file()
+                       and os.access(candidate, os.X_OK)
+                       and candidate.resolve() != wrapper), None)
+    if executable is None:
+        raise ValueError("original codex CLI not found for directory trust registration")
+    executable = str(Path(executable).absolute())
+    home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex").resolve()
+    home.mkdir(parents=True, exist_ok=True)
+    # Serialize delegates from different repositories using the same config.
+    with (home / "codex-delegate-trust.lock").open("a") as lock, tempfile.TemporaryFile() as errors:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        with subprocess.Popen([executable, "app-server"], cwd=home,
+                              env=dict(os.environ, CODEX_HOME=str(home)),
+                              stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                              stderr=errors, bufsize=0) as process:
+            pending = b""
+            deadline = time.monotonic() + 20
+
+            def send(message):
+                process.stdin.write((json.dumps(message) + "\n").encode())
+
+            def response(request_id):
+                nonlocal pending
+                while True:
+                    while b"\n" in pending:
+                        line, pending = pending.split(b"\n", 1)
+                        message = json.loads(line)
+                        if message.get("id") == request_id:
+                            if "error" in message:
+                                raise ValueError(f"Codex directory trust registration: {message['error']}")
+                            return message.get("result", {})
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not select.select([process.stdout], [], [], remaining)[0]:
+                        raise ValueError("timed out registering Codex directory trust")
+                    chunk = os.read(process.stdout.fileno(), 65536)
+                    if not chunk:
+                        errors.seek(0)
+                        raise ValueError("Codex directory trust writer exited: " + errors.read().decode(errors="replace"))
+                    pending += chunk
+
+            try:
+                send(dict(id=1, method="initialize", params=dict(
+                    clientInfo=dict(name="codex_delegate", version="1"))))
+                response(1)
+                send(dict(method="initialized"))
+                send(dict(id=2, method="config/value/write", params=dict(
+                    keyPath="projects." + json.dumps(str(Path(directory).resolve()), ensure_ascii=False) + ".trust_level",
+                    value="trusted", mergeStrategy="replace")))
+                result = response(2)
+                if result.get("status") != "ok":
+                    raise ValueError(f"Codex directory trust registration was not effective: {result}")
+            finally:
+                process.stdin.close()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+
+
 def launch(args, context):
     root, common, worktrees = context
     if not os.environ.get("TMUX"):
@@ -189,6 +256,7 @@ def launch(args, context):
     try:
         directory = run("gwt-path", "-b", args.branch)
         update(context, task_id, worktree=directory)
+        trust_worktree(directory)
         if note.is_file():
             destination = Path(directory) / ".agent-handoff.md"
             if destination.exists():

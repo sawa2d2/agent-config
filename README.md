@@ -93,7 +93,11 @@ The originating Codex agent can stay in its original checkout on `main`, launch
 workers, and inspect their results on demand.
 Existing launch and handoff behavior remains: `-m`/`--model` selects the model;
 without a prompt, `.agent-handoff.md` is required and moved into the new worktree.
-No installed settings or approval rules are changed by these commands.
+Before launching a worker, Codex's config API registers only the new worktree
+as trusted in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). Existing
+settings, including sandbox and approval policies, are preserved. Hook trust is
+separate. A failed trust registration stops the launch and is recorded in task
+status; the created worktree is retained.
 
 ```bash
 codex-delegate -m gpt-6.1-sol feat/fix 'Fix the bug; run relevant checks and commit/push'

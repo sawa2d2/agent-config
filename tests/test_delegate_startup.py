@@ -133,6 +133,7 @@ class StartupTests(unittest.TestCase):
                      patch.object(codex.shutil, 'which', return_value='fixture'), \
                      patch.object(codex, 'git', return_value=directory), \
                      patch.object(codex, 'run', side_effect=run), \
+                     patch.object(codex, 'trust_worktree') as trust, \
                      patch.object(codex, 'writing', side_effect=lambda *args: nullcontext(store)), \
                      patch.object(codex, 'update', side_effect=lambda *args, **fields: updates.append(fields)), \
                      patch.object(codex, 'submit') as submit, \
@@ -147,6 +148,7 @@ class StartupTests(unittest.TestCase):
                             codex.launch(args, (root, root, []))
                         self.assertEqual(updates[-1]['launch'], 'failed')
                     submit.assert_called_once()
+                    trust.assert_called_once_with(directory)
                     self.assertIn({'launch': 'sent'}, updates)
 
     def test_deadline_and_no_retry(self):
