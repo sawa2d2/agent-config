@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# == 1 && $1 == --help ]]; then
+  cat <<'HELP'
+Usage: agent-tmux-overview
+
+Show agent status across sessions on the current tmux server using choose-tree.
+Requires tmux and an attached client; run inside tmux. Existing shared hooks for
+Bob, Claude Code and Codex supply window status and attention.
+Labels include the last hook update and any application-provided pane progress.
+An ! marks an unacknowledged agent notification; otherwise its column is blank.
+Native filtering may retain unmarked multi-pane windows, shown as [untracked].
+
+Use Up/Down to navigate, Enter to switch, + to expand panes, v to toggle the
+native preview, and q to close. Reopen to refresh the list and status labels.
+Attention stays set until a prompt is submitted or your configuration clears it.
+Stale means no recent hook update; done records the agent's Stop event.
+Neither proves the task is complete.
+HELP
+  exit 0
+fi
+if (( $# )); then
+  echo 'Usage: agent-tmux-overview [--help]' >&2
+  exit 2
+fi
+if [[ -z ${TMUX:-} ]]; then
+  echo 'agent-tmux-overview: run inside tmux (start or attach a session first).' >&2
+  exit 1
+fi
+if ! command -v tmux >/dev/null 2>&1; then
+  echo 'agent-tmux-overview: tmux is required.' >&2
+  exit 1
+fi
+
+# choose-tree ignores a filter that would hide every item.
+statuses=$(tmux list-windows -a -F '#{@agent_status}')
+if [[ -z $statuses ]]; then
+  echo 'agent-tmux-overview: no agent windows; launch Bob, Claude Code or Codex with the shared hooks enabled.' >&2
+  exit 0
+fi
+
+# Progress belongs to each pane; do not mistake the active pane for the agent.
+progress='#{?#{&&:#{pane_pb_state},#{!=:#{pane_pb_state},hidden}}, p#{pane_index}=#{pane_pb_state}#{?#{==:#{pane_pb_state},indeterminate},,:#{pane_pb_progress}%},}'
+# Fixed-width columns keep lifecycle information aligned; details follow them.
+label='#{p28:#{=/25/...:window_name}} [#{p9:#{?#{@agent_status},#{@agent_status},untracked}}] #{?#{&&:#{@agent_status},#{==:#{@agent_attention},1}},!, }'
+updated=' updated=#{p14:#{?#{&&:#{@agent_status},#{@agent_status_at}},#{t/f/%m-%d %H#:%M#:%S:@agent_status_at},-}}'
+
+exec tmux choose-tree -Zw \
+  -f '#{!=:#{@agent_status},}' \
+  -F "#{?session_format,#{session_name},${label}${updated}#{?pane_format, | #{pane_current_command}${progress},#{P:${progress}}}}"

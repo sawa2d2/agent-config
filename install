@@ -80,7 +80,7 @@ done
 
 # Agent utilities need PATH entries in non-interactive shells, which
 # lack the aliases from shell/aliases.sh.
-for bin_name in agent-delegate bob-delegate codex-delegate codex-ralph agent-backlog; do
+for bin_name in agent-delegate bob-delegate codex-delegate codex-ralph agent-backlog agent-tmux-overview; do
   dest="$HOME/.local/bin/$bin_name"
   link_managed "$dest" "bin/$bin_name"
 done

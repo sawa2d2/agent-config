@@ -64,6 +64,7 @@ Launchers (`bin/`):
 - `ai-stats claude|bob|codex`: token/cost usage with matching date/project filters, before/after comparisons, JSON Lines, and weekly or fixed windows (see [usage statistics](docs/ai-stats.md)).
 - `codex-ralph`: bounded loop of fresh `codex exec` runs until a check passes.
 - `agent-backlog`: list, add, or remove untracked future tasks shared by all worktrees (see below).
+- `agent-tmux-overview`: native tmux agent window picker with pane previews (see below).
 
 Each script except the `claude`, `bob` and `codex` launchers (which pass it to the real CLI) prints its usage with `--help`; header comments in `bin/` and `scripts/` document the details.
 
@@ -195,6 +196,67 @@ prevent the final launch update. Inspect the recorded paths and tmux before any
 manual recovery; do not blindly relaunch the same branch. Worker reports must be
 made before deleting the worker checkout. No daemon, polling, follow-up injection,
 automatic resume, cross-agent management, or automatic merge is provided.
+
+## tmux agent overview
+
+Run `agent-tmux-overview` inside an attached tmux session (`--help` for usage).
+It uses native `choose-tree` across sessions on the current server, showing
+window names, `@agent_status` and `@agent_attention`, with native pane previews.
+Labels also show the last hook update (`@agent_status_at`, local time), and
+application-provided native progress (`pane_pb_state` / `pane_pb_progress`) when
+available. Window rows collect progress from every pane, identified by pane
+index; expanded pane rows show only that pane's progress. For example:
+
+```text
+agent-config                 [working  ]   updated=11-07 14:32:10 p1=normal:42%
+local-ai                     [waiting  ] ! updated=11-07 14:31:05
+dots                         [untracked]   updated=-
+```
+
+Names use a 28-column field (long names are shortened with `...`); state,
+attention and update fields are aligned, with optional pane details last.
+An `!` marks an unacknowledged agent notification; otherwise that column is
+blank. Missing update values are shown as `-`.
+
+Progress can be `normal`, `error`, `indeterminate` or `paused`; indeterminate
+progress has no percentage. Hidden or unsupported progress is omitted. Shared
+agent hooks supply lifecycle state, not task phases or completion percentages;
+a percentage appears only when a pane application supplies OSC 9;4 progress.
+
+Bob, Claude Code and Codex use the existing shared hooks installed by `./install`
+and refreshed by their launchers; no Fleet, model calls or additional daemon is
+involved. `./install` links the command into `~/.local/bin`; sourcing
+`shell/aliases.sh` also exposes it interactively.
+
+Use Up/Down and Enter to switch to the selected target, `+` to expand a window's
+panes, `v` to toggle previews, and `q` to close. With no marked agent windows the
+command prints guidance instead of opening an unfiltered tree. Outside tmux it
+asks you to start or attach a session and exits nonzero.
+
+The filter requests marked agent windows. In tmux 3.7c, native `choose-tree` can
+retain an unmarked window with multiple panes even when all its panes fail the
+filter. These rows are labeled `[untracked]`, with a blank notification column
+and `-` for the update field. This picker does not guarantee an agent-only list.
+
+Suggested optional binding (prefix + `A`, unused in tmux's default prefix table;
+check your own bindings first):
+
+```tmux
+bind-key A run-shell '~/.local/bin/agent-tmux-overview'
+```
+
+Add this yourself to your tmux configuration if wanted. This repository does
+not edit `~/.tmux.conf` or its dotfiles symlink target, or apply live bindings.
+
+Native `choose-tree` is not a continuously refreshed agent dashboard: item
+labels are evaluated when the tree is built, and hook updates do not force a
+rebuild. Close and reopen for current membership, state, progress and update
+labels; terminal previews can change while the picker is open. Attention remains
+set through resumed work until a submitted prompt or your tmux configuration
+clears it; selecting a target does not acknowledge it. `stale` means no recent
+hook update (normally 300 seconds), and `done` records the agent's Stop event.
+Neither proves task completion
+or successful checks; inspect the agent output and verification results.
 
 ## Shared future tasks
 
