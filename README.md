@@ -27,6 +27,21 @@ To enable the launchers in interactive Bash or Zsh, add to your startup file:
 [[ -f "$HOME/agent-config/shell/aliases.sh" ]] && source "$HOME/agent-config/shell/aliases.sh"
 ```
 
+Use a persistent checkout such as `~/agent-config` for this line, rather than a
+temporary development worktree. Open a new shell after editing the startup file,
+or run the line above in the current shell. `alias codex` should then name
+`~/agent-config/bin/codex` (with the home directory expanded).
+
+If bare `codex` starts a new session instead of resuming, check `type -a codex`
+and `alias codex`. The standalone installer owns `~/.local/bin/codex` and may
+replace it during updates; leave that link pointing to the underlying CLI.
+Load `shell/aliases.sh` from `.bashrc` or `.zshrc` to select the repository
+launcher even when `~/.local/bin` comes first on PATH. The launcher removes its
+own `bin` directory from PATH before resolving the underlying CLI, avoiding
+recursion. Do not replace the installer's link with a link to `bin/codex`.
+Aliases apply to interactive shell commands; scripts should invoke the
+repository launcher explicitly when they need its resume defaults.
+
 Optional extras:
 
 ```bash
