@@ -75,7 +75,7 @@ Installed by `./install` (`scripts/`):
 - Skills from `deploy/skills/` (`handoff`, `takeover`, `backlog`, `loop`) plus upstream skills, Spec Kit, rtk and Claude Code plugins (`install-tools`, `install-skill`, `install-rtk`, `install-claude-plugins`).
 - Agent settings and themes (`install-claude-settings`, `install-bob-settings`, `install-bob-theme`, `install-codex-theme`, `install-codex-compaction`, `install-codex-subagent-model`).
 - Codex rules (`deploy/codex/rules/agent-config.rules`, linked to `~/.codex/rules/`): `gfinish` runs outside the workspace-write sandbox; its `approved` marker still authorizes the merge. Detailed Git approval, conflict recovery, sandbox and deleted-worktree hook procedures are in [on-demand operations](deploy/operations/).
-- Hooks (`install-agent-hooks`): tmux window status (`agent-tmux-status`), `approved` merge marker (`agent-approval-marker`), handoff suggestions and rtk output compression.
+- Hooks (`install-agent-hooks`): tmux window status (`agent-tmux-status`), `approved` merge marker (`agent-approval-marker`), handoff suggestions and rtk output compression. Standalone hook executables are copied to `~/.local/share/agent-config/hooks/`, so deleting the source worktree does not break installed hooks. `--codex-only` updates only Codex settings and its required executables.
 
 Further documentation:
 

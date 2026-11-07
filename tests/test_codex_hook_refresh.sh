@@ -43,17 +43,17 @@ cat > "$CODEX_HOME/hooks.json" <<'JSON'
 {"description":"user metadata","hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/old/scripts/codex-rtk-hook"},{"type":"command","command":"echo user","timeout":7}]}],"Stop":[{"hooks":[{"type":"command","command":"echo done"}]}]}}
 JSON
 launch new --sandbox read-only
-python3 - "$CODEX_HOME/hooks.json" "$root" <<'PY'
+python3 - "$CODEX_HOME/hooks.json" "$HOME/.local/share/agent-config/hooks" <<'PY'
 import json, sys
 p, root = sys.argv[1:]
 d = json.load(open(p))
 assert d['description'] == 'user metadata'
 assert d['hooks']['Stop'] == [{'hooks': [{'type': 'command', 'command': 'echo done'}]},
-    {'hooks': [{'type': 'command', 'command': root + '/scripts/agent-tmux-status done'}]}]
+    {'hooks': [{'type': 'command', 'command': root + '/agent-tmux-status done'}]}]
 assert d['hooks']['PreToolUse'] == [
     {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'echo user', 'timeout': 7}]},
-    {'hooks': [{'type': 'command', 'command': root + '/scripts/agent-tmux-status working'}]},
-    {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': root + '/scripts/codex-rtk-hook'}]}]
+    {'hooks': [{'type': 'command', 'command': root + '/agent-tmux-status working'}]},
+    {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': root + '/codex-rtk-hook'}]}]
 PY
 [[ $(cat "$CODEX_HOME/argv") == $'--no-alt-screen\n--sandbox\nread-only' ]] || fail 'explicit sandbox changed'
 # Atomic rewrites replace the inode: verify both bytes and file identity stay stable.
@@ -66,11 +66,11 @@ cmp -s "$CODEX_HOME/hooks.json" "$tmp/before.json" || fail 'unchanged definition
 [[ $(cat "$CODEX_HOME/argv") == $'--no-alt-screen\n-a\non-request' ]] || fail 'explicit approval changed'
 rm "$tmp/bin/rtk"
 launch
-python3 - "$CODEX_HOME/hooks.json" "$root" <<'PY'
+python3 - "$CODEX_HOME/hooks.json" "$HOME/.local/share/agent-config/hooks" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
 assert d['hooks']['PreToolUse'] == [{'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'echo user', 'timeout': 7}]},
-    {'hooks': [{'type': 'command', 'command': sys.argv[2] + '/scripts/agent-tmux-status working'}]}]
+    {'hooks': [{'type': 'command', 'command': sys.argv[2] + '/agent-tmux-status working'}]}]
 assert d['description'] == 'user metadata'
 PY
 [[ $(cat "$CODEX_HOME/argv") == $'--no-alt-screen\n--approve-for-me\n-c\nfeatures.worktrees=false\nresume\n--last' ]] || fail 'default launch changed'

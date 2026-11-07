@@ -28,19 +28,46 @@ export AGENT_HOOKS_CODEX_ONLY=${1:-}
 repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 rtk=0
 command -v rtk >/dev/null 2>&1 && rtk=1
-AGENT_TMUX_STATUS="$repo_dir/scripts/agent-tmux-status" CODEX_RTK_HOOK="$repo_dir/scripts/codex-rtk-hook" \
-  BOB_HANDOFF_SUGGEST="$repo_dir/scripts/bob-handoff-suggest" \
-  CODEX_HANDOFF_SUGGEST="$repo_dir/scripts/codex-handoff-suggest" \
-  AGENT_APPROVAL_MARKER="$repo_dir/scripts/agent-approval-marker" RTK="$rtk" python3 - <<'PY'
+AGENT_HOOKS_SOURCE="$repo_dir/scripts" RTK="$rtk" python3 - <<'PYHOOKS'
 import json
 import os
 import shlex
 from pathlib import Path
 import tempfile
 
-command = shlex.quote(os.environ["AGENT_TMUX_STATUS"])
 home = Path.home()
 codex_home = Path(os.environ.get("CODEX_HOME") or home / ".codex")
+# Copy standalone executables, rather than linking to a disposable checkout.
+hook_dir = home / ".local/share/agent-config/hooks"
+names = ["agent-tmux-status", "agent-approval-marker", "codex-handoff-suggest", "codex-rtk-hook"]
+if not os.environ["AGENT_HOOKS_CODEX_ONLY"]:
+    names.append("bob-handoff-suggest")
+for name in names:
+    source = Path(os.environ["AGENT_HOOKS_SOURCE"]) / name
+    destination = hook_dir / name
+    content = source.read_bytes()
+    mode = source.stat().st_mode & 0o777
+    if (not destination.is_symlink() and destination.exists()
+            and destination.read_bytes() == content and destination.stat().st_mode & 0o777 == mode):
+        continue
+    hook_dir.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{name}.", dir=hook_dir)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(content)
+        os.chmod(temporary, mode)
+        os.replace(temporary, destination)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    print(f"Installed hook: {destination}")
+
+
+def hook_command(name):
+    return shlex.quote(str(hook_dir / name))
+
+
+command = hook_command("agent-tmux-status")
 # Event -> (matcher or None, state). Bob has no Notification or SessionEnd
 # event (observed in Bob Shell 2.0.6); a new session clears the old mark.
 targets = {
@@ -80,21 +107,21 @@ RTK_HOOK = "rtk hook claude"
 rtk_targets = {
     home / ".bob/settings/settings.json": {"PreToolUse": ("^execute_command$", RTK_HOOK)},
     home / ".claude/settings.json": {"PreToolUse": ("Bash", RTK_HOOK)},
-    codex_home / "hooks.json": {"PreToolUse": ("Bash", shlex.quote(os.environ["CODEX_RTK_HOOK"]))},
+    codex_home / "hooks.json": {"PreToolUse": ("Bash", hook_command("codex-rtk-hook"))},
 }
 
 
 # Event -> [(matcher, command)] registered whether or not rtk is installed.
-approval_marker = shlex.quote(os.environ["AGENT_APPROVAL_MARKER"])
+approval_marker = hook_command("agent-approval-marker")
 extra_targets = {
     home / ".bob/settings/settings.json": {
-        "UserPromptSubmit": [(None, shlex.quote(os.environ["BOB_HANDOFF_SUGGEST"])), (None, approval_marker)],
+        "UserPromptSubmit": [(None, hook_command("bob-handoff-suggest")), (None, approval_marker)],
         # Bob shows PostToolUse context to the model but drops PreToolUse's (Bob Shell 2.0.9).
-        "PostToolUse": [(None, shlex.quote(os.environ["BOB_HANDOFF_SUGGEST"]))]},
+        "PostToolUse": [(None, hook_command("bob-handoff-suggest"))]},
     home / ".claude/settings.json": {"UserPromptSubmit": [(None, approval_marker)]},
     codex_home / "hooks.json": {
         "UserPromptSubmit": [(None, approval_marker)],
-        "PreCompact": [("auto", shlex.quote(os.environ["CODEX_HANDOFF_SUGGEST"]))]},
+        "PreCompact": [("auto", hook_command("codex-handoff-suggest"))]},
 }
 
 
@@ -162,4 +189,4 @@ for path in dict.fromkeys([*targets, *rtk_targets, *extra_targets]):
         if os.path.exists(temporary):
             os.unlink(temporary)
     print(f"Updated hooks: {path}")
-PY
+PYHOOKS
