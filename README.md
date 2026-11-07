@@ -62,7 +62,9 @@ Launchers (`bin/`):
 - `clauderm`: delete Claude Code sessions of the current repository.
 - `codexrm`: delete Codex sessions of the current repository (with their subagent threads).
 - `ai-stats claude|bob|codex`: token/cost usage with matching date/project filters, before/after comparisons, JSON Lines, and weekly or fixed windows (see [usage statistics](docs/ai-stats.md)).
-- `codex-ralph`: bounded loop of fresh `codex exec` runs until a check passes.
+- `codex-ralph`: bounded loop of fresh `codex exec` runs until a check passes;
+  `$loop` routes Codex tasks to it. Check results (including failed stdout/stderr)
+  persist in the workspace’s uncommitted `.agent-progress.md`.
 - `agent-backlog`: list, add, or remove untracked future tasks shared by all worktrees (see below).
 - `agent-tmux-overview`: native tmux agent window picker with pane previews (see below).
 
@@ -70,7 +72,7 @@ Each script except the `claude`, `bob` and `codex` launchers (which pass it to t
 
 Installed by `./install` (`scripts/`):
 
-- Skills from `deploy/skills/` (`handoff`, `takeover`, `backlog`, `autonomous-development`) plus upstream skills, Spec Kit, rtk and Claude Code plugins (`install-tools`, `install-skill`, `install-rtk`, `install-claude-plugins`).
+- Skills from `deploy/skills/` (`handoff`, `takeover`, `backlog`, `loop`) plus upstream skills, Spec Kit, rtk and Claude Code plugins (`install-tools`, `install-skill`, `install-rtk`, `install-claude-plugins`).
 - Agent settings and themes (`install-claude-settings`, `install-bob-settings`, `install-bob-theme`, `install-codex-theme`, `install-codex-compaction`, `install-codex-subagent-model`).
 - Codex rules (`deploy/codex/rules/agent-config.rules`, linked to `~/.codex/rules/`): `gfinish` runs outside the workspace-write sandbox; its `approved` marker still authorizes the merge. Detailed Git approval, conflict recovery, sandbox and deleted-worktree hook procedures are in [on-demand operations](deploy/operations/).
 - Hooks (`install-agent-hooks`): tmux window status (`agent-tmux-status`), `approved` merge marker (`agent-approval-marker`), handoff suggestions and rtk output compression.
@@ -369,6 +371,9 @@ fields are preserved; an explicit policy choice is left byte-for-byte intact.
 When adding the default, YAML comments/formatting may change. Invalid YAML,
 duplicate keys or a non-mapping policy fail before replacing that Codex copy.
 Bob/Claude copies and upstream sources are unchanged by the conversion.
+The explicitly invoked `$loop` skill replaces `autonomous-development`. After
+an authorized reinstall, remove the old installed skill only if its
+`.agent-config-managed` marker confirms agent-config ownership.
 Managed installed skills need a separate authorized reinstall to receive it;
 repository changes alone do not rewrite real user settings. This does not
 guarantee removal of skill metadata from the initial model context.

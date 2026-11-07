@@ -5,15 +5,22 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 export HOME="$tmp/home" CODEX_HOME="$tmp/config" PATH="$tmp/bin:$PATH" STATE="$tmp/state"
 mkdir -p "$HOME" "$CODEX_HOME" "$tmp/bin" "$STATE"
+cd "$tmp"
+printf "Original objective\n" > .agent-progress.md
 printf 'Implement the task\n' > "$tmp/prompt"
 cat > "$tmp/bin/codex" <<'PY'
 #!/usr/bin/env python3
 import os, pathlib, sys, time
 s = pathlib.Path(os.environ['STATE'])
 assert sys.argv[1:] == ['exec', '-'], sys.argv
-assert 'Implement the task' in sys.stdin.read()
+prompt = sys.stdin.read()
+assert 'Implement the task' in prompt and '.agent-progress.md' in prompt
 n = int((s / 'calls').read_text()) + 1 if (s / 'calls').exists() else 1
 (s / 'calls').write_text(str(n))
+if n == 2:
+    progress = pathlib.Path('.agent-progress.md').read_text()
+    assert 'Original objective' in progress and 'Exit status: 1' in progress
+    assert 'expected two calls' in progress and 'checker stderr' in progress
 if (s / 'block').exists():
     (s / 'pid').write_text(str(os.getpid()))
     time.sleep(30)
@@ -22,12 +29,16 @@ if (s / 'error').exists():
 PY
 cat > "$tmp/check" <<'SH'
 #!/usr/bin/env bash
+echo "expected two calls"
+echo "checker stderr" >&2
 [[ $(cat "$STATE/calls") -ge 2 ]]
 SH
 chmod +x "$tmp/bin/codex" "$tmp/check"
 run() { python3 "$root/bin/codex-ralph" --prompt-file "$tmp/prompt" --max-iterations "$1" --check "$tmp/check"; }
 run 3
 [[ $(cat "$STATE/calls") == 2 ]]
+grep -q "Exit status: 0" .agent-progress.md
+grep -q "Exit status: 1" .agent-progress.md
 rm "$STATE/calls"
 status=0
 run 1 || status=$?
@@ -47,6 +58,7 @@ printf '#!/bin/sh\nexit 9\n' > "$tmp/check"
 status=0
 run 3 || status=$?
 [[ $status == 9 && $(cat "$STATE/calls") == 1 ]]
+grep -q "Exit status: 9" .agent-progress.md
 rm "$STATE/calls"
 # Both signals cancel the active CLI and prevent subsequent iterations.
 for sig in TERM INT; do

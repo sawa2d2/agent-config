@@ -68,15 +68,29 @@ def main():
     for iteration in range(1, args.max_iterations + 1):
         print(f'Codex Ralph: iteration {iteration}/{args.max_iterations}', file=sys.stderr)
         # Use a temporary stdin file to avoid a pipe write deadlock and keep the
-        # prompt identical across fresh sessions. Files in the workspace carry progress.
+        # task identical across fresh sessions. The progress file carries feedback.
         with tempfile.TemporaryFile() as source:
-            source.write((prompt + '\n\nWork from the current files. Record remaining work '
-                          'in the workspace for the next fresh session.\n').encode())
+            source.write((prompt + '\n\nRead .agent-progress.md first if it exists, including failed '
+                          'completion checks. Work from the current files. Update '
+                          '.agent-progress.md with decisions, remaining work and '
+                          'verification evidence for the next fresh session. Do not '
+                          'commit this progress file.\n').encode())
             source.seek(0)
             status = run(['codex', 'exec', '-'], stdin=source)
         if status:
             return status
-        status = run([str(check)])
+        # Keep stdout and stderr together, including on the final failed check;
+        # a later invocation must be able to diagnose it without chat history.
+        with tempfile.TemporaryFile() as output:
+            status = run([str(check)], stdout=output, stderr=subprocess.STDOUT)
+            output.seek(0)
+            evidence = output.read().decode(errors='replace')
+        sys.stderr.write(evidence)
+        with Path('.agent-progress.md').open('a') as progress:
+            progress.write(f'\n## Completion check: iteration {iteration}\n'
+                           f'Command: {check}\nExit status: {status}\n\n')
+            progress.write(''.join('    ' + line + '\n' for line in evidence.splitlines())
+                           if evidence else '(no output)\n')
         if status == 0:
             return 0
         if status != 1:

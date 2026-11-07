@@ -12,6 +12,12 @@ class StartupError(ValueError):
     pass
 
 
+def launcher(agent):
+    # Delegates need wrapper semantics (e.g. `codex new`), even when only
+    # aliases select our launchers and PATH resolves the upstream CLI.
+    return str(Path(__file__).resolve().parent.parent / "bin" / agent)
+
+
 def tmux(*args, input=None):
     try:
         return subprocess.run(["tmux", *args], input=input, text=True,
@@ -138,7 +144,7 @@ def main():
     parser.add_argument("model", nargs="?")
     args = parser.parse_args()
     label = "agent-delegate" if args.agent == "claude" else "bob-delegate"
-    command = [args.agent]
+    command = [launcher(args.agent)]
     if args.agent == "claude":
         if args.model:
             command += ["--model", args.model]

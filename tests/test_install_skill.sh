@@ -24,6 +24,15 @@ assert fields.get("description"), fields
 PY
 done
 
+# The renamed repository skill distributes the explicit-only policy to all agents.
+install_skill "$root/deploy/skills/loop" loop > /dev/null
+for target in .bob .claude .codex; do
+  dest="$HOME/$target/skills/loop"
+  [[ -f "$dest/.agent-config-managed" ]] || fail "loop not managed: $target"
+  cmp "$root/deploy/skills/loop/SKILL.md" "$dest/SKILL.md" || fail "loop changed: $target"
+  [[ $(cat "$dest/agents/openai.yaml") == $'policy:\n  allow_implicit_invocation: false' ]] || fail "loop policy: $target"
+done
+
 # Defaults to the Bob, Claude Code and Codex skill directories and marks copies as managed.
 mkdir -p "$tmp/src/demo/ref"
 printf -- '---\nname: demo\ndescription: d\n---\nv1\n' > "$tmp/src/demo/SKILL.md"

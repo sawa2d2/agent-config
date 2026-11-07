@@ -13,6 +13,43 @@ spec.loader.exec_module(startup)
 
 
 class StartupTests(unittest.TestCase):
+    def test_intended_launchers_with_alias_only_and_path_setup(self):
+        import json
+        import os
+        import shutil
+        values = ["new", "line\n$(touch injected) `touch injected2` ' \\ 日本語"]
+        for shell in ('bash', 'zsh'):
+            if not shutil.which(shell):
+                continue
+            for setup in ('alias-only', 'path'):
+                for agent in ('codex', 'bob', 'claude'):
+                    with self.subTest(shell=shell, setup=setup, agent=agent), tempfile.TemporaryDirectory() as directory:
+                        root = Path(directory) / 'repo with spaces'
+                        (root / 'bin').mkdir(parents=True)
+                        native = Path(directory) / 'native'
+                        native.mkdir()
+                        target = Path(directory) / 'result.json'
+                        wrapper = root / 'bin' / agent
+                        wrapper.write_text('#!/usr/bin/env python3\nimport json,os,sys\n'
+                                           'open(os.environ["RESULT"],"w").write(json.dumps(sys.argv[1:]))\n')
+                        wrapper.chmod(0o755)
+                        (native / agent).write_text('#!/bin/sh\nexit 71\n')
+                        (native / agent).chmod(0o755)
+                        # Resolve from the delegate installation, never PATH or aliases.
+                        with patch.object(startup, '__file__', str(root / 'lib/delegate_startup.py')):
+                            command = startup.shell_command([startup.launcher(agent), *values])
+                        script = Path(directory) / 'run'
+                        script.write_text((f"alias {agent}=" + startup.shell_command([str(wrapper)]) + '\n'
+                                           if setup == 'alias-only' else '') + command + '\n')
+                        search = str(native if setup == 'alias-only' else root / 'bin')
+                        result = subprocess.run([shell, '--norc' if shell == 'bash' else '-f', '-i', str(script)], cwd=directory,
+                                                env=dict(os.environ, PATH=search + ':' + os.environ['PATH'],
+                                                         HOME=directory, ZDOTDIR=directory,
+                                                         RESULT=str(target)), capture_output=True, text=True)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(json.loads(target.read_text()), values)
+                        self.assertFalse(list(Path(directory).glob('injected*')))
+
     def test_literal_submission_in_interactive_shell(self):
         # Execute physical input lines separately: bash -c alone would miss the
         # original bug where readline interprets embedded newlines as Enter.

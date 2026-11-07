@@ -158,9 +158,9 @@ second = launch('feat/quote;literal', prompt, '-m', model, cwd=worker)
 commands = [json.loads(line) for line in (base / 'tmux.log').read_text().splitlines()]
 keys = [a[-1] for a in commands if a[:1] == ['send-keys'] and '-l' in a]
 keys = [key for key in keys if "codex" in key]
-assert shell_words(keys[0])[:2] == ['codex', 'new']
+assert shell_words(keys[0])[:2] == [str(root / 'bin/codex'), 'new']
 assert shell_words(keys[0])[-1].startswith('Read .agent-handoff.md and continue the work it describes.')
-assert shell_words(keys[-1])[:4] == ['codex', 'new', '--model', model]
+assert shell_words(keys[-1])[:4] == [str(root / 'bin/codex'), 'new', '--model', model]
 assert shell_words(keys[-1])[-1].startswith(prompt)
 assert '--report ' + second['id'] in shell_words(keys[-1])[-1]
 # Execute recorded input against the real launch wrapper with only a fake paid CLI.
@@ -171,10 +171,10 @@ assert arguments[-1].startswith(prompt)
 assert arguments[-1] == shell_words(keys[-1])[-1]
 assert not any(primary.glob('injected*'))
 third = launch('feat/model', '--status is a literal prompt', '--model', 'gpt-6-luna')
-assert json.loads((base / 'codex.args').read_text())[:3] == ['new', '--model', 'gpt-6-luna']
+assert json.loads((base / 'codex.args').read_text())[:4] == ['--no-alt-screen', '--approve-for-me', '--model', 'gpt-6-luna']
 
-# Launching itself never installs or changes settings (wrapper fixture above
-# may refresh its isolated HOME, so use a fresh baseline).
+# The intended wrapper refreshes only the isolated HOME; repeated launches
+# preserve the already installed configuration.
 config = (Path(env['HOME']) / '.codex/config.toml').read_bytes()
 launch('feat/no-settings')
 assert (Path(env['HOME']) / '.codex/config.toml').read_bytes() == config
@@ -360,8 +360,8 @@ for index, options in enumerate([
     call(*options, f'feat/selected-grammar-{index}', literal)
     command = [json.loads(line)[-1] for line in (base / 'tmux.log').read_text().splitlines()
                if json.loads(line)[:1] == ['send-keys'] and '-l' in json.loads(line)][-1]
-    assert shlex.split(command)[:4] == ['codex', 'new', '--model', model]
-    assert shlex.split(command)[-1].startswith(literal)
+    assert shell_words(command)[:4] == [str(root / 'bin/codex'), 'new', '--model', model]
+    assert shell_words(command)[-1].startswith(literal)
 
 # A selected linked checkout supplies its own HEAD and note, not the main root.
 git('-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'worker commit', '--allow-empty', cwd=selected_worker)

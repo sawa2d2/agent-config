@@ -1,10 +1,10 @@
 ---
-name: autonomous-development
+name: loop
 description: Carry a development objective through autonomously across several work units, branches or sessions. Use only when the user invokes this skill by name.
 disable-model-invocation: true
 ---
 
-# Autonomous Development
+# Loop
 
 Carry the objective to completion with as few interruptions as possible. The
 global and personal instructions still apply and take precedence over this
@@ -18,7 +18,7 @@ worktrees, pull requests or merge choices), skip those steps.
 | Unclear requirements or design | superpowers `brainstorming` first (asks questions until the design is settled); `grilling` to stress-test a proposal |
 | Settled design, several steps | superpowers `writing-plans`, then `executing-plans` (or `subagent-driven-development` where subagents exist) |
 | Large feature whose specification should be kept as documents | Spec Kit: `specify init` in the repository, then `/speckit.specify`, `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement` |
-| Mechanically checkable end state (all tests pass, lint clean) | `ralph-loop` (Claude Code only) with an explicit completion condition and an iteration limit |
+| Mechanically checkable end state (all tests pass, lint clean) | Codex: `codex-ralph` below; Claude Code: `ralph-loop`, with an explicit completion condition and iteration limit |
 | Before claiming any unit is done | superpowers `verification-before-completion` |
 
 The superpowers skills are installed with `disable-model-invocation`, so the
@@ -28,6 +28,28 @@ directory instead (for example `~/.claude/skills/brainstorming/SKILL.md`).
 Ask about unclear requirements before planning. When a tool is not installed
 in this agent, carry out its idea inline: clarify, plan in verifiable units,
 execute, verify.
+
+## Codex fresh-session loop
+
+For an authorized task with a mechanically checkable end state, reuse the
+installed `codex-ralph` runner from the assigned workspace:
+
+```bash
+codex-ralph --prompt-file /path/to/task.txt --max-iterations 3 --check /path/to/check
+```
+
+Write the task and its scope into the prompt file. Use a trusted executable
+check: exit 0 means complete, 1 means more work, any other status stops the
+runner. Choose a finite iteration limit. Each iteration starts `codex exec`
+from the current workspace; agent errors stop immediately. Existing sandbox,
+approval, Git and delegated-verification rules still apply. When checks must
+run in a child agent, have that child own the runner and its check.
+
+The runner appends each completed check's command, exit status and combined
+stdout/stderr to `.agent-progress.md`, including the last failed check when
+the limit is reached. Read that evidence before another attempt; retain it
+when updating progress. On completion, report actual checks and limitations.
+Do not restart automatically after a limit or blocker.
 
 ## Starting a branch
 
@@ -60,7 +82,8 @@ creation, agent identity, repository selection, and coordinator/worker behavior.
   write the Git directory); never commit it or add it to the repository's
   `.gitignore`.
 - Record the objective, each unit's status and branch, stacked parents and
-  recorded commits, decisions, blockers, and checks waiting for the user.
+  recorded commits, decisions, blockers, failed check commands/results, and checks
+  waiting for the user.
   Update it after every unit and before the session may end or be compacted.
 - When resuming, read it first and verify it against Git.
 

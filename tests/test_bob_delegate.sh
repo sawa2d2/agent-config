@@ -63,7 +63,7 @@ echo note > .agent-handoff.md
 "$root/bin/bob-delegate" feat/x > /dev/null
 [[ ! -e .agent-handoff.md && $(cat "$tmp/worktrees/feat/x/.agent-handoff.md") == note ]] || fail 'note was not moved'
 grep -qx "new-window -d -t \$7 -n feat/x -c $tmp/worktrees/feat/x -P -F #{pane_id}" "$tmp/tmux.log" || fail "window: $(cat "$tmp/tmux.log")"
-grep -Fqx "send-keys -t %9 -l \$'bob' \$'new'" "$tmp/tmux.log" || fail "bob new: $(cat "$tmp/tmux.log")"
+grep -Fqx "send-keys -t %9 -l \$'$root/bin/bob' \$'new'" "$tmp/tmux.log" || fail "bob new: $(cat "$tmp/tmux.log")"
 grep -qx 'send-keys -t %9 Enter' "$tmp/tmux.log" || fail 'Enter was not sent'
 # The handoff prompt is typed after the input box appears.
 [[ $(cat "$tmp/pasted") == "Read .agent-handoff.md and continue the work it describes." ]] || fail "prompt: $(cat "$tmp/tmux.log")"

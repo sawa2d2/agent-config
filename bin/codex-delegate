@@ -16,7 +16,7 @@ import tempfile
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from delegate_startup import pane_alive, submit, wait_for
+from delegate_startup import launcher, pane_alive, submit, wait_for
 
 
 def run(*args, cwd=None):
@@ -201,7 +201,7 @@ def launch(args, context):
                    "-c", directory, "-P", "-F", "#{pane_id}")
         update(context, task_id, pane=pane)
         run("tmux", "set-option", "-p", "-t", pane, "@codex_delegate_task", task_id)
-        command = ["codex", "new"]
+        command = [launcher("codex"), "new"]
         if args.model:
             command += ["--model", args.model]
         command.append(worker_prompt(prompt, task_id))
