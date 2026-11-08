@@ -54,6 +54,7 @@ def install(checkout=primary, refused=None):
 
 primary.mkdir()
 run('git', 'init', '-q', str(primary))
+git('branch', '-M', 'main')
 shutil.copyfile(installer, primary / 'install')
 for source in set(links.values()):
     path = primary / source
@@ -74,7 +75,12 @@ for name in (
     path.write_text(f"printf 'stub: {name}\\n'\n")
 git('add', '.')
 git('-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'fixture')
+remote = base / 'remote.git'
+run('git', 'init', '--bare', '-q', str(remote))
+git('remote', 'add', 'origin', str(remote))
+git('push', '-qu', 'origin', 'main')
 git('worktree', 'add', '-qb', 'linked', str(linked))
+run('git', '-C', str(linked), 'push', '-qu', 'origin', 'linked')
 
 # Fresh install, idempotence, both checkout directions, paths containing spaces.
 install()
@@ -128,16 +134,18 @@ install()
 git('worktree', 'prune', '--expire=now')
 git('worktree', 'add', '-q', str(linked), 'linked')
 install(linked)
+
+# A failed pull stops before the installer changes HOME.
+run('git', '-C', str(linked), 'branch', '--unset-upstream')
+shutil.rmtree(home)
+home.mkdir()
+result = subprocess.run(['bash', str(linked / 'install')], text=True, capture_output=True)
+assert result.returncode != 0, 'installer continued after pull failed'
+assert 'There is no tracking information' in result.stderr, result.stderr
+assert not (home / '.local/share/agent-config/operations').exists()
+
 git('worktree', 'remove', str(linked))
 assert str(linked) not in git('worktree', 'list', '--porcelain')
 install()
-
-# Without Git metadata, exact-current-source installs still work.
-archive = base / 'archive'
-shutil.copytree(primary, archive, ignore=shutil.ignore_patterns('.git'))
-shutil.rmtree(home)
-home.mkdir()
-install(archive)
-install(archive)
 print('PASS: install worktree links')
 PY

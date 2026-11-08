@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+git -C "$repo_dir" pull
 # Only registered checkouts establish ownership of another checkout's links.
 # Missing worktrees remain recognizable until Git prunes their registration.
 worktree_records=""
