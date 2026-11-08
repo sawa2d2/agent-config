@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Supported by Codex 0.160.0 (app-server ConfigReadResponse schema).
+# Supported by Codex 0.167.0 (app-server ConfigReadResponse schema).
 # https://learn.chatgpt.com/docs/config-file/config-reference
-# Compact at 100k tokens, about where Claude's autoCompactWindow of 120000
-# compacts. The earlier managed root line with 200000 cannot be told apart from
-# a chosen value, so it moves to the new one.
+# Match the custom handoff's approximate trigger, not its post-clear size.
 python3 - <<'PY'
 import os
 from pathlib import Path
@@ -17,9 +15,11 @@ text = config.read_text(encoding="utf-8") if config.exists() else ""
 # Conservatively keep explicit settings anywhere, including profiles and quoted
 # or dotted keys. Python 3.9 has no TOML parser; avoid rewriting existing TOML.
 key = r'''(?:model_auto_compact_token_limit|"model_auto_compact_token_limit"|'model_auto_compact_token_limit')'''
-line = b"model_auto_compact_token_limit = 100000\n"
-old_line = b"model_auto_compact_token_limit = 200000\n"
-if text.startswith(old_line.decode()):
+line = b"model_auto_compact_token_limit = 35000\n"
+old_lines = (b"model_auto_compact_token_limit = 200000\n",
+             b"model_auto_compact_token_limit = 100000\n")
+old_line = next((line for line in old_lines if text.startswith(line.decode())), None)
+if old_line is not None:
     data = line + config.read_bytes()[len(old_line):]
 elif re.search(r"(?m)^\s*(?:[^#\n=]+\.\s*)?" + key + r"\s*=", text):
     print(f"Kept existing Codex compaction setting in {config}")
@@ -39,5 +39,5 @@ try:
 finally:
     if os.path.exists(temporary):
         os.unlink(temporary)
-print(f"Set Codex compaction threshold: 100000 tokens in {config}")
+print(f"Set Codex compaction threshold: 35000 tokens in {config}")
 PY

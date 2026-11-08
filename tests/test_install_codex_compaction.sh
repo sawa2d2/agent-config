@@ -9,7 +9,7 @@ config="$HOME/.codex/config.toml"
 install_compaction() { bash "$root/scripts/install-codex-compaction" >/dev/null; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 install_compaction
-[[ $(cat "$config") == 'model_auto_compact_token_limit = 100000' ]] || fail 'default'
+[[ $(cat "$config") == 'model_auto_compact_token_limit = 35000' ]] || fail 'default'
 before=$(stat -c '%i:%Y' "$config")
 install_compaction
 [[ $(stat -c '%i:%Y' "$config") == "$before" ]] || fail 'rewritten'
@@ -25,12 +25,19 @@ mv "$config" "$tmp/target"
 ln -s "$tmp/target" "$config"
 install_compaction
 [[ -L "$config" && $(stat -c '%a' "$tmp/target") == 600 ]] || fail 'symlink or mode'
-{ printf '%s\n' 'model_auto_compact_token_limit = 100000'; cat "$tmp/original"; } > "$tmp/expected"
+{ printf '%s\n' 'model_auto_compact_token_limit = 35000'; cat "$tmp/original"; } > "$tmp/expected"
 cmp "$config" "$tmp/expected" || fail 'unrelated settings changed'
 CODEX_HOME="$tmp/custom" install_compaction
-[[ $(cat "$tmp/custom/config.toml") == 'model_auto_compact_token_limit = 100000' ]] || fail 'CODEX_HOME'
+[[ $(cat "$tmp/custom/config.toml") == 'model_auto_compact_token_limit = 35000' ]] || fail 'CODEX_HOME'
 # The earlier managed root line moves to the new value; the rest is kept.
-printf '%s\n' 'model_auto_compact_token_limit = 200000' '[tui]' 'theme = "dracula"' > "$config"
+for old in 100000 200000; do
+  printf 'model_auto_compact_token_limit = %s\n[tui]\ntheme = "dracula"\n' "$old" > "$config"
+  install_compaction
+  [[ $(cat "$config") == $'model_auto_compact_token_limit = 35000\n[tui]\ntheme = "dracula"' ]] || fail 'old default not migrated'
+done
+# A matching value outside the exact managed first-line form stays explicit.
+printf '%s\n' '# custom' 'model_auto_compact_token_limit = 100000' > "$config"
+cp "$config" "$tmp/custom-before"
 install_compaction
-[[ $(cat "$config") == $'model_auto_compact_token_limit = 100000\n[tui]\ntheme = "dracula"' ]] || fail 'old default not migrated'
+cmp "$config" "$tmp/custom-before" || fail 'custom old value changed'
 echo 'PASS: Codex compaction defaults and explicit settings'

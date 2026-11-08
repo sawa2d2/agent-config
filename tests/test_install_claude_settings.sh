@@ -23,7 +23,7 @@ assert "text" not in theme["overrides"]
 assert settings["theme"] == "custom:agent-config-selected"
 assert settings["permissions"]["allow"] == ["Read"]
 assert settings["tui"] == "default"
-assert settings["autoCompactWindow"] == 120000
+assert settings["autoCompactWindow"] == 100000
 assert settings["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] == "sonnet"
 assert settings["skillOverrides"]["docx"] == "user-invocable-only"
 assert settings["skillOverrides"]["artifact-design"] == "user-invocable-only"
@@ -34,17 +34,20 @@ assert settings["permissions"]["deny"] == ["Bash(rm *)", "Artifact", "ArtifactCo
 assert settings["skillOverrides"]["plugin-authoring"] == "user-invocable-only"
 PY
 
-# The previous managed default moves to the new one.
-python3 - <<'PY'
-import json
+# The previous managed defaults move to the new one.
+for old in 120000 200000; do
+OLD_COMPACTION_WINDOW="$old" python3 - <<'PY'
+import json, os
 from pathlib import Path
 path = Path.home() / ".claude/settings.json"
 settings = json.loads(path.read_text())
-settings["autoCompactWindow"] = 200000
+settings["autoCompactWindow"] = int(os.environ["OLD_COMPACTION_WINDOW"])
 path.write_text(json.dumps(settings))
 PY
 bash "$root/scripts/install-claude-settings" > /dev/null
-python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["autoCompactWindow"] == 120000'
+python3 -c 'import json, pathlib; assert json.loads((pathlib.Path.home()/".claude/settings.json").read_text())["autoCompactWindow"] == 100000'
+
+done
 
 # An explicit renderer choice (for example via /tui fullscreen) and compact window are preserved.
 python3 - <<'PY'

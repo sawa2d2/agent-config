@@ -1,14 +1,15 @@
 # Automatic Codex context handoff
 
-Ordinary interactive `codex`, `codex new`, `codex resume`, and `codex fork`
-launches enable automatic handoff. `codex auto-handoff` remains an explicit
-alias. Headless/utility commands pass through. See [all three agents](../../docs/automatic-handoff.md)
-for Claude Code and Bob Shell.
+Ordinary `codex`, `codex new`, and resume launches use native compaction.
+Select the retained custom launcher with `codex auto-handoff`,
+`codex auto-handoff new`, or `codex auto-handoff resume`.
+See [all three agents](../../docs/automatic-handoff.md) for the common prefix
+and [native settings](../../docs/native-compaction.md) for comparison limits.
 
-The integration targets installed `codex-cli 0.167.0`. Unknown versions,
-profiles, remote endpoints and new worktrees continue through the native CLI
-with an explicit automation-disabled warning; explicit `auto-handoff` fails
-instead. Python's standard library is the only added dependency.
+The integration targets installed `codex-cli 0.167.0`. Explicit auto-handoff
+rejects unknown versions, profiles, remote endpoints and new worktrees.
+Ordinary launches pass directly to the native CLI. Python's standard library
+is the only added dependency.
 
 ## Measurement and threshold
 
@@ -22,11 +23,13 @@ make the next request larger. Compaction can lower the next measurement.
 
 The threshold is the smaller of **35,000 input tokens** and **80% of a known
 positive `modelContextWindow`**. Without a window, the absolute threshold is
-used; without valid input usage no handoff occurs. 35,000 leaves 65,000 tokens
-before this repository's existing 100,000 auto-compaction setting, reserving
-room for the handoff turn. The lower threshold is an efficiency experiment,
-not a demonstrated improvement. This is a practical default, not a guarantee that
-handoff precedes compaction: long turns may compact first. The launcher waits
+used; without valid input usage no handoff occurs. The native default is now also 35,000, so native compaction can precede
+handoff; the prefix does not change compaction settings. To reproduce the
+previous 65,000-token headroom for comparison, explicitly launch
+`codex auto-handoff new -c model_auto_compact_token_limit=100000`.
+This is a performance experiment, not a demonstrated improvement or a
+guarantee that handoff precedes compaction: long turns may compact first.
+The launcher waits
 for the turn to finish and uses the latest measurement, so it does not stop
 tools or act on a pre-compaction high-water mark. It changes neither model
 context settings nor the compaction threshold.
@@ -66,7 +69,7 @@ The normal TUI handles sandbox and approval choices; the launcher never
 answers an approval. CLI `-c`/`--config` and feature overrides are also forwarded
 to its owned server. Profiles, explicitly remote endpoints, and `--worktree`
 are rejected in this mode because their equivalent server setup is not
-established. Ordinary launches pass those modes through with an automation-disabled warning. An interactive terminal is
+established. Ordinary launches pass those modes directly to the native CLI. An interactive terminal is
 required. CLI subcommands other than interactive `resume` are not intended
 for automatic handoff.
 

@@ -95,7 +95,7 @@ Installed by `./install` (`scripts/`):
 Further documentation:
 
 - [Project roadmap](ROADMAP.md)
-- [Automatic handoff](docs/automatic-handoff.md): ordinary Claude Code, Bob Shell and Codex interactive launches automatically write a verified handoff, clear context and take over; rotations repeat as context grows.
+- [Native compaction](docs/native-compaction.md) is the normal Claude Code, Bob Shell and Codex launch mode. The retained [automatic handoff](docs/automatic-handoff.md) is opt-in with `<cli> auto-handoff`; manual handoff/takeover remains available.
 - [Codex skill metadata audit](docs/codex-skill-metadata.md)
 - [Codex rtk coverage](docs/codex-rtk-coverage.md)
 - [Codex session management and language tooling](docs/codex-session-language.md)

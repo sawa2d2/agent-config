@@ -43,7 +43,13 @@ fi
 bash "$repo_dir/scripts/install-claude-settings" >/dev/null
 bash "$repo_dir/scripts/install-agent-hooks" >/dev/null
 
-# Own only interactive launches; native utility and print modes pass through.
+automatic_handoff=false
+if [[ ${1:-} == auto-handoff ]]; then
+  automatic_handoff=true
+  shift
+fi
+
+# Own only explicitly selected interactive launches; native utility and print modes pass through.
 launch() {
   local interactive=true arg
   for arg in "$@"; do
@@ -56,7 +62,7 @@ launch() {
     auth|agents|attach|auto-mode|doctor|gateway|import|install|logs|mcp|plugin|plugins|purge|respawn|rm|setup-token|stop|kill|ultrareview|update|upgrade)
       interactive=false ;;
   esac
-  if $interactive && [[ -t 0 && -t 1 ]]; then
+  if $automatic_handoff && $interactive && [[ -t 0 && -t 1 ]]; then
     exec python3 "$repo_dir/scripts/agent-auto-handoff" claude "$real_cli" "$@"
   fi
   exec "$real_cli" "$@"

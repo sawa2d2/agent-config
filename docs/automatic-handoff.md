@@ -1,11 +1,14 @@
 # Automatic interactive handoff
 
-Ordinary `claude`, `bob` and `codex` launches, including `new` and interactive
-resume, enable automatic handoff on the verified installed versions. The
+Ordinary `claude`, `bob` and `codex` launches use
+[native compaction](native-compaction.md). Select the retained custom handoff
+with `claude auto-handoff`, `bob auto-handoff`, or `codex auto-handoff`.
+Put `auto-handoff` first, before `new`, resume arguments, or a prompt. The
+usual no-argument resume defaults still apply after this prefix. The
 launcher owns a pseudo-terminal; native UI, tools and approval policies remain
 in control. It never answers an approval. Noninteractive/utility invocations
-retain their existing behavior. Unverified CLI versions run normally with a
-visible automation-disabled warning.
+retain their existing behavior. Unverified Claude/Bob versions run normally with a visible automation-disabled
+warning; explicit Codex auto-handoff rejects an unverified version.
 
 | Agent | Installed interface investigated | Trigger at a successful turn boundary |
 | --- | --- | --- |
@@ -19,6 +22,13 @@ read-only, using the same schema as the existing suggestion hook. Cumulative
 cost and `--max-cost` do not trigger rotation; Bob still enforces its native
 cost limit.
 A cost-limit failure is not a successful boundary and cannot clear a chat.
+
+Native compaction remains enabled in opt-in mode. With the new lower defaults
+it can run before the handoff threshold is observed, including during the
+handoff turn. The prefix selects the retained automation; it does not guarantee
+rotation or silently change a user's compaction settings. For a comparison
+with the previous native headroom, explicitly use the prior 100k Codex limit,
+120k Claude window, or 37% Bob threshold as described in the native guide.
 
 ## Sequence
 
@@ -84,7 +94,7 @@ to the launcher, with its next input checked by UserPromptSubmit.
 ## Verification
 
 ```sh
-git switch feat/automatic-agent-handoff
+git switch feat/native-context-compaction
 bash tests/run tests/test_agent_auto_handoff.sh tests/test_codex_auto_handoff.sh tests/test_install_agent_hooks.sh tests/test_cli_wrappers.sh tests/test_claude_wrapper.sh tests/test_bob_handoff_suggest.sh tests/test_codex_hook_refresh.sh
 ```
 

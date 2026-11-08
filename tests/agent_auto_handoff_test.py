@@ -139,39 +139,48 @@ class LifecycleTests(unittest.TestCase):
 
 
 class TerminalTests(unittest.TestCase):
-    def test_ordinary_interactive_wrappers_enable_automation(self):
+    def test_interactive_wrappers_require_explicit_opt_in(self):
         for agent in ("claude", "bob", "codex"):
-            with self.subTest(agent=agent), tempfile.TemporaryDirectory() as directory:
-                base = Path(directory)
-                (base / "bin").mkdir()
-                fake = base / "bin" / agent
-                fake.write_text('#!/bin/sh\nif [ "$1" = --version ]; then echo fixture-version; else echo NATIVE_CLI; fi\n')
-                fake.chmod(0o755)
-                env = {**os.environ, "HOME": str(base / "home"), "CODEX_HOME": str(base / "codex"),
-                       "XDG_CONFIG_HOME": str(base / "config"), "PATH": str(base / "bin") + ":/usr/bin:/bin"}
-                master, slave = pty.openpty()
-                child = subprocess.Popen(["bash", str(ROOT / "bin" / agent), "new"],
-                                         env=env, stdin=slave, stdout=slave, stderr=slave)
-                os.close(slave)
-                output = b""
-                try:
-                    deadline = time.monotonic() + 15
-                    while time.monotonic() < deadline:
-                        if select.select([master], [], [], .1)[0]:
-                            try:
-                                output += os.read(master, 65536)
-                            except OSError:
-                                break
-                        elif child.poll() is not None:
-                            break
-                    self.assertEqual(child.wait(timeout=2), 0, output.decode(errors="replace"))
-                    self.assertIn(b"auto-handoff disabled: unverified CLI version", output)
-                    self.assertIn(b"NATIVE_CLI", output)
-                finally:
-                    if child.poll() is None:
-                        child.kill()
-                        child.wait()
-                    os.close(master)
+            for explicit in (False, True):
+                for args in ([], ["new"], ["chat", "--resume", "latest"] if agent == "bob" else ["resume"]):
+                    with self.subTest(agent=agent, explicit=explicit, args=args), tempfile.TemporaryDirectory() as directory:
+                        base = Path(directory)
+                        (base / "bin").mkdir()
+                        fake = base / "bin" / agent
+                        fake.write_text('#!/bin/sh\necho NATIVE_CLI\nprintf "arg:%s\\n" "$@"\n')
+                        fake.chmod(0o755)
+                        # Observe routing without starting a real CLI or provider.
+                        python = base / "bin/python3"
+                        python.write_text('#!/bin/sh\ncase "$1" in */scripts/*auto-handoff) echo AUTO_HANDOFF; printf "arg:%s\\n" "$@"; exit 0;; esac\nexec '
+                                          + sys.executable + ' "$@"\n')
+                        python.chmod(0o755)
+                        env = {**os.environ, "HOME": str(base / "home"), "CODEX_HOME": str(base / "codex"),
+                               "XDG_CONFIG_HOME": str(base / "config"), "PATH": str(base / "bin") + ":/usr/bin:/bin"}
+                        master, slave = pty.openpty()
+                        command = ["bash", str(ROOT / "bin" / agent), *(["auto-handoff"] if explicit else []), *args]
+                        child = subprocess.Popen(command, env=env, stdin=slave, stdout=slave, stderr=slave)
+                        os.close(slave)
+                        output = b""
+                        try:
+                            deadline = time.monotonic() + 15
+                            while time.monotonic() < deadline:
+                                if select.select([master], [], [], .1)[0]:
+                                    try:
+                                        output += os.read(master, 65536)
+                                    except OSError:
+                                        break
+                                elif child.poll() is not None:
+                                    break
+                            self.assertEqual(child.wait(timeout=2), 0, output.decode(errors="replace"))
+                            self.assertIn(b"AUTO_HANDOFF" if explicit else b"NATIVE_CLI", output)
+                            self.assertNotIn(b"NATIVE_CLI" if explicit else b"AUTO_HANDOFF", output)
+                            self.assertNotIn(b"arg:auto-handoff", output)
+                            self.assertNotIn(b"arg:new", output)
+                        finally:
+                            if child.poll() is None:
+                                child.kill()
+                                child.wait()
+                            os.close(master)
 
     def test_native_hook_relay_and_repeated_rotation(self):
         for agent in ("claude", "bob"):

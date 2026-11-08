@@ -70,7 +70,7 @@ cd "$root"
 [[ -f "$HOME/.bob/theme.json" ]] || fail 'bob: theme was not refreshed'
 [[ -f "$HOME/.bob/settings/settings.json" ]] || fail 'bob: settings were not added'
 expect $'--approve-for-me\nresume\n--last' codex
-grep -q '^model_auto_compact_token_limit = 100000$' "$HOME/.codex/config.toml" || fail 'codex: compaction default missing'
+grep -q '^model_auto_compact_token_limit = 35000$' "$HOME/.codex/config.toml" || fail 'codex: compaction default missing'
 
 # "new" starts a new session and passes the remaining arguments on.
 expect $'chat\n--auto-approve' bob new

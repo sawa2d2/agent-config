@@ -11,7 +11,7 @@ check() { python3 -c "import json, sys; d = json.load(open(sys.argv[1])); assert
 
 # Creates the file with the defaults when missing.
 bash "$root/scripts/install-bob-settings" > /dev/null
-check 'd == {"session": {"limitWarnings": True, "respectGitIgnore": True, "compactionThresholdPercent": 37, "maxCost": 20}, "approval": {"outsideWorkspaceAllowed": True, "permissionOptions": [{"groupId": "read", "enableOutsideWorkspace": True}]}}'
+check 'd == {"session": {"limitWarnings": True, "respectGitIgnore": True, "compactionThresholdPercent": 19, "maxCost": 20}, "approval": {"outsideWorkspaceAllowed": True, "permissionOptions": [{"groupId": "read", "enableOutsideWorkspace": True}]}}'
 
 # Keeps unrelated settings and values the user set; adds only missing keys.
 printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": false, "compactionThresholdPercent": 90}}' > "$settings"
@@ -25,9 +25,11 @@ printf '%s\n' '{"session": {"maxTurns": 300}}' > "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null
 check '"maxTurns" not in d["session"] and d["session"]["maxCost"] == 20'
 # The earlier compaction default moves to the new one.
-printf '%s\n' '{"session": {"compactionThresholdPercent": 80}}' > "$settings"
-bash "$root/scripts/install-bob-settings" > /dev/null
-check 'd["session"]["compactionThresholdPercent"] == 37'
+for old in 37 80; do
+  printf '{"session": {"compactionThresholdPercent": %s}}\n' "$old" > "$settings"
+  bash "$root/scripts/install-bob-settings" > /dev/null
+  check 'd["session"]["compactionThresholdPercent"] == 19'
+done
 printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": false, "compactionThresholdPercent": 90}}' > "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null
 
