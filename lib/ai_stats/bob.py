@@ -4,7 +4,7 @@ Reads ~/.bob/db/bob.db read-only. Bob stores, per model request, the cost and
 the context tokens sent in the assistant message's _meta.spend; it records no
 input/output/cache breakdown. Each task counts in the week (local time, from
 Monday) it was created; with --window, each request (assistant message) counts
-in the fixed-length window of its messages.created_at, and each task in every
+in the request window of its messages.created_at, and each task in every
 window it has requests in.
 
 A subagent task spends from its parent's session.maxCost budget, and Bob adds
@@ -98,7 +98,7 @@ def fmt(value, spec=",.0f"):
 
 def read_sessions():
     if not DB_PATH.is_file():
-        raise SystemExit(f"ai-stats bob: database not found: {DB_PATH}")
+        raise SystemExit(f"aistats bob: database not found: {DB_PATH}")
 
     db = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     tasks = {task_id: (parent, task_type, created, costs, env) for task_id, parent, task_type, created, costs, env

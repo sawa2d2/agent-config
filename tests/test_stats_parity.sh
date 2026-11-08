@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory() as tmp:
     env = {**os.environ, 'HOME': tmp, 'TZ': 'UTC',
            'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude')}
     def run(agent, *args, ok=True):
-        p = subprocess.run([str(root / 'bin/ai-stats'), agent, *args],
+        p = subprocess.run([str(root / 'bin/aistats'), agent, *args],
                            env=env, text=True, capture_output=True)
         assert (p.returncode == 0) == ok, (agent, args, p.returncode, p.stderr)
         return p.stdout if ok else p.stderr
@@ -132,12 +132,12 @@ with tempfile.TemporaryDirectory() as tmp:
     assert '0.300' in run('bob', '--project', 'alpha', '--split', '2026-02-01')
 
     for args, ok in ((['--help'], True), ([], False), (['unknown'], False)):
-        p = subprocess.run([str(root / 'bin/ai-stats'), *args], env=env,
+        p = subprocess.run([str(root / 'bin/aistats'), *args], env=env,
                            text=True, capture_output=True)
         assert (p.returncode == 0) == ok, (args, p.stderr)
     # Symlink launchers must locate the shared modules from outside the repo.
     link = home / 'stats-link'
-    link.symlink_to(root / 'bin/ai-stats')
+    link.symlink_to(root / 'bin/aistats')
     p = subprocess.run([str(link), 'codex', '--json'], cwd=home, env=env,
                        text=True, capture_output=True)
     assert p.returncode == 0 and p.stdout == run('codex', '--json'), p.stderr
@@ -170,6 +170,8 @@ with tempfile.TemporaryDirectory() as tmp:
         assert rows(agent) == rows(agent, '--window', '5h', '-w', '1')
         assert rows(agent) == rows(agent, '--split', '2026-02-01')
         assert '2025-12-29' in run(agent, '--until', '2026-02-01')
+        assert '2026-01-01 00:00' in run(agent, '--until', '2026-02-01', '--window', '1d')
+        assert '2025-12-29 00:00' in run(agent, '--until', '2026-02-01', '--window', '1week')
         assert run(agent, '--split', '2026-02-01') == run(
             agent, '--split-commit', 'HEAD', '--repo', str(repo))
         assert 'before: 0 sessions' in run(agent, '--split', '1900-01-01')

@@ -2,7 +2,7 @@
 
 Reads ~/.claude/projects/**/*.jsonl (CLAUDE_CONFIG_DIR is honored), counts each
 API request once (by requestId or message id), and prints per-week sums (or per
-fixed-length window with --window), or the mean, standard deviation and median
+request window with --window), or the mean, standard deviation and median
 per session split into before/after groups.
 """
 import json

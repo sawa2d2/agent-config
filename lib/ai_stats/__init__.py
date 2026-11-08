@@ -21,19 +21,21 @@ def commit_time(ref, repo):
 
 
 def window_spec(value):
-    """argparse type: 'week' or a length such as 5h, 2d or 1w."""
+    """argparse type: 'week' or a length such as 5h, 2d or 1week."""
+    if re.fullmatch(r"[1-9][0-9]*week", value):
+        value = value[:-4] + "w"
     if value != "week" and not re.fullmatch(r"[1-9][0-9]*[hdw]", value):
         raise argparse.ArgumentTypeError(f"expected week or a length such as 5h, 2d, 1w: {value!r}")
     return value
 
 
 class Windows:
-    """Local weeks from Monday ('week'), or consecutive windows of a fixed
-    length, the last ending now; `count` of them are shown (0: all)."""
+    """Local calendar days/weeks or rolling hours; count=0 shows all windows."""
 
     def __init__(self, spec, count):
         self.spec, self.count = spec, count
         self.weekly = spec == "week"
+        self.calendar = self.weekly or spec.endswith(("d", "w"))
         now = datetime.now().astimezone()
         if self.weekly:
             self.step, self.unit, self.heading, self.width = timedelta(weeks=1), "week", "week", 12
@@ -43,21 +45,33 @@ class Windows:
             units = {"h": "hours", "d": "days", "w": "weeks"}
             self.step = timedelta(**{units[spec[-1]]: int(spec[:-1])})
             self.unit, self.heading, self.width = "window", "start", 18
-            self.end = now
-            self.first = now - self.step * count
+            if self.calendar:
+                # Date arithmetic keeps midnight boundaries intact across DST.
+                self.end = now.date() + timedelta(days=1)
+                if spec.endswith("w"):
+                    self.end = now.date() + timedelta(days=7 - now.weekday())
+            else:
+                self.end = now
+            self.first = self.end - self.step * count
 
     def key(self, time):
         """The week's Monday, or the start time of the window containing `time`."""
         if self.weekly:
             day = time.astimezone().date()
             return day - timedelta(days=day.weekday())
+        if self.calendar:
+            day = time.astimezone().date()
+            return self.first + self.step * ((day - self.first) // self.step)
         return self.end - self.step * ((self.end - time) // self.step + 1)
 
     def shown(self, key):
         return not self.count or key >= self.first
 
     def label(self, key):
-        return f"{key.isoformat() if self.weekly else key.astimezone().strftime('%Y-%m-%d %H:%M'):<{self.width}}"
+        label = (key.isoformat() if self.weekly else
+                 f"{key.isoformat()} 00:00" if self.calendar else
+                 key.astimezone().strftime('%Y-%m-%d %H:%M'))
+        return f"{label:<{self.width}}"
 
     def vs_prev(self):
         u = self.unit
@@ -67,13 +81,15 @@ class Windows:
         """Legend line defining the first column and what counts in it."""
         if self.weekly:
             return f"week     = Monday (local time) of the week each {item} {event}\n"
-        return (f"start    = start (local time) of each {self.spec} window, the last ending now; each\n"
+        end = ("next Monday at 00:00" if self.spec.endswith("w") else
+               "tomorrow at 00:00" if self.calendar else "now")
+        return (f"start    = start (local time) of each {self.spec} window, the last ending {end}; each\n"
                 f"           request counts in the window of its timestamp, and each {item} in\n"
                 f"           every window it has requests in\n")
 
 
 def arguments():
-    example = "ai-stats codex"
+    example = "aistats codex"
     examples = f"""\
 --since/--until select sessions by start time (Bob: budget-owning task).
 TIME is an ISO 8601 date or date-time; without an offset it is local time.
@@ -107,7 +123,8 @@ examples:
                         help="skip sessions with fewer API requests (default: 1)")
     parser.add_argument("--window", type=window_spec, default="week",
                         help="aggregation window: week (local, from Monday) or a length such as "
-                             "5h, 2d, 1w ending now (default: week)")
+                             "5h (ending now), 2d (ending tomorrow at local 00:00), "
+                             "1w/1week (ending next Monday at local 00:00; default: week)")
     parser.add_argument("-w", "--windows", "--weeks", type=int,
                         help="windows shown without a split, including the current one "
                              "(0: all; default: 10, or 0 with --since/--until)")

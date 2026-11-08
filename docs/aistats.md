@@ -1,17 +1,17 @@
 # Agent usage statistics
 
-`ai-stats claude|bob|codex` is the sole CLI, with the same options for all
+`aistats claude|bob|codex` is the sole CLI, with the same options for all
 three agents. It replaces the former individual stats commands:
 
 ```sh
-ai-stats codex --since 2026-10-01 --until 2026-11-01
-ai-stats bob --project agent-config --min-requests 3 --json
-ai-stats claude --split-commit HEAD~3 --repo .
-ai-stats codex --split 2026-11-01T00:00Z
-ai-stats bob --window 5h -w 6
+aistats codex --since 2026-10-01 --until 2026-11-01
+aistats bob --project agent-config --min-requests 3 --json
+aistats claude --split-commit HEAD~3 --repo .
+aistats codex --split 2026-11-01T00:00Z
+aistats bob --window 5h -w 6
 ```
 
-Select any agent with `ai-stats claude|bob|codex`; all options in these
+Select any agent with `aistats claude|bob|codex`; all options in these
 examples work with all three agents.
 
 - `--since TIME` includes sessions starting at that time; `--until TIME`
@@ -25,8 +25,19 @@ examples work with all three agents.
   per-session mean, sample standard deviation, and median before/after the
   cutoff. A session starting exactly at the cutoff is in the after group.
 - `--window week` groups whole sessions by their start week's local Monday.
-  Durations such as `5h`, `2d`, and `1w` group requests by their timestamps in
-  consecutive fixed windows ending now. A session may occur in several windows.
+  Explicit lengths group requests by timestamp; a session may occur in several
+  windows. `1d` means today, starting at local 00:00. `Nd` uses consecutive
+  N-date windows, the newest ending tomorrow at local 00:00 (so `2d` includes
+  yesterday and today). `1w` and `1week` mean the current Monday-to-Monday week;
+  `Nw`/`Nweek` use N-week windows ending next Monday at local 00:00. These
+  calendar windows include their start and exclude their end; a request exactly
+  at midnight belongs to the new date/week. The current window is incomplete.
+  Local calendar boundaries remain at midnight across daylight-saving changes,
+  so a day may contain 23 or 25 hours. `week` retains whole-session grouping,
+  while `1w`/`1week` group individual requests.
+  Hour lengths such as `5h` retain consecutive fixed-duration windows ending
+  at the current time, including the existing end-inclusive boundary behavior.
+  Use `24h` for a rolling 24-hour window instead of the calendar-date `1d`.
 - `-w`, `--windows`, and `--weeks` are aliases. Default: 10 windows, or all
   windows with `--since`/`--until`; 0 means all. The previous window remains
   available for ratios even when it is hidden.
@@ -55,7 +66,7 @@ subagents roll into that task, while independently budgeted subtasks remain
 separate. Filters and splits use the budget owner's start time and directory.
 The existing context percentiles, >100k shares, compaction counts, task cost
 percentiles, and model/context-window lines remain available. Task cost
-percentiles use the whole task's recorded cost, even in a fixed window; message
+percentiles use the whole task's recorded cost, even in a request window; message
 spend is the fallback when task cost is absent. JSON separates `task_cost` from
 summed message `cost`. Missing spend measurements are unknown, not zero. Bob's
 observed spend schema exposes only `cost` and `contextTokens`, not separate
@@ -107,10 +118,10 @@ not current or model-specific prices, and are not cross-provider cost estimates.
 ## Verification
 
 ```sh
-git switch feat/unify-agent-stats
-bash tests/run tests/test_claude_stats.sh tests/test_bob_stats.sh tests/test_codex_stats.sh tests/test_stats_parity.sh tests/test_shell_aliases.sh
+git switch rename-aistats-calendar-windows
+bash tests/run tests/test_claude_stats.sh tests/test_bob_stats.sh tests/test_codex_stats.sh tests/test_stats_parity.sh tests/test_shell_aliases.sh tests/test_stats_windows.sh
 ```
 
-Expected: `5 passed, 0 failed`. Fixtures are synthetic, contain no conversation
+Expected: `6 passed, 0 failed`. Fixtures are synthetic, contain no conversation
 content, and exercise CLI parity, filters, splits, JSON, copies, subagents,
-cumulative events, missing fields, and empty selections.
+cumulative events, missing fields, empty selections, local midnight boundaries, and daylight-saving transitions.

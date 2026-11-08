@@ -5,7 +5,7 @@ Reads the rollouts under ~/.codex/sessions and ~/.codex/archived_sessions
 (observed in 0.160.0), counted once by its response_id; its input_tokens include
 the cached and cache-write tokens. Each rollout (subagent threads have their
 own) counts as a session in the week (local time, from Monday) it started; with
---window, each response counts in the fixed-length window of its timestamp.
+--window, each response counts in the request window of its timestamp.
 """
 import json
 import math

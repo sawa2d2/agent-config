@@ -7,7 +7,7 @@ trap 'rm -rf -- "$tmp"' EXIT
 export CLAUDE_CONFIG_DIR="$tmp/claude"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 rows() { grep -Ec '^[0-9]{4}-[0-9]{2}-[0-9]{2} '; } # week rows, after the legend and header
-stats() { "$root/bin/ai-stats" claude "$@"; }
+stats() { "$root/bin/aistats" claude "$@"; }
 
 # Session a: two requests, the first logged twice under one requestId (one line per content block).
 mkdir -p "$CLAUDE_CONFIG_DIR/projects/-home-a" "$CLAUDE_CONFIG_DIR/projects/-home-b"
@@ -91,4 +91,4 @@ grep -Eqx '[0-9-]{10} [0-9]{2}:[0-9]{2} +2 +2 +26 +13 +26.0% +13.0% +[0-9,]+ +[0
 [[ $(stats --window 5h -w 1 | tail -n1) == "$(tail -n1 <<< "$out")" ]] || fail "window -w 1: $(stats --window 5h -w 1)"
 ! stats --window 5x 2>/dev/null || fail 'invalid window'
 
-echo 'PASS: ai-stats claude'
+echo 'PASS: aistats claude'

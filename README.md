@@ -76,7 +76,7 @@ Launchers (`bin/`):
 - `bobtask`: list, resume, delete, move, dump or hand off Bob tasks (`bobrm` = `bobtask rm -c`).
 - `clauderm`: delete Claude Code sessions of the current repository.
 - `codexrm`: delete Codex sessions of the current repository (with their subagent threads).
-- `ai-stats claude|bob|codex`: token/cost usage with matching date/project filters, before/after comparisons, JSON Lines, and weekly or fixed windows (see [usage statistics](docs/ai-stats.md)).
+- `aistats claude|bob|codex`: token/cost usage with matching date/project filters, before/after comparisons, JSON Lines, and calendar or rolling-hour windows (see [usage statistics](docs/aistats.md)).
 - `codex-ralph`: bounded loop of fresh `codex exec` runs until a check passes;
   `$loop` routes Codex tasks to it. Check results (including failed stdout/stderr)
   persist in the workspace’s uncommitted `.agent-progress.md`.
