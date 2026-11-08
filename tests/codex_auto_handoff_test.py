@@ -86,12 +86,30 @@ class RotationTests(unittest.TestCase):
             self.assertTrue(module.eligible(args))
 
     def test_total_and_cached_are_not_added(self):
-        self.usage(40000)
+        self.usage(34999)
         self.complete()
         self.assertEqual(self.state.phase, "watch")
 
+    def test_absolute_threshold_without_window(self):
+        self.usage(34999, None)
+        self.complete()
+        self.assertEqual(self.state.phase, "watch")
+        self.event("turn/started", turn={"id": "task"})
+        self.usage(35000, None)
+        self.complete()
+        self.assertEqual(self.state.phase, "requested")
+
+    def test_absolute_threshold_with_larger_window(self):
+        self.usage(35000)
+        self.complete()
+        self.assertEqual(self.state.phase, "requested")
+
     def test_window_threshold_and_compaction(self):
-        self.usage(79000, 90000)
+        self.usage(31999, 40000)
+        self.complete()
+        self.assertEqual(self.state.phase, "watch")
+        self.event("turn/started", turn={"id": "task"})
+        self.usage(32000, 40000)
         self.complete()
         self.assertEqual(self.state.phase, "requested")
 

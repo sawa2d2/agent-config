@@ -9,9 +9,9 @@ visible automation-disabled warning.
 
 | Agent | Installed interface investigated | Trigger at a successful turn boundary |
 | --- | --- | --- |
-| Claude Code 2.1.319 | `--help`, embedded hook schema, `SessionStart(source=clear)`, `UserPromptSubmit`, `Stop`, native `/clear` | Latest transcript request input + cache creation + cache read >= 80,000 tokens |
+| Claude Code 2.1.319 | `--help`, embedded hook schema, `SessionStart(source=clear)`, `UserPromptSubmit`, `Stop`, native `/clear` | Latest transcript request input + cache creation + cache read >= 35,000 tokens |
 | Bob Shell 2.0.9 | `--help`, `chat --help`, installed `@ibm/bob/dist/bob.js` hook lifecycle and built-in `clear` command (aliases `new`, `task`) | Latest request context > 50,000 tokens |
-| Codex 0.167.0 | `--help`, `app-server --help`, App Server thread/turn/token events, native `/clear` | Latest request input >= min(80,000, 80% of context window) |
+| Codex 0.167.0 | `--help`, `app-server --help`, App Server thread/turn/token events, native `/clear` | Latest request input >= min(35,000, 80% of context window) |
 
 Measurements are latest request sizes, not accumulated tokens. Long autonomous
 turns may compact before a successful boundary. Bob's database is opened

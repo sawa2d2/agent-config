@@ -20,11 +20,12 @@ input to the last model request, not an exact live count of all messages and
 tool results currently in memory. Output and newly appended tool results may
 make the next request larger. Compaction can lower the next measurement.
 
-The threshold is the smaller of **80,000 input tokens** and **80% of a known
+The threshold is the smaller of **35,000 input tokens** and **80% of a known
 positive `modelContextWindow`**. Without a window, the absolute threshold is
-used; without valid input usage no handoff occurs. 80,000 leaves 20,000 tokens
+used; without valid input usage no handoff occurs. 35,000 leaves 65,000 tokens
 before this repository's existing 100,000 auto-compaction setting, reserving
-room for the handoff turn. This is a practical default, not a guarantee that
+room for the handoff turn. The lower threshold is an efficiency experiment,
+not a demonstrated improvement. This is a practical default, not a guarantee that
 handoff precedes compaction: long turns may compact first. The launcher waits
 for the turn to finish and uses the latest measurement, so it does not stop
 tools or act on a pre-compaction high-water mark. It changes neither model

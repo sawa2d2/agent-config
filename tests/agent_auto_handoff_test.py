@@ -109,6 +109,19 @@ class LifecycleTests(unittest.TestCase):
             "cache_read_input_tokens": 80000, "output_tokens": 500}}}) + "\n")
         self.assertEqual(module.measurement("claude", {"transcript_path": str(transcript)}), 80300)
 
+    def test_claude_threshold_includes_cache(self):
+        transcript = self.root / "transcript.jsonl"
+        state = module.Rotation("claude")
+        self.event(state, "SessionStart", source="startup")
+        for cached, phase in ((34699, "watch"), (34700, "requested")):
+            with self.subTest(cached=cached):
+                transcript.write_text(json.dumps({"type": "assistant", "message": {"usage": {
+                    "input_tokens": 100, "cache_creation_input_tokens": 200,
+                    "cache_read_input_tokens": cached, "output_tokens": 500}}}) + "\n")
+                self.event(state, "UserPromptSubmit", prompt="work")
+                self.event(state, "Stop", transcript_path=str(transcript))
+                self.assertEqual(state.phase, phase)
+
     def test_bob_uses_latest_context_not_cumulative_cost(self):
         home = self.root / ".bob"
         (home / "db").mkdir(parents=True)

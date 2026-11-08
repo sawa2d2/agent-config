@@ -20,7 +20,7 @@ import tty
 import uuid
 
 
-LIMIT = 80000
+LIMIT = 35000
 TAKEOVER_PROMPT = "Use the takeover skill to read .agent-handoff.md and continue the recorded task."
 
 
