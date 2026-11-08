@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""Relay lifecycle metadata only to the launcher that owns this terminal."""
+import json
+import os
+from pathlib import Path
+import socket
+import sys
+import tempfile
+
+endpoint = os.environ.get("AGENT_HANDOFF_SOCKET")
+if endpoint:
+    event = {}
+    try:
+        event = json.load(sys.stdin)
+        # Prompts/results may be large. Only the handoff marker/prompt is needed.
+        fields = ("hook_event_name", "session_id", "cwd", "transcript_path", "source",
+                  "prompt", "stop_hook_active", "background_tasks", "session_crons")
+        event = {key: event[key] for key in fields if key in event}
+        if "prompt" in event:
+            event["prompt"] = event["prompt"][:4096]
+        with tempfile.TemporaryDirectory(prefix="handoff-event-", dir=str(Path(endpoint).parent)) as directory:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:
+                client.bind(directory + "/reply")
+                client.settimeout(3)
+                client.sendto(json.dumps(event).encode(), endpoint)
+                if client.recv(128) != b"ok":
+                    print("Automatic takeover blocked: fresh task was not verified. History and note retained.", file=sys.stderr)
+                    sys.exit(2)
+    except (OSError, ValueError, TypeError) as error:
+        print("auto-handoff event failed: " + str(error), file=sys.stderr)
+        sys.exit(2 if event.get("hook_event_name") == "UserPromptSubmit" else 1)

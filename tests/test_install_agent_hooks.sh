@@ -22,6 +22,7 @@ check() {
     APPROVAL="$stable/agent-approval-marker" python3 -c "
 import json, os
 bob, claude, codex = (json.load(open(os.environ[k])) for k in ('BOB', 'CLAUDE', 'CODEX'))
+relay = str(__import__('pathlib').Path(os.environ['STATUS']).with_name('agent-handoff-event'))
 status, suggest, approval = os.environ['STATUS'], os.environ['SUGGEST'], os.environ['APPROVAL']
 def states(settings, event):
     return [(g.get('matcher'), h['command']) for g in settings['hooks'].get(event, []) for h in g['hooks']]
@@ -33,14 +34,14 @@ assert $1, (bob, claude, codex)
 install_hooks > /dev/null
 check "sorted(codex['hooks']) == ['Interrupt', 'PermissionRequest', 'PostToolUse', 'PreCompact', 'PreToolUse', 'SessionEnd', 'Stop', 'UserPromptSubmit']"
 check "all(states(codex, e) == [(None, status + ' ' + state)] for e, state in [('PreToolUse', 'working'), ('PostToolUse', 'working'), ('PermissionRequest', 'waiting'), ('Stop', 'done'), ('Interrupt', 'clear'), ('SessionEnd', 'clear')])"
-check "states(bob, 'Stop') == [(None, status + ' done')] and states(bob, 'SessionStart') == [(None, status + ' clear')]"
-check "sorted(bob['hooks']) == ['PostToolUse', 'PreToolUse', 'SessionStart', 'Stop', 'UserPromptSubmit']"
+check "states(bob, 'Stop') == [(None, status + ' done'), (None, relay)] and states(bob, 'SessionStart') == [(None, status + ' clear'), (None, relay)]"
+check "sorted(bob['hooks']) == ['PostToolUse', 'PreCompact', 'PreToolUse', 'SessionStart', 'Stop', 'UserPromptSubmit']"
 check "states(claude, 'Notification') == [('permission_prompt', status + ' waiting')]"
-check "sorted(claude['hooks']) == ['Notification', 'PostToolUse', 'PreToolUse', 'SessionEnd', 'Stop', 'UserPromptSubmit']"
-check "states(bob, 'UserPromptSubmit') == [(None, status + ' prompt'), (None, suggest), (None, approval)]"
-check "states(bob, 'PostToolUse') == [(None, status + ' working'), (None, suggest)]"
-check "states(claude, 'UserPromptSubmit') == [(None, status + ' prompt'), (None, approval)]"
-check "all(cmd.endswith((' prompt', ' working', ' done', ' waiting', ' clear')) for s in (bob, claude) for e in s['hooks'] for _, cmd in states(s, e) if cmd not in (suggest, approval))"
+check "sorted(claude['hooks']) == ['Notification', 'PostToolUse', 'PreCompact', 'PreToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'StopFailure', 'UserPromptSubmit']"
+check "states(bob, 'UserPromptSubmit') == [(None, status + ' prompt'), (None, suggest), (None, approval), (None, relay)]"
+check "states(bob, 'PostToolUse') == [(None, status + ' working'), (None, suggest), (None, relay)]"
+check "states(claude, 'UserPromptSubmit') == [(None, status + ' prompt'), (None, approval), (None, relay)]"
+check "all(cmd.endswith((' prompt', ' working', ' done', ' waiting', ' clear')) for s in (bob, claude) for e in s['hooks'] for _, cmd in states(s, e) if cmd not in (suggest, approval, relay))"
 
 check "states(codex, 'UserPromptSubmit') == [(None, status + ' prompt'), (None, approval)]"
 
@@ -108,8 +109,8 @@ JSON
 chmod 600 "$claude"
 install_hooks > /dev/null
 check "claude['theme'] == 'dark'"
-check "states(claude, 'Stop') == [(None, 'say done'), (None, status + ' done')]"
-check "'PreCompact' not in claude['hooks']"
+check "states(claude, 'Stop') == [(None, 'say done'), (None, status + ' done'), (None, relay)]"
+check "states(claude, 'PreCompact') == [(None, relay)]"
 [[ $(stat -c %a "$claude" 2>/dev/null || stat -f %Lp "$claude") == 600 ]] || fail 'mode not kept'
 
 # Codex preserves unmanaged hooks, including siblings of an old managed hook,
@@ -135,7 +136,7 @@ custom_before=$(cat "$codex")
 mkdir -p "$tmp/with space"
 cp -R "$root/scripts" "$tmp/with space/"
 PATH="$tmp/bin:/usr/bin:/bin" bash "$tmp/with space/scripts/install-agent-hooks" > /dev/null
-check "states(bob, 'Stop') == [(None, status + ' done')]"
+check "states(bob, 'Stop') == [(None, status + ' done'), (None, relay)]"
 
 # Invalid settings are refused without changes.
 printf '%s\n' '{"hooks": {"Stop": {}}}' > "$bob"
@@ -188,7 +189,7 @@ for codex_only in (False, True):
     configs = (codex,) if codex_only else (bob, claude, codex)
     names = {"agent-tmux-status", "agent-approval-marker", "codex-handoff-suggest", "codex-rtk-hook"}
     if not codex_only:
-        names.add("bob-handoff-suggest")
+        names.update(["bob-handoff-suggest", "agent-handoff-event"])
     assert {p.name for p in stable.iterdir()} == names
     if codex_only:
         assert all(p.read_text() == '{"custom": true, "hooks": {}}' for p in (bob, claude))

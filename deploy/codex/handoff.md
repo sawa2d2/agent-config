@@ -1,14 +1,14 @@
 # Automatic Codex context handoff
 
-`codex auto-handoff new 'Continue the task'` runs the normal interactive TUI
-with automatic handoff enabled. `codex auto-handoff` resumes the last chat in
-the current directory, matching ordinary `codex`. Use `codex auto-handoff
-resume <id>` for a specific chat. Ordinary launches keep their existing
-behavior. Nothing is globally installed or enabled by this feature.
+Ordinary interactive `codex`, `codex new`, `codex resume`, and `codex fork`
+launches enable automatic handoff. `codex auto-handoff` remains an explicit
+alias. Headless/utility commands pass through. See [all three agents](../../docs/automatic-handoff.md)
+for Claude Code and Bob Shell.
 
-The integration targets installed `codex-cli 0.167.0` (2026-11-07). Other
-versions fail visibly in this explicit mode rather than guessing protocol or
-terminal behavior. Python's standard library is the only added dependency.
+The integration targets installed `codex-cli 0.167.0`. Unknown versions,
+profiles, remote endpoints and new worktrees continue through the native CLI
+with an explicit automation-disabled warning; explicit `auto-handoff` fails
+instead. Python's standard library is the only added dependency.
 
 ## Measurement and threshold
 
@@ -49,9 +49,10 @@ context settings nor the compaction threshold.
    the same working directory before asking the agent to use the takeover skill. A full sentence avoids
    leaving the TUI skill-completion menu open on a bare `$takeover`. It never treats
    a terminal redraw or the existence of a note as proof of a fresh thread.
-5. At most **one rotation per launcher invocation** is allowed, including
-   after a successful takeover. This prevents repeated startup/handoff loops.
-   Relaunch this mode when another automatic rotation is wanted.
+5. Each verified new thread gets a new freshness marker on its next handoff.
+   Rotations can repeat as context grows. A fresh thread must first report
+   usage below the threshold before another rotation; an immediately oversized
+   takeover disables automation visibly instead of looping.
 
 User input takes priority. Typing during the handoff sequence cancels further
 automation; the launcher forwards the input normally. A transition timeout
@@ -64,7 +65,7 @@ The normal TUI handles sandbox and approval choices; the launcher never
 answers an approval. CLI `-c`/`--config` and feature overrides are also forwarded
 to its owned server. Profiles, explicitly remote endpoints, and `--worktree`
 are rejected in this mode because their equivalent server setup is not
-established. Use ordinary `codex` for those modes. An interactive terminal is
+established. Ordinary launches pass those modes through with an automation-disabled warning. An interactive terminal is
 required. CLI subcommands other than interactive `resume` are not intended
 for automatic handoff.
 

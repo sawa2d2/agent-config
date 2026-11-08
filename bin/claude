@@ -43,19 +43,38 @@ fi
 bash "$repo_dir/scripts/install-claude-settings" >/dev/null
 bash "$repo_dir/scripts/install-agent-hooks" >/dev/null
 
+# Own only interactive launches; native utility and print modes pass through.
+launch() {
+  local interactive=true arg
+  for arg in "$@"; do
+    case "$arg" in
+      -p|--print|--help|-h|--version|-v|--safe-mode|--bare|--bg|--bg=*|--background|--worktree|--worktree=*|-w)
+        interactive=false ;;
+    esac
+  done
+  case "${1:-}" in
+    auth|agents|attach|auto-mode|doctor|gateway|import|install|logs|mcp|plugin|plugins|purge|respawn|rm|setup-token|stop|kill|ultrareview|update|upgrade)
+      interactive=false ;;
+  esac
+  if $interactive && [[ -t 0 && -t 1 ]]; then
+    exec python3 "$repo_dir/scripts/agent-auto-handoff" claude "$real_cli" "$@"
+  fi
+  exec "$real_cli" "$@"
+}
+
 # Resume the latest session of this directory when no arguments are supplied.
 # Claude Code keeps it under projects/<cwd with non-alphanumerics as "-">;
 # without one, --continue fails, so start a new session instead.
 if (( $# == 0 )); then
   project_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(pwd -P | sed 's/[^A-Za-z0-9]/-/g')"
   if compgen -G "$project_dir/*.jsonl" >/dev/null; then
-    exec "$real_cli" --continue
+    launch --continue
   fi
-  exec "$real_cli"
+  launch
 fi
 # "new" starts a new session instead of sending "new" as the first prompt.
 if [[ $1 == new ]]; then
-  exec "$real_cli" "${@:2}"
+  launch "${@:2}"
 fi
 
-exec "$real_cli" "$@"
+launch "$@"

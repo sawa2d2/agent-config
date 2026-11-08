@@ -75,6 +75,8 @@ def suggestion(database, task_id, limit, threshold):
 
 
 def main():
+    if os.environ.get("AGENT_HANDOFF_SOCKET"):
+        return  # The owning launcher handles automatic rotations.
     try:
         event = json.load(sys.stdin)
         task_id, event_name = event["session_id"], event["hook_event_name"]

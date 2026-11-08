@@ -41,7 +41,7 @@ codex_home = Path(os.environ.get("CODEX_HOME") or home / ".codex")
 hook_dir = home / ".local/share/agent-config/hooks"
 names = ["agent-tmux-status", "agent-approval-marker", "codex-handoff-suggest", "codex-rtk-hook"]
 if not os.environ["AGENT_HOOKS_CODEX_ONLY"]:
-    names.append("bob-handoff-suggest")
+    names.extend(["bob-handoff-suggest", "agent-handoff-event"])
 for name in names:
     source = Path(os.environ["AGENT_HOOKS_SOURCE"]) / name
     destination = hook_dir / name
@@ -125,9 +125,18 @@ extra_targets = {
 }
 
 
+# No-op outside an owned interactive launcher. Never alter approval decisions.
+for path, events in (
+    (home / ".claude/settings.json", ("SessionStart", "UserPromptSubmit", "PostToolUse", "Stop", "StopFailure", "PreCompact")),
+    (home / ".bob/settings/settings.json", ("SessionStart", "UserPromptSubmit", "PostToolUse", "Stop", "PreCompact")),
+):
+    for event in events:
+        extra_targets.setdefault(path, {}).setdefault(event, []).append((None, hook_command("agent-handoff-event")))
+
+
 def managed_command(command):
     return (any(script in command for script in ("agent-tmux-status", "codex-rtk-hook", "bob-handoff-suggest", "codex-handoff-suggest",
-                                                    "agent-approval-marker"))
+                                                    "agent-approval-marker", "agent-handoff-event"))
             or command == RTK_HOOK)
 
 

@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""Own Claude/Bob's interactive terminal and observe their native lifecycle hooks."""
+import errno
+import fcntl
+import importlib.machinery
+import json
+import os
+from pathlib import Path
+import pty
+import selectors
+import signal
+import socket
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import termios
+import time
+import tty
+
+core = importlib.machinery.SourceFileLoader(
+    "codex_handoff", str(Path(__file__).with_name("codex-auto-handoff"))).load_module()
+
+
+def measurement(agent, event):
+    if agent == "claude":
+        tokens = 0
+        with open(event["transcript_path"], encoding="utf-8") as stream:
+            for line in stream:
+                row = json.loads(line)
+                if row.get("type") == "assistant" and not row.get("isSidechain"):
+                    usage = row.get("message", {}).get("usage", {})
+                    if "input_tokens" in usage:
+                        tokens = sum(usage.get(key, 0) for key in (
+                            "input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+        return tokens
+    home = Path.home() / ".bob"
+    with sqlite3.connect(f"file:{home / 'db/bob.db'}?mode=ro", uri=True) as database:
+        row = database.execute("select parent_id from tasks where id = ?",
+                               (event["session_id"],)).fetchone()
+        if not row or row[0]:
+            raise ValueError("not a root Bob task")
+        row = database.execute("select data from messages where task_id = ? and role = 'assistant' "
+                               "order by created_at desc limit 1", (event["session_id"],)).fetchone()
+        tokens = json.loads(row[0]).get("_meta", {}).get("spend", {}).get("contextTokens", 0) if row else 0
+        return core.LIMIT if tokens > 50000 else 0
+
+
+class Rotation(core.Rotation):
+    def __init__(self, agent):
+        super().__init__()
+        self.agent = agent
+        self.serial = 0
+        self.verify_bob_takeover = False
+
+    def event(self, event):
+        name, session = event.get("hook_event_name"), event.get("session_id")
+        if not session or not event.get("cwd"):
+            return
+        if name == "SessionStart":
+            if self.thread and self.phase != "clearing":
+                return  # Nested agents also inherit the hook environment.
+            if self.phase == "clearing" and event.get("source") != {"claude": "clear", "bob": "startup"}[self.agent]:
+                self.cancel("expected a clear SessionStart; history retained")
+                return
+            self.client({"id": 1, "method": "thread/start"})
+            self.server({"id": 1, "result": {"thread": {"id": session}, "cwd": event["cwd"]}})
+            if self.agent == "bob" and self.phase == "takeover":
+                self.action = None  # Bob emits SessionStart while submitting the queued takeover.
+            return
+        if name == "UserPromptSubmit" and self.verify_bob_takeover and event.get("prompt") == core.TAKEOVER_PROMPT:
+            if self.phase != "takeover" or session != self.thread or event["cwd"] != self.cwd:
+                self.cancel("fresh Bob task was not verified; takeover blocked")
+                return False
+            self.verify_bob_takeover = False
+        if session != self.thread or event["cwd"] != self.cwd:
+            return
+        if name == "UserPromptSubmit":
+            self.client({"method": "turn/start", "params": {
+                "threadId": session, "input": [{"text": event.get("prompt", "")}]}})
+            self.serial += 1
+            self.turn = str(self.serial)
+        elif name in ("StopFailure", "PreCompact"):
+            if self.phase not in ("watch", "disabled"):
+                self.cancel("handoff failed or compacted; history retained")
+        elif name == "PostToolUse" and self.phase == "watch" and not self.armed:
+            try:
+                if measurement(self.agent, event) < core.LIMIT:
+                    self.armed = True
+            except (OSError, ValueError, KeyError, TypeError, sqlite3.Error):
+                pass  # Stop reads again and reports measurement errors before any action.
+        elif name == "Stop":
+            if event.get("stop_hook_active"):
+                self.cancel("a Stop hook continued the turn; automatic handoff disabled")
+                return
+            if event.get("background_tasks") or event.get("session_crons"):
+                self.cancel("background work is active; automatic handoff disabled")
+                return
+            try:
+                self.tokens = measurement(self.agent, event)
+            except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
+                self.cancel("cannot read context measurement: " + str(error))
+                return
+            self.server({"method": "turn/completed", "params": {
+                "threadId": session, "turn": {"id": self.turn, "status": "completed"}}})
+            if self.agent == "bob" and self.phase == "clearing":
+                self.verify_bob_takeover = True
+
+
+def run(agent, cli, args):
+    output = subprocess.check_output([cli, "--version"], text=True).strip().splitlines()
+    version = output[0] if output else "unknown"
+    expected = {"claude": "2.1.319 (Claude Code)", "bob": "2.0.9"}[agent]
+    if version != expected:
+        print(f"{agent} auto-handoff disabled: unverified CLI version {version}", file=sys.stderr)
+        os.execv(cli, [cli, *args])
+    state = Rotation(agent)
+    with tempfile.TemporaryDirectory(prefix=agent + "-handoff-") as directory:
+        endpoint = directory + "/events.sock"
+        relay = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        relay.bind(endpoint)
+        relay.setblocking(False)
+        env = {**os.environ, "AGENT_HANDOFF_SOCKET": endpoint}
+        master, slave = pty.openpty()
+        saved = termios.tcgetattr(0)
+        def resize(*_):
+            fcntl.ioctl(master, termios.TIOCSWINSZ, fcntl.ioctl(0, termios.TIOCGWINSZ, b"\0" * 8))
+        resize()
+        previous = signal.signal(signal.SIGWINCH, resize)
+        child = subprocess.Popen([cli, *args], stdin=slave, stdout=slave, stderr=slave,
+                                 env=env, start_new_session=True)
+        os.close(slave)
+        selector = selectors.DefaultSelector()
+        for file, kind in ((0, "input"), (master, "terminal"), (relay, "event")):
+            selector.register(file, selectors.EVENT_READ, kind)
+        pending = None
+        def terminate(*_):
+            raise SystemExit(143)
+        previous_term = signal.signal(signal.SIGTERM, terminate)
+        try:
+            tty.setraw(0)
+            while child.poll() is None:
+                events = selector.select(0.05)
+                events.sort(key=lambda item: item[0].data != "input")
+                for key, _ in events:
+                    try:
+                        if key.data == "event":
+                            data, sender = relay.recvfrom(65536)
+                        else:
+                            data = os.read(key.fd, 65536)
+                    except OSError as error:
+                        if key.data == "terminal" and error.errno == errno.EIO:
+                            return child.wait()
+                        raise
+                    if not data:
+                        return child.wait(timeout=5)
+                    if key.data == "input":
+                        state.user_input()
+                        pending = None
+                        os.write(master, data)
+                    elif key.data == "terminal":
+                        os.write(1, data)
+                    else:
+                        try:
+                            allowed = state.event(json.loads(data))
+                            relay.sendto(b"blocked" if allowed is False else b"ok", sender)
+                        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+                            state.cancel("lifecycle relay failed: " + str(error))
+                now = time.monotonic()
+                if state.reason:
+                    os.write(1, (f"\r\n[{agent} auto-handoff] {state.reason}\r\n").encode())
+                    state.reason = None
+                if state.deadline and now >= state.deadline:
+                    state.cancel("handoff transition timed out; history and note retained")
+                if state.phase == "disabled":
+                    pending = None
+                if state.action:
+                    pending = (now + 0.5, state.action, False)
+                    state.action = None
+                if pending and now >= pending[0]:
+                    command, submit = pending[1:]
+                    if submit:
+                        os.write(master, b"\r")
+                        pending = None
+                        if agent == "bob" and command == "/clear" and state.phase == "clearing":
+                            pending = (now + 0.5, core.TAKEOVER_PROMPT, False)
+                    else:
+                        data = command.encode() if command.startswith("/") else b"\x1b[200~" + command.encode() + b"\x1b[201~"
+                        os.write(master, data)
+                        pending = (now + 0.2, command, True)
+            return child.returncode
+        finally:
+            termios.tcsetattr(0, termios.TCSADRAIN, saved)
+            signal.signal(signal.SIGWINCH, previous)
+            signal.signal(signal.SIGTERM, previous_term)
+            selector.close()
+            if child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+            relay.close()
+            os.close(master)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(run(sys.argv[1], sys.argv[2], sys.argv[3:]))
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        print("auto-handoff: " + str(error), file=sys.stderr)
+        sys.exit(1)

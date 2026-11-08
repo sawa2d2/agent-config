@@ -39,6 +39,9 @@ type_prompt() {
 # Run an auto-approved chat. When the user leaves a task that stopped at its
 # cost limit, offer to continue in a new task started by `bobtask handoff`.
 chat() {
+  if [[ -t 0 && -t 1 ]]; then
+    exec python3 "$wrapper_dir/../scripts/agent-auto-handoff" bob "$real_bob" chat --auto-approve "$@"
+  fi
   local since prompt='' status answer
   while :; do
     since=$(( $(date +%s) * 1000 ))
@@ -64,5 +67,15 @@ fi
 if [[ $1 == new ]]; then
   chat "${@:2}"
   exit
+fi
+interactive=true
+for arg in "$@"; do
+  case "$arg" in --help|-h|--version|-v) interactive=false ;; esac
+done
+if $interactive && [[ -t 0 && -t 1 ]]; then
+  case "${1:-}" in
+    chat|-r|--resume|-p|--prompt)
+      exec python3 "$wrapper_dir/../scripts/agent-auto-handoff" bob "$real_bob" "$@" ;;
+  esac
 fi
 exec "$real_bob" "$@"

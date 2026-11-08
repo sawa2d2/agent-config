@@ -25,8 +25,11 @@ bash "$wrapper_dir/../scripts/install-codex-compaction" >/dev/null
 bash "$wrapper_dir/../scripts/install-agent-hooks" --codex-only >/dev/null
 
 automatic_handoff=false
+handoff_mode=--default
+if [[ -t 0 && -t 1 ]]; then automatic_handoff=true; fi
 if [[ ${1:-} == auto-handoff ]]; then
   automatic_handoff=true
+  handoff_mode=--explicit
   shift
 fi
 
@@ -89,6 +92,6 @@ if $no_alt_screen; then
   set -- --no-alt-screen "$@"
 fi
 if $automatic_handoff; then
-  exec python3 "$wrapper_dir/../scripts/codex-auto-handoff" "$real_cli" "$@"
+  exec python3 "$wrapper_dir/../scripts/codex-auto-handoff" "$handoff_mode" "$real_cli" "$@"
 fi
 exec "$real_cli" "$@"

@@ -26,7 +26,7 @@ class RotationTests(unittest.TestCase):
         self.state.server({"id": 1, "result": {"thread": {"id": thread}, "cwd": cwd or str(self.root)}})
 
     def event(self, method, **params):
-        self.state.server({"method": method, "params": {"threadId": "old", **params}})
+        self.state.server({"method": method, "params": {"threadId": self.state.thread, **params}})
 
     def usage(self, value=81000, window=200000):
         self.event("thread/tokenUsage/updated", tokenUsage={
@@ -53,10 +53,37 @@ class RotationTests(unittest.TestCase):
         self.assertEqual(self.state.action, "/clear")
         self.start("fresh")
         self.assertEqual(self.state.action, module.TAKEOVER_PROMPT)
-        self.assertEqual(self.state.phase, "done")
-        self.usage(999999)
-        self.complete()
-        self.assertEqual(self.state.phase, "done")
+        self.assertEqual(self.state.phase, "takeover")
+        previous_marker = self.state.marker
+        self.state.client({"method": "turn/start", "params": {
+            "threadId": "fresh", "input": [{"text": module.TAKEOVER_PROMPT}]}})
+        self.event("turn/started", turn={"id": "takeover"})
+        self.usage(1000)
+        self.complete("takeover")
+        self.state.client({"method": "turn/start", "params": {"threadId": "fresh"}})
+        self.event("turn/started", turn={"id": "later"})
+        self.usage()
+        self.complete("later")
+        self.assertEqual(self.state.phase, "requested")
+        self.assertNotEqual(self.state.marker, previous_marker)
+
+    def test_takeover_cannot_loop_immediately(self):
+        self.handoff()
+        (self.root / ".agent-handoff.md").write_text(self.state.marker)
+        self.complete("handoff")
+        self.start("fresh")
+        self.state.client({"method": "turn/start", "params": {
+            "threadId": "fresh", "input": [{"text": module.TAKEOVER_PROMPT}]}})
+        self.event("turn/started", turn={"id": "takeover"})
+        self.usage()
+        self.complete("takeover")
+        self.assertEqual(self.state.phase, "disabled")
+
+    def test_only_interactive_commands_are_eligible(self):
+        for args in (["exec", "hello"], ["-m", "model", "review"], ["--help"], ["resume", "--help"]):
+            self.assertFalse(module.eligible(args))
+        for args in ([], ["resume", "--last"], ["-m", "exec", "hello"], ["--", "exec"]):
+            self.assertTrue(module.eligible(args))
 
     def test_total_and_cached_are_not_added(self):
         self.usage(40000)
