@@ -176,20 +176,22 @@ second = launch('feat/quote;literal', prompt, '-m', model, cwd=worker)
 commands = [json.loads(line) for line in (base / 'tmux.log').read_text().splitlines()]
 keys = [a[-1] for a in commands if a[:1] == ['send-keys'] and '-l' in a]
 keys = [key for key in keys if "codex" in key]
-assert shell_words(keys[0])[:2] == [str(root / 'bin/codex'), 'new']
+permissions = ['--sandbox', 'danger-full-access', '--ask-for-approval', 'on-request']
+assert shell_words(keys[0])[:6] == [str(root / 'bin/codex'), 'new', *permissions]
 assert shell_words(keys[0])[-1].startswith('Read .agent-handoff.md and continue the work it describes.')
-assert shell_words(keys[-1])[:4] == [str(root / 'bin/codex'), 'new', '--model', model]
+assert shell_words(keys[-1])[:8] == [str(root / 'bin/codex'), 'new', *permissions, '--model', model]
 assert shell_words(keys[-1])[-1].startswith(prompt)
 assert '--report ' + second['id'] in shell_words(keys[-1])[-1]
 # Execute recorded input against the real launch wrapper with only a fake paid CLI.
 run('bash', '-c', keys[-1], extra={'PATH': str(root / 'bin') + ':' + env['PATH']})
 arguments = json.loads((base / 'codex.args').read_text())
-assert arguments[:4] == ['--no-alt-screen', '--approve-for-me', '--model', model]
+assert arguments[:7] == ['--no-alt-screen', *permissions, '--model', model]
+assert '--approve-for-me' not in arguments
 assert arguments[-1].startswith(prompt)
 assert arguments[-1] == shell_words(keys[-1])[-1]
 assert not any(primary.glob('injected*'))
 third = launch('feat/model', '--status is a literal prompt', '--model', 'gpt-6-luna')
-assert json.loads((base / 'codex.args').read_text())[:4] == ['--no-alt-screen', '--approve-for-me', '--model', 'gpt-6-luna']
+assert json.loads((base / 'codex.args').read_text())[:7] == ['--no-alt-screen', *permissions, '--model', 'gpt-6-luna']
 
 # The intended wrapper refreshes only the isolated HOME; repeated launches
 # preserve the already installed configuration.
@@ -292,7 +294,7 @@ lock = primary / '.git/codex-delegate.lock'
 lock.chmod(0o400)
 try:
     result = report(second, 'running', '--summary', 'denied', ok=False)
-    assert 'require_escalated' in result.stderr
+    assert 'Report the denied operation' in result.stderr
 finally:
     lock.chmod(0o600)
 
@@ -383,7 +385,7 @@ for index, options in enumerate([
     call(*options, f'feat/selected-grammar-{index}', literal)
     command = [json.loads(line)[-1] for line in (base / 'tmux.log').read_text().splitlines()
                if json.loads(line)[:1] == ['send-keys'] and '-l' in json.loads(line)][-1]
-    assert shell_words(command)[:4] == [str(root / 'bin/codex'), 'new', '--model', model]
+    assert shell_words(command)[:8] == [str(root / 'bin/codex'), 'new', *permissions, '--model', model]
     assert shell_words(command)[-1].startswith(literal)
 
 # A selected linked checkout supplies its own HEAD and note, not the main root.

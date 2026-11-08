@@ -23,13 +23,8 @@ the common `info/exclude`. It refuses writes when any registered worktree tracks
 the file; report this and request an explicit migration decision, never untrack
 it automatically. Do not change tracked `.gitignore`.
 
-The original root and common Git directory may be outside a linked worktree's
-write permissions. For an authorized mutation blocked by Codex's sandbox, retry
-the exact CLI command with `sandbox_permissions: "require_escalated"` using the
-supported execution tool. Automatic approval review still applies. In Bob and
-Claude Code use their normal tool approval workflow if blocked. If approval is
-unavailable or denied, report the blocker and leave the task unsaved; never
-disable security, add broad allow rules, change writable roots, or silently
+If a write is blocked, use the agent's normal tool approval workflow. If approval
+is unavailable or denied, report the blocker and leave the task unsaved; never
 write a worktree-local `.backlog.md`. The CLI does not grant permissions itself.
 
 Keep `.agent-handoff.md` in the current worktree for its active task. Use

@@ -170,6 +170,14 @@ for script in install-rtk install-claude-settings install-bob-theme install-code
   install-agent-hooks install-tools install-nix-tools install-claude-plugins; do
   printf '#!/usr/bin/env bash\nexit 0\n' > "$package/scripts/$script"
 done
+# Installation pulls the current branch; keep that operation inside local fixtures.
+git init -q "$package"
+git -C "$package" add .
+git -C "$package" -c user.name=Test -c user.email=test@example.com commit -qm fixture
+git init --bare -q "$tmp/package-remote.git"
+git -C "$package" remote add origin "$tmp/package-remote.git"
+git -C "$package" push -qu origin HEAD
+
 # An existing managed shared Codex link migrates to the Codex-specific file.
 mkdir -p "$HOME/.codex"
 ln -s "$package/deploy/AGENTS.md" "$HOME/.codex/AGENTS.md"
@@ -210,9 +218,11 @@ for repository in repositories:
             assert installed.read_bytes() == (root / 'deploy/operations' / installed.name).read_bytes()
     assert not (repository / '.local/share/agent-config/operations').exists()
 PY
-# Unknown Codex instruction links remain untouched, including broken links.
+# Existing foreign targets remain protected; broken-link repair is covered
+# by test_install_worktree_links.sh.
 codex_global="$HOME/.codex/AGENTS.md"
 rm "$codex_global"
+printf 'user instructions\n' > "$tmp/foreign-codex"
 ln -s "$tmp/foreign-codex" "$codex_global"
 bash "$package/install" > /dev/null 2>&1 && { echo 'foreign Codex global link overwritten' >&2; exit 1; }
 [[ $(readlink "$codex_global") == "$tmp/foreign-codex" ]]
@@ -221,6 +231,7 @@ ln -s "$package/deploy/codex/AGENTS.md" "$codex_global"
 # Refuse to take over an existing reference installation from another source.
 references="$HOME/.local/share/agent-config/operations"
 rm "$references"
+mkdir "$tmp/foreign"
 ln -s "$tmp/foreign" "$references"
 bash "$package/install" > /dev/null 2>&1 && { echo 'foreign reference symlink overwritten' >&2; exit 1; }
 [[ $(readlink "$references") == "$tmp/foreign" ]]

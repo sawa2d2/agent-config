@@ -53,6 +53,13 @@ for stale in "$HOME/.bob/rules/karpathy.md" "$HOME/.claude/rules/karpathy.md"; d
   fi
 done
 
+# Retire the repository-owned gfinish rule link; preserve user-managed rules.
+stale="${CODEX_HOME:-$HOME/.codex}/rules/agent-config.rules"
+if [[ -L "$stale" ]] && is_managed_source "$(readlink "$stale")" deploy/codex/rules/agent-config.rules; then
+  rm -- "$stale"
+  printf 'Removed: %s\n' "$stale"
+fi
+
 # Skills authored in this repository; install-tools adds upstream skills.
 for source in "$repo_dir/deploy/skills"/*/; do
   [[ -f "$source/SKILL.md" ]] || continue
@@ -67,11 +74,10 @@ source="$repo_dir/deploy/operations"
 [[ -d "$source" ]] || { printf 'Missing operational references: %s\n' "$source" >&2; exit 1; }
 link_managed "$dest" deploy/operations
 
-# Link shared/agent-specific globals and Codex rules for immediate repository updates.
+# Link shared/agent-specific globals for immediate repository updates.
 # Bob Shell reliably loads global instructions from ~/.bob/rules/.
-# Codex loads every *.rules file in ~/.codex/rules/.
 for link in "$HOME/.bob/rules/agent-config.md:AGENTS.md" "$HOME/.claude/CLAUDE.md:AGENTS.md" \
-  "$HOME/.codex/AGENTS.md:codex/AGENTS.md" "$HOME/.codex/rules/agent-config.rules:codex/rules/agent-config.rules"; do
+  "$HOME/.codex/AGENTS.md:codex/AGENTS.md"; do
   dest=${link%%:*}
   # Migrate only this installer's former shared Codex instruction link.
   legacy=""

@@ -24,7 +24,6 @@ links = {
     '.bob/rules/agent-config.md': 'deploy/AGENTS.md',
     '.claude/CLAUDE.md': 'deploy/AGENTS.md',
     '.codex/AGENTS.md': 'deploy/codex/AGENTS.md',
-    '.codex/rules/agent-config.rules': 'deploy/codex/rules/agent-config.rules',
     **{f'.local/bin/{name}': f'bin/{name}' for name in (
         'agent-delegate', 'bob-delegate', 'codex-delegate', 'codex-ralph', 'agent-backlog')},
 }
@@ -87,6 +86,22 @@ install()
 install()
 install(linked)
 install()
+
+# Retire only rule symlinks owned by registered checkouts, including dangling links.
+rule = home / '.codex/rules/agent-config.rules'
+rule.parent.mkdir(parents=True, exist_ok=True)
+for checkout in (primary, linked):
+    rule.symlink_to(checkout / 'deploy/codex/rules/agent-config.rules')
+    install()
+    assert not rule.is_symlink()
+rule.symlink_to(base / 'custom.rules')
+install()
+assert rule.readlink() == base / 'custom.rules'
+rule.unlink()
+rule.write_text('user rules\n')
+install()
+assert rule.read_text() == 'user rules\n'
+rule.unlink()
 
 # Both former shared Codex links are migrated, including another checkout's.
 for checkout in (primary, linked):

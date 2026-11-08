@@ -93,7 +93,6 @@ Installed by `./install` (`scripts/`):
   `bob` wrapper launch migrates the old repository default of `20` to `0`,
   preserving other explicit values. To clear an existing task limit and resume
   immediately, run `bob chat --resume latest --max-cost 0`.
-- Codex rules (`deploy/codex/rules/agent-config.rules`, linked to `~/.codex/rules/`): `gfinish` runs outside the workspace-write sandbox; its `approved` marker still authorizes the merge. Detailed Git approval, conflict recovery, sandbox and deleted-worktree hook procedures are in [on-demand operations](deploy/operations/).
 - Hooks (`install-agent-hooks`): tmux window status (`agent-tmux-status`), `approved` merge marker (`agent-approval-marker`), handoff suggestions and rtk output compression. Standalone hook executables are copied to `~/.local/share/agent-config/hooks/`, so deleting the source worktree does not break installed hooks. `--codex-only` updates only Codex settings and its required executables.
 
 Further documentation:
@@ -108,14 +107,21 @@ Further documentation:
 
 ## Codex task coordination
 
+`./install` removes the former repository-owned `gfinish` rule symlink. Custom
+symlinks and regular rule files are preserved for explicit review.
+
 The originating Codex agent can stay in its original checkout on `main`, launch
 workers, and inspect their results on demand.
 Existing launch and handoff behavior remains: `-m`/`--model` selects the model;
 without a prompt, `.agent-handoff.md` is required and moved into the new worktree.
 Before launching a worker, Codex's config API registers only the new worktree
 as trusted in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). Existing
-settings, including sandbox and approval policies, are preserved. Hook trust is
-separate. A failed trust registration stops the launch and is recorded in task
+settings are preserved. Workers start with `--sandbox danger-full-access` and
+`--ask-for-approval on-request`: this disables the Codex sandbox for the whole
+worker session while retaining approval requests. It does not authorize merges;
+the exact `approved` requirement and approval marker remain. Direct Codex launches
+keep their existing defaults. Managed environment restrictions still apply.
+Hook trust is separate. A failed trust registration stops the launch and is recorded in task
 status; the created worktree is retained.
 
 ```bash
@@ -176,11 +182,9 @@ across linked worktrees and retained after a worker worktree is deleted. Root
 validation follows `agent-backlog`; unsupported bare/separate-Git-directory
 layouts are rejected. Writes use a common Git metadata lock and atomic record
 replacement, and append `/.codex-tasks/` to common `info/exclude`; tracked task
-state blocks writes. Use the CLI for all writers. Launch/report writes from a
-linked worktree may need supported `require_escalated` approval after a sandbox
-denial. Request approval for that exact authorized command; automatic review
-still applies. Never change sandbox settings, broaden allow rules or fall back
-to worktree-local state. Reads never create files or change exclusions.
+state blocks writes. Use the CLI for all writers. Report blocked launch/report
+writes; never fall back to worktree-local state. Reads never create files or
+change exclusions.
 
 All three delegates first wait up to 10 seconds for the interactive shell to
 acknowledge readiness. Bash/Zsh arguments are serialized onto one physical line;
@@ -197,8 +201,8 @@ Launch state (`starting`, `sent`, `verified`, `failed`), worker report, and pane
 observation are independent. `sent` only confirms input submission; `verified`
 confirms the worker reported startup, not that its implementation is correct.
 The starting report must describe the worker's actual first action; never submit
-example summaries verbatim. If reporting is denied, request supported escalation
-for the exact report command first.
+example summaries verbatim. If reporting is blocked, explain the missing report
+in the session.
 
 Claude/Bob wait up to 30 seconds for a stable agent process in the pane's process
 tree. Bob additionally waits up to 30 seconds for its input box before submitting
@@ -318,13 +322,9 @@ instructions discover it through the existing global instruction links;
 `shell/aliases.sh` also exposes the CLI in interactive shells. Invoke the skill
 as `/backlog` in Claude Code or `$backlog` in Bob and Codex.
 
-Codex's linked-worktree sandbox may deny writes to the original checkout and
-common Git directory. For an authorized backlog write, request the supported
-`require_escalated` execution after a sandbox denial; automatic approval review
-still applies. Bob and Claude Code use their normal tool approvals. A denial
-must be reported, with no local backlog fallback, broad allow rule, or sandbox
-change. Installing this feature does not modify these permissions or create a
-backlog in existing repositories.
+Blocked backlog writes use the agent's normal tool approval workflow. Report
+denials without creating a worktree-local backlog. Installing this feature
+does not create a backlog in existing repositories.
 
 `tests/test_agent_backlog.sh` verifies CLI behavior and installation/discovery
 in temporary fixtures. These checks do not prove actual Bob/Claude/Codex skill
@@ -346,7 +346,7 @@ All three installed variants contain the same shared Verification section.
 `deploy/AGENTS.md` keeps shared engineering principles, test delegation and
 safety rules always loaded. Bob and Claude load that shared file; Codex loads
 it plus `deploy/codex/instructions.md`, rendered into `deploy/codex/AGENTS.md`.
-Codex's approval, Git escalation, coordinator and deleted-worktree triggers
+Codex's approval, coordinator and deleted-worktree triggers
 therefore reach only Codex. All agents retain the mandatory delegation
 procedure trigger. Backlog storage/consultation and handoff creation/resumption
 require the existing `backlog`, `handoff` and `takeover` skills only at their
@@ -368,8 +368,8 @@ is migrated, and foreign symlinks remain untouched. The rendering command only
 writes repository files.
 
 Mandatory triggers direct agents to read only the applicable operational
-reference before delegation/coordination/reporting, Codex finalization/Git
-escalation, or the confirmed deleted-worktree hook failure. These references
+reference before delegation/coordination/reporting, Codex finalization, or the
+confirmed deleted-worktree hook failure. These references
 are not a new skill or automatically invoked workflow.
 
 `./install` links `deploy/operations/` to

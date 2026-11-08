@@ -159,11 +159,9 @@ Use repeated --commit for multiple commits; if no commit was needed, explain why
 in the summary. Terminal reports require --checks. Report running when starting,
 needs-input when blocked, and completed or failed before ending; also give the
 final outcome in this tmux session. Reporting is explicit, not automatic. Delegate
-test runs as instructed. Never claim unrun checks passed. For sandbox-denied
-state writes to the original root/shared Git metadata, request supported
-require_escalated approval for the exact authorized report command; never change
-sandbox/auto-approval controls or use a local fallback. If approval is denied,
-explain the missing report in the session. Pane presence does not prove progress.
+test runs as instructed. Never claim unrun checks passed. If reporting is
+blocked, explain the missing report in the session; never use a local fallback.
+Pane presence does not prove progress.
 """
 
 
@@ -269,7 +267,8 @@ def launch(args, context):
                    "-c", directory, "-P", "-F", "#{pane_id}")
         update(context, task_id, pane=pane)
         run("tmux", "set-option", "-p", "-t", pane, "@codex_delegate_task", task_id)
-        command = [launcher("codex"), "new"]
+        command = [launcher("codex"), "new", "--sandbox", "danger-full-access",
+                   "--ask-for-approval", "on-request"]
         if args.model:
             command += ["--model", args.model]
         command.append(worker_prompt(prompt, task_id))
@@ -383,5 +382,5 @@ if __name__ == "__main__":
         if isinstance(error, subprocess.CalledProcessError) and error.stderr:
             print(error.stderr.strip(), file=sys.stderr)
         if isinstance(error, PermissionError) or isinstance(error.__cause__, PermissionError):
-            print("Request supported require_escalated approval for this exact authorized operation; never weaken the sandbox or use a worktree-local fallback.", file=sys.stderr)
+            print("Report the denied operation; never use a worktree-local fallback.", file=sys.stderr)
         sys.exit(1)
