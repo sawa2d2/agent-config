@@ -39,7 +39,7 @@ These govern all coding and maintenance work and override the process any skill,
 - If delegation is unavailable or fails, report the blocker and unrun checks; missing results never count as a pass.
 - Iterate through implementation, testing, diagnosis, and fixes while making meaningful progress, until relevant tests pass.
 - Run executable checks yourself rather than handing them to the user, except slow or costly ones; give those as copy-paste commands with expected results.
-- Do not retry an unchanged failing operation without a concrete reason to expect a different result.
+- Do not retry an unchanged failing operation without a concrete reason to expect a different result. A transient network error during a remote check (such as DNS resolution failure) is a concrete reason: wait 10 seconds, then retry the same operation once before reporting blocked. If that retry fails, report that verification could not be completed; cached tracking refs do not establish current remote state.
 - Try reasonable alternatives, but never bypass security controls, exceed granted permissions, or elevate privileges to pass tests without authorization.
 - When permissions, credentials, environment restrictions, or external dependencies block progress, stop and report the evidence, attempted remedies, and the user action needed.
 - Never claim a check passed unless it was executed; distinguish verified results from assumptions and untested behavior.
