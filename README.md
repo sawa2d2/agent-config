@@ -399,19 +399,49 @@ guarantee removal of skill metadata from the initial model context.
 
 ## Session token status lines
 
-The existing launch/install settings hooks enable Codex's native `used-tokens`
-footer and Claude's `scripts/claude-session-status` command. Existing custom
-status lines (including a disabled Codex footer) are preserved.
-Codex reports its native session total; Claude sums main-session transcript input,
-cache creation, cache read, and output tokens once per request, excluding subagents.
-These are cumulative session totals, not current context usage or billing totals.
+The launch/install hooks provide separate current-context and cumulative-session
+indicators. Compaction can reduce context usage without resetting session totals;
+neither total is a billing total.
 
-Activate with `bash scripts/install-codex-theme` and
-`bash scripts/install-claude-settings`, then restart the CLIs. These commands modify
-user settings; use them only when ready. Custom footers need manual integration
-(Codex: add `used-tokens` via `/statusline`; Claude: call the script with stdin JSON).
-See [Codex settings](https://learn.chatgpt.com/docs/config-file/config-reference)
-and [Claude status lines](https://code.claude.com/docs/en/statusline).
+- **Codex:** new settings use `model-with-reasoning`, `context-used`,
+  `context-window-size`, `current-dir`, and `used-tokens`. The first two context
+  items show native usage percentage and window capacity; `used-tokens` remains
+  the cumulative session total. Codex 0.167.0 has no native status-line item for
+  current context tokens. We do not estimate that count from rounded percentages
+  or substitute cumulative input tokens. Unknown context items may be omitted.
+  Supported items and their meanings were checked against the
+  [0.167.0 status-line implementation](https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/tui/src/bottom_pane/status_line_setup.rs).
+- **Claude:** `scripts/claude-session-status` displays, for example,
+  `Context (last input): 24,000/200,000 tokens (12%) | Session tokens: 1,234,567`.
+  Context uses the status JSON's `context_window.current_usage` input, cache-write,
+  and cache-read tokens divided by `context_window_size`. This is the latest
+  reported input snapshot, not a live count of newly generated output. It matches
+  Claude's documented input-only percentage formula. Missing/null usage (including
+  before the first response or just after compaction) displays `unavailable`, not
+  zero. Session tokens separately sum transcript input, cache creation, cache read,
+  and output once per main-session request, excluding subagents. A transcript read
+  failure does not hide valid context data. See the
+  [Claude status JSON reference](https://code.claude.com/docs/en/statusline#context-window-fields).
+
+Existing status settings are preserved, including disabled/custom Codex footers
+and the previous managed default: the installer cannot distinguish that default
+from a deliberate user choice. To update an existing Codex footer, use
+`/statusline` to replace `context-remaining` with `context-used`, add
+`context-window-size`, and retain `used-tokens`. Existing Claude status commands
+pointing to this repository's script pick up its new output; other custom commands
+need manual integration with the same stdin JSON.
+
+From the repository root, when ready to modify user settings:
+
+```bash
+bash scripts/install-codex-theme
+bash scripts/install-claude-settings
+```
+
+Restart the CLIs afterward. These installers also apply their existing theme and
+settings defaults; this change does not alter compaction thresholds. No real home
+settings are installed by the tests. See
+[Codex configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
 
 ## Tests
 

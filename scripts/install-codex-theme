@@ -141,7 +141,7 @@ if configured is None:
 elif configured.strip("\"'") != name:
     print(f"Kept Codex theme {configured} (select {name} with /theme)")
 if not status_configured:
-    entry = 'status_line = ["model-with-reasoning", "context-remaining", "current-dir", "used-tokens"]\n'
+    entry = 'status_line = ["model-with-reasoning", "context-used", "context-window-size", "current-dir", "used-tokens"]\n'
     # Reuse the table created above; dotted theme settings need a dotted key.
     text, count = re.subn(r"(?m)^(\s*\[\s*tui\s*\]\s*(?:#.*)?$)", lambda m: m[0] + "\n" + entry.rstrip(), text, count=1)
     if not count:
