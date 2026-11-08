@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Add agent-config defaults to Bob Shell settings without overriding any value
-# the user has set: a warning five turns before the turn limit, or at 80% of
-# the cost limit, so the agent wraps up before Bob stops the task; file tools
+# Add agent-config defaults to Bob Shell settings, migrating old defaults
+# while preserving other user values: a warning five turns before the turn
+# limit, or at 80% of an explicit cost limit, so the agent wraps up before
+# Bob stops the task; file tools
 # that skip ignored files such as dependencies and build output; compaction
-# at about 50k tokens, which keeps each turn smaller; and a cost
-# limit per task so a runaway task cannot spend a day's share of a monthly
-# Bobcoin budget; and auto-approved reads outside the workspace, so a task
+# at about 50k tokens, which keeps each turn smaller; unlimited task cost;
+# and auto-approved reads outside the workspace, so a task
 # started by `bobtask handoff` can read the earlier task's transcript in
 # $TMPDIR (keys observed in Bob Shell 2.0.6; Bob compacts at 90%, has no cost
 # limit and cancels every tool call outside the workspace by default).
@@ -24,7 +24,7 @@ import tempfile
 
 settings_file = Path.home() / ".bob/settings/settings.json"
 defaults = {"session": {"limitWarnings": True, "respectGitIgnore": True,
-                        "compactionThresholdPercent": 19, "maxCost": 20},
+                        "compactionThresholdPercent": 19, "maxCost": 0},
             "approval": {"outsideWorkspaceAllowed": True}}
 # Outside the workspace, only the read group goes through: Bob still asks
 # before edits and commands there.
@@ -33,6 +33,8 @@ READ_OUTSIDE_WORKSPACE = {"groupId": "read", "enableOutsideWorkspace": True}
 # context on every turn, and the handoff note lets a new task continue, so
 # that value goes back to Bob's default of 100; any other value is the user's.
 OLD_MAX_TURNS = 300
+# Remove the repository's earlier task cost cap; Bob uses 0 for unlimited.
+OLD_MAX_COST = 20
 # Bob Shell 2.0.9 reads this native session setting as percent / 100,
 # with no lower clamp in the installed distribution. 19% of the observed
 # premium-ide 270000-token window is 51300 (nearest whole percent to 50k).
@@ -49,6 +51,9 @@ if not isinstance(settings, dict) or not all(isinstance(settings.get(section, {}
     raise SystemExit(f"Expected JSON object settings: {settings_file}")
 
 changed = False
+if settings.get("session", {}).get("maxCost") == OLD_MAX_COST:
+    del settings["session"]["maxCost"]
+    changed = True
 if settings.get("session", {}).get("maxTurns") == OLD_MAX_TURNS:
     del settings["session"]["maxTurns"]
     changed = True

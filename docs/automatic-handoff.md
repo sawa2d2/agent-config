@@ -20,7 +20,7 @@ Measurements are latest request sizes, not accumulated tokens. Long autonomous
 turns may compact before a successful boundary. Bob's database is opened
 read-only, using the same schema as the existing suggestion hook. Cumulative
 cost and `--max-cost` do not trigger rotation; Bob still enforces its native
-cost limit.
+cost limit when explicitly configured (the repository default is unlimited).
 A cost-limit failure is not a successful boundary and cannot clear a chat.
 
 Native compaction remains enabled in opt-in mode. With the new lower defaults

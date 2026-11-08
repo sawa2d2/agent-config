@@ -11,19 +11,28 @@ check() { python3 -c "import json, sys; d = json.load(open(sys.argv[1])); assert
 
 # Creates the file with the defaults when missing.
 bash "$root/scripts/install-bob-settings" > /dev/null
-check 'd == {"session": {"limitWarnings": True, "respectGitIgnore": True, "compactionThresholdPercent": 19, "maxCost": 20}, "approval": {"outsideWorkspaceAllowed": True, "permissionOptions": [{"groupId": "read", "enableOutsideWorkspace": True}]}}'
+check 'd == {"session": {"limitWarnings": True, "respectGitIgnore": True, "compactionThresholdPercent": 19, "maxCost": 0}, "approval": {"outsideWorkspaceAllowed": True, "permissionOptions": [{"groupId": "read", "enableOutsideWorkspace": True}]}}'
 
 # Keeps unrelated settings and values the user set; adds only missing keys.
 printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": false, "compactionThresholdPercent": 90}}' > "$settings"
 chmod 600 "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null
-check 'd == {"approval": {"forbiddenApprovalGroups": [], "outsideWorkspaceAllowed": True, "permissionOptions": [{"groupId": "read", "enableOutsideWorkspace": True}]}, "session": {"maxTurns": 50, "respectGitIgnore": False, "compactionThresholdPercent": 90, "limitWarnings": True, "maxCost": 20}}'
+check 'd == {"approval": {"forbiddenApprovalGroups": [], "outsideWorkspaceAllowed": True, "permissionOptions": [{"groupId": "read", "enableOutsideWorkspace": True}]}, "session": {"maxTurns": 50, "respectGitIgnore": False, "compactionThresholdPercent": 90, "limitWarnings": True, "maxCost": 0}}'
 [[ $(stat -c %a "$settings" 2>/dev/null || stat -f %Lp "$settings") == 600 ]] || fail 'mode not kept'
 
 # The 300-turn limit of earlier installs goes back to Bob's default.
 printf '%s\n' '{"session": {"maxTurns": 300}}' > "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null
-check '"maxTurns" not in d["session"] and d["session"]["maxCost"] == 20'
+check '"maxTurns" not in d["session"] and d["session"]["maxCost"] == 0'
+# The earlier repository cost cap is removed; other explicit values are kept.
+printf '%s\n' '{"session": {"maxCost": 20}}' > "$settings"
+bash "$root/scripts/install-bob-settings" > /dev/null
+check 'd["session"]["maxCost"] == 0'
+for cost in 0 0.5 10 25; do
+  printf '{"session": {"maxCost": %s}}\n' "$cost" > "$settings"
+  bash "$root/scripts/install-bob-settings" > /dev/null
+  check "d['session']['maxCost'] == $cost"
+done
 # The earlier compaction default moves to the new one.
 for old in 37 80; do
   printf '{"session": {"compactionThresholdPercent": %s}}\n' "$old" > "$settings"
@@ -59,6 +68,6 @@ rm "$settings" && ln -s "$tmp/target.json" "$settings"
 # A symlinked settings file (kept in a dotfiles checkout, say) is updated through the link.
 bash "$root/scripts/install-bob-settings" > /dev/null || fail 'symlink refused'
 [[ -L $settings ]] || fail 'symlink replaced'
-grep -q '"maxCost": 20' "$tmp/target.json" || fail "symlink target not updated: $(cat "$tmp/target.json")"
+grep -q '"maxCost": 0' "$tmp/target.json" || fail "symlink target not updated: $(cat "$tmp/target.json")"
 
 echo 'PASS: install-bob-settings'

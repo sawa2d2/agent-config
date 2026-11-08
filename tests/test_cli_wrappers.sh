@@ -150,6 +150,8 @@ db.execute("INSERT INTO tasks VALUES (?, ?, NULL, ?, ?, ?, 0, 0, NULL, NULL, ?)"
            ("limited", "file:" + sys.argv[2], "Limited", "go", "", "{\"cost\": 0}"))
 db.execute("INSERT INTO messages VALUES (?, ?, ?, ?, 1)", ("m1", "limited", "user", "{\"role\": \"user\", \"content\": \"go\"}"))
 db.commit()' "$HOME/.bob/db/bob.db" "$tmp/work.git"
+# Use an explicit cost cap distinct from the migrated repository default.
+printf '%s\n' '{"session": {"maxCost": 10}}' > "$HOME/.bob/settings/settings.json"
 # Fake Bob: the first chat spends past the cost limit, later ones spend nothing.
 cat > "$tmp/loop/bob" <<'CLI'
 #!/usr/bin/env bash
