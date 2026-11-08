@@ -65,6 +65,9 @@ install settings into the user's home.
 
 Codex profiles, explicitly remote endpoints and `--worktree` are not supported
 by its owned App Server integration and visibly fall back to the native CLI.
+The owned Codex TUI receives an explicit `--cd` for the launch directory unless
+one was supplied, so `tui.resume_cwd = "current"` also works through its remote
+transport. Explicit `-C`/`--cd` choices are preserved.
 Claude print, background, safe/bare, and worktree launches bypass automation.
 This integration targets the inspected native TUIs and hook contracts; it is
 not an API for controlling unrelated tmux panes. Terminal text alone is never

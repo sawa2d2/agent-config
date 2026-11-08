@@ -1,6 +1,7 @@
 """Deterministic protocol safety tests; no credentials or real user settings."""
 import importlib.machinery
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -191,6 +192,19 @@ class RotationTests(unittest.TestCase):
 
 
 class TransportTests(unittest.TestCase):
+    def test_remote_tui_defaults_to_explicit_local_cwd(self):
+        for args in ([], ["resume", "--last"], ["fork", "--last"],
+                     ["--", "--cd=prompt-text"], ["-m", "-Cmodel", "resume"]):
+            with self.subTest(args=args):
+                self.assertEqual(module.tui_arguments(args), ["--cd", os.getcwd(), *args])
+
+    def test_remote_tui_preserves_explicit_cwd(self):
+        for args in (["-C", "/chosen", "resume"], ["--cd", "/chosen", "resume"],
+                     ["--cd=/chosen", "resume"], ["-C/chosen", "resume"],
+                     ["resume", "--last", "--cd", "/chosen"]):
+            with self.subTest(args=args):
+                self.assertEqual(module.tui_arguments(args), args)
+
     def test_masked_partial_and_fragmented_frames(self):
         observer = module.WebSocketObserver()
         self.assertEqual(observer.feed(b"GET /rpc HTTP/1.1\r\n"), [])

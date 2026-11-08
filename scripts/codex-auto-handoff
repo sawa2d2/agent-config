@@ -22,6 +22,10 @@ import uuid
 
 LIMIT = 35000
 TAKEOVER_PROMPT = "Use the takeover skill to read .agent-handoff.md and continue the recorded task."
+VALUE_OPTIONS = {"-c", "--config", "-m", "--model", "-s", "--sandbox", "-a",
+                 "--ask-for-approval", "-C", "--cd", "--add-dir", "-i", "--image",
+                 "--enable", "--disable", "-p", "--profile", "--remote",
+                 "--remote-auth-token-env", "--local-provider"}
 
 
 def fingerprint(path):
@@ -258,10 +262,6 @@ class WebSocketObserver:
 
 def eligible(args):
     """Exclude native utility/headless commands, consuming option values first."""
-    values = {"-c", "--config", "-m", "--model", "-s", "--sandbox", "-a",
-              "--ask-for-approval", "-C", "--cd", "--add-dir", "-i", "--image",
-              "--enable", "--disable", "-p", "--profile", "--remote",
-              "--remote-auth-token-env", "--local-provider"}
     commands = {"exec", "e", "review", "login", "logout", "mcp", "mcp-server",
                 "app-server", "completion", "sandbox", "debug", "apply", "cloud",
                 "features", "help", "delete", "export", "update"}
@@ -275,13 +275,30 @@ def eligible(args):
             break
         if arg in ("--help", "-h", "--version", "-V"):
             return False
-        if arg in values:
+        if arg in VALUE_OPTIONS:
             skip = True
         elif not arg.startswith("-") and first_positional:
             if arg in commands:
                 return False
             first_positional = False
     return True
+
+
+def tui_arguments(args):
+    """Make the local cwd explicit for the TUI's remote transport."""
+    skip = False
+    for arg in args:
+        if skip:
+            skip = False
+            continue
+        if arg == "--":
+            break
+        if arg == "--cd" or arg.startswith(("--cd=", "-C")):
+            return args
+        if arg in VALUE_OPTIONS:
+            skip = True
+    # Remote resume rejects tui.resume_cwd="current" without an explicit --cd.
+    return ["--cd", os.getcwd(), *args]
 
 
 def run(cli, args):
@@ -320,7 +337,7 @@ def run(cli, args):
             fcntl.ioctl(master, termios.TIOCSWINSZ, fcntl.ioctl(0, termios.TIOCGWINSZ, b"\0" * 8))
         resize()
         previous = signal.signal(signal.SIGWINCH, resize)
-        child = subprocess.Popen([cli, "--remote", "unix://" + endpoint, *args],
+        child = subprocess.Popen([cli, "--remote", "unix://" + endpoint, *tui_arguments(args)],
                                  stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
         os.close(slave)
         selector = selectors.DefaultSelector()
