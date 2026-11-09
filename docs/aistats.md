@@ -24,7 +24,9 @@ examples work with all three agents.
 - `--split TIME` and `--split-commit REF` are mutually exclusive. They compare
   per-session mean, sample standard deviation, and median before/after the
   cutoff. A session starting exactly at the cutoff is in the after group.
-- `--window week` groups whole sessions by their start week's local Monday.
+- `--window` defaults to `1day` (`1d`): one local calendar day, with requests
+  grouped by their timestamps. `Nday` is an alias for `Nd`.
+  `--window week` groups whole sessions by their start week's local Monday.
   Explicit lengths group requests by timestamp; a session may occur in several
   windows. `1d` means today, starting at local 00:00. `Nd` uses consecutive
   N-date windows, the newest ending tomorrow at local 00:00 (so `2d` includes
@@ -38,9 +40,20 @@ examples work with all three agents.
   Hour lengths such as `5h` retain consecutive fixed-duration windows ending
   at the current time, including the existing end-inclusive boundary behavior.
   Use `24h` for a rolling 24-hour window instead of the calendar-date `1d`.
+- Daily (`1day`/`1d`) displays omit days whose usage is known to be zero, as
+  well as days with no requests. Claude uses unrounded weighted tokens; Codex
+  requires every recorded token metric to be zero; Bob requires both message
+  cost and context tokens to be zero. Missing measurements remain unknown and
+  retain the day. Ratios compare against the previous retained day, skipping
+  gaps and zero days; an unknown baseline produces no ratio. Requests on a
+  retained day still all contribute to its per-request calculations. Explicit
+  weekly, multi-day and hourly windows keep their existing aggregation and
+  adjacent-window comparisons. JSON and per-session split statistics are unchanged.
 - `-w`, `--windows`, and `--weeks` are aliases. Default: 10 windows, or all
-  windows with `--since`/`--until`; 0 means all. The previous window remains
-  available for ratios even when it is hidden.
+  windows with `--since`/`--until`; 0 means all. The default therefore covers
+  today and the previous nine dates, without extending the range for omitted
+  days. The previous retained day (or adjacent window for other window lengths)
+  remains available for ratios even when it is hidden.
 - `--json` emits one JSON object per selected session, oldest first. It takes
   precedence over text comparisons and ignores display windows. An empty
   selection emits no lines. Argument validation still applies.
@@ -118,10 +131,12 @@ not current or model-specific prices, and are not cross-provider cost estimates.
 ## Verification
 
 ```sh
-git switch rename-aistats-calendar-windows
+git switch aistats-default-day
 bash tests/run tests/test_claude_stats.sh tests/test_bob_stats.sh tests/test_codex_stats.sh tests/test_stats_parity.sh tests/test_shell_aliases.sh tests/test_stats_windows.sh
 ```
 
 Expected: `6 passed, 0 failed`. Fixtures are synthetic, contain no conversation
 content, and exercise CLI parity, filters, splits, JSON, copies, subagents,
-cumulative events, missing fields, empty selections, local midnight boundaries, and daylight-saving transitions.
+cumulative events, missing fields, empty selections, local midnight boundaries,
+daylight-saving transitions, default daily windows, zero-usage days, and
+comparisons across inactive days.

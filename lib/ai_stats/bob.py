@@ -1,11 +1,10 @@
-"""Weekly token usage and cost from Bob Shell tasks.
+"""Token usage and cost from Bob Shell tasks.
 
 Reads ~/.bob/db/bob.db read-only. Bob stores, per model request, the cost and
 the context tokens sent in the assistant message's _meta.spend; it records no
-input/output/cache breakdown. Each task counts in the week (local time, from
-Monday) it was created; with --window, each request (assistant message) counts
-in the request window of its messages.created_at, and each task in every
-window it has requests in.
+input/output/cache breakdown. Each request (assistant message) counts in the
+window of its messages.created_at, and each task in every window it has requests
+in. With --window week, whole tasks count in their creation week (local Monday).
 
 A subagent task spends from its parent's session.maxCost budget, and Bob adds
 its cost to the parent's tasks.costs, so it counts as part of the parent; a
@@ -185,6 +184,9 @@ def print_windows(sessions, windows):
         w["context"] += context
         w["contexts"].append(context)
         w["cost"] += cost
+    if windows.spec == "1d":
+        weeks = {key: w for key, w in weeks.items() if w["cost"] != 0 or w["context"] != 0}
+    previous_groups = windows.previous(weeks)
     for w in weeks.values():
         # Summed message spend stands in when Bob recorded no task cost.
         w["task costs"] = sorted(c if (c := sessions[task_id]["task_cost"]) is not None else summed
@@ -196,7 +198,7 @@ def print_windows(sessions, windows):
     for week, w in sorted(weeks.items()):
         if not windows.shown(week):
             continue
-        previous = weeks.get(week - windows.step)
+        previous = previous_groups.get(week)
         per_request = w["cost"] / w["requests"]
         costs = w["task costs"]
         print(f"{windows.label(week)}{len(w['tasks']):>8}{w['requests']:>10,}"
@@ -218,7 +220,10 @@ def print_windows(sessions, windows):
 
     # Bob picks the model; the compaction percentage only means something against its window.
     models = {}
+    retained_tasks = {task for key, w in weeks.items() if windows.shown(key) for task in w["tasks"]}
     for row in sessions.values():
+        if windows.spec == "1d" and row["id"] not in retained_tasks:
+            continue
         if not windows.shown(windows.key(row["start"])):
             continue
         for model in row["_models"]:

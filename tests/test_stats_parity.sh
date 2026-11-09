@@ -169,7 +169,8 @@ with tempfile.TemporaryDirectory() as tmp:
         assert run(agent, '--weeks', '0') == run(agent, '--windows', '0') == run(agent, '-w', '0')
         assert rows(agent) == rows(agent, '--window', '5h', '-w', '1')
         assert rows(agent) == rows(agent, '--split', '2026-02-01')
-        assert '2025-12-29' in run(agent, '--until', '2026-02-01')
+        assert '2025-12-29' in run(agent, '--until', '2026-02-01', '--window', 'week')
+        assert run(agent, '-w', '0') == run(agent, '--window', '1day', '-w', '0') == run(agent, '--window', '1d', '-w', '0')
         assert '2026-01-01 00:00' in run(agent, '--until', '2026-02-01', '--window', '1d')
         assert '2025-12-29 00:00' in run(agent, '--until', '2026-02-01', '--window', '1week')
         assert run(agent, '--split', '2026-02-01') == run(

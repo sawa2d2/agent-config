@@ -7,7 +7,7 @@ trap 'rm -rf -- "$tmp"' EXIT
 export CLAUDE_CONFIG_DIR="$tmp/claude"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 rows() { grep -Ec '^[0-9]{4}-[0-9]{2}-[0-9]{2} '; } # week rows, after the legend and header
-stats() { "$root/bin/aistats" claude "$@"; }
+stats() { "$root/bin/aistats" claude --window week "$@"; }
 
 # Session a: two requests, the first logged twice under one requestId (one line per content block).
 mkdir -p "$CLAUDE_CONFIG_DIR/projects/-home-a" "$CLAUDE_CONFIG_DIR/projects/-home-b"
@@ -60,7 +60,7 @@ grep -Eqx '2026-02-23 +1 +1 +6 +6 +- +- +0 +-' <<< "$out" || fail "weekly b: $ou
 # --since/--until without -w show every week in range, not only the last 10.
 [[ $(TZ=UTC stats --until 2026-02-01T00:00:00Z | tail -n1) == 2025-12-29* ]] || fail 'until shows old weeks'
 
-# By default only the last 10 weeks show: the old sessions drop out, ones started now and a week ago stay.
+# With --window week only the last 10 weeks show: the old sessions drop out, ones started now and a week ago stay.
 # This week's row shows its ratio to last week's, even when -w 1 hides last week.
 printf '%s\n' '{"type":"assistant","timestamp":"'"$(date -u +%FT%TZ)"'","requestId":"r3","message":{"id":"m4","usage":{"input_tokens":1,"output_tokens":1}}}' \
   > "$CLAUDE_CONFIG_DIR/projects/-home-b/c.jsonl"

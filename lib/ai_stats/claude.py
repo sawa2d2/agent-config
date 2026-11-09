@@ -1,9 +1,9 @@
-"""Weekly token usage from Claude Code transcripts.
+"""Token usage from Claude Code transcripts.
 
 Reads ~/.claude/projects/**/*.jsonl (CLAUDE_CONFIG_DIR is honored), counts each
-API request once (by requestId or message id), and prints per-week sums (or per
-request window with --window), or the mean, standard deviation and median
-per session split into before/after groups.
+API request once (by requestId or message id), and prints per-request-window
+sums (or whole-session weekly sums with --window week), or the mean, standard
+deviation and median per session split into before/after groups.
 """
 import json
 import os
@@ -104,7 +104,9 @@ def print_windows(sessions, windows):
             group[i] += value
     sums = {key: (len(ids), requests, round(weighted), weighted / requests, read / requests,
                   f"{read / write:.1f}" if write else "-")
-            for key, (ids, requests, weighted, write, read) in groups.items()}
+            for key, (ids, requests, weighted, write, read) in groups.items()
+            if windows.spec != "1d" or weighted != 0}
+    previous_groups = windows.previous(sums)
     print(WEEKLY_LEGEND + windows.vs_prev() + windows.column("session"))
     print(f"{windows.heading:<{windows.width}}{'sessions':>10}{'requests':>10}{'weighted (tok)':>16}"
           f"{'per req (tok)':>15}{'weighted vs prev':>18}{'per req vs prev':>17}"
@@ -112,7 +114,7 @@ def print_windows(sessions, windows):
     for key, (n, requests, weighted, per_request, read_per_request, read_write) in sorted(sums.items()):
         if not windows.shown(key):
             continue
-        previous = sums.get(key - windows.step)
+        previous = previous_groups.get(key)
         print(f"{windows.label(key)}{n:>10}{requests:>10,}{weighted:>16,}{per_request:>15,.0f}"
               f"{ratio(previous and previous[2], weighted):>18}"
               f"{ratio(previous and previous[3], per_request):>17}"

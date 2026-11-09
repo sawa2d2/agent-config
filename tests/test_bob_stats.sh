@@ -54,10 +54,10 @@ db.commit()
 PY
 
 monday=$(date -d "-$(( $(date +%u) - 1 )) days" +%F)
-# By default the last 10 weeks show; only assistant messages with spend count.
+# With --window week the last 10 weeks show; only assistant messages with spend count.
 # This week's row shows cost and cost per request as a percentage of last week's, even when -w 1 hides it,
 # then the median, 90th percentile and maximum of the task costs 0.2 (d), 0.6 (a and s) and 1.0 (t).
-out=$("$root/bin/aistats" bob)
+out=$("$root/bin/aistats" bob --window week)
 grep -Fqx 'per req  = cost / requests' <<< "$out" || fail "legend: $out"
 grep -Fqx 'task p50, task p90, task max' <<< "$out" || fail "legend: $out"
 grep -Eqx "$monday +3 +5 +21,800 +1.80 +0.360 +225.0% +45.0% +0.60 +0.92 +1.00" <<< "$out" || fail "this week: $out"
@@ -71,12 +71,12 @@ grep -Fqx 'model: premium-ide, contextWindow 270,000 (tasks: 2)' <<< "$out" || f
 grep -Fqx 'model: other, contextWindow 128,000 (tasks: 1)' <<< "$out" || fail "model: $out"
 grep -Fqx 'model: not recorded (tasks: 2)' <<< "$out" || fail "model: $out"
 [[ $(rows <<< "$out") == 4 ]] || fail "default weeks: $out"
-out1=$("$root/bin/aistats" bob -w 1)
+out1=$("$root/bin/aistats" bob --window week -w 1)
 [[ $(rows <<< "$out1") == 2 ]] || fail "-w 1 rows: $out1"
 grep -Fx "$(grep -m1 "^$monday" <<< "$out")" <<< "$out1" >/dev/null || fail "ratio with -w 1: $out1"
 grep -Fqx 'model: not recorded (tasks: 1)' <<< "$out1" || fail "-w 1 model: $out1"
 # -w 0 shows every week.
-out=$("$root/bin/aistats" bob -w 0)
+out=$("$root/bin/aistats" bob --window week -w 0)
 grep -Eqx '2025-12-29 +1 +1 +500 +0.05 +0.050 +- +- +0.05 +0.05 +0.05' <<< "$out" || fail "all weeks: $out"
 grep -Eqx '2025-12-29 +500 +500 +500 +0.0% +0.0% +0' <<< "$out" || fail "all weeks: $out"
 [[ $(rows <<< "$out") == 6 ]] || fail "all weeks: $out"

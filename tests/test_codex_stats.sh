@@ -7,7 +7,7 @@ trap 'rm -rf -- "$tmp"' EXIT
 export CODEX_HOME="$tmp/codex" TZ=UTC
 fail() { echo "FAIL: $*" >&2; exit 1; }
 rows() { grep -Ec '^[0-9]{4}-[0-9]{2}-[0-9]{2} '; } # week rows, after the legend and header
-stats() { "$root/bin/aistats" codex "$@"; }
+stats() { "$root/bin/aistats" codex --window week "$@"; }
 record() { # timestamp response_id input cached output
   printf '{"timestamp":"%s","type":"token_usage_record","payload":{"response_id":"%s","usage":{"input_tokens":%d,"cached_input_tokens":%d,"cache_write_input_tokens":0,"output_tokens":%d,"reasoning_output_tokens":0,"total_tokens":%d}}}\n' \
     "$1" "$2" "$3" "$4" "$5" $(($3 + $5))
@@ -35,7 +35,7 @@ grep -Eqx '2025-12-29 +2 +3 +800 +267 +- +-' <<< "$out" || fail "all weeks: $out
 [[ $(rows <<< "$out") == 1 ]] || fail "all weeks: $out"
 [[ $(TZ=Asia/Tokyo stats -w 0 | tail -n1) == 2025-12-29* ]] || fail 'weekly local time'
 
-# By default only the last 10 weeks show; this week's row shows its ratio to last week's,
+# With --window week only the last 10 weeks show; this week's row shows its ratio to last week's,
 # even when -w 1 hides last week.
 mkdir -p "$CODEX_HOME/sessions/now"
 record "$(date -u +%FT%TZ)" r4 10 0 0 > "$CODEX_HOME/sessions/now/rollout-c.jsonl"

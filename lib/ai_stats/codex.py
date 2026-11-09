@@ -1,11 +1,11 @@
-"""Weekly token usage from Codex sessions.
+"""Token usage from Codex sessions.
 
 Reads the rollouts under ~/.codex/sessions and ~/.codex/archived_sessions
 (CODEX_HOME is honored). Codex writes one token_usage_record per model response
 (observed in 0.160.0), counted once by its response_id; its input_tokens include
 the cached and cache-write tokens. Each rollout (subagent threads have their
-own) counts as a session in the week (local time, from Monday) it started; with
---window, each response counts in the request window of its timestamp.
+own) counts in each request window of its responses by default; --window week
+groups whole sessions by their start week (local time, from Monday).
 """
 import json
 import math
@@ -198,8 +198,14 @@ def print_windows(sessions, windows):
             group[2] = total([group[2], weighted])
             details.setdefault(key, []).extend(records)
 
+    if windows.spec == "1d":
+        groups = {key: group for key, group in groups.items()
+                  if not all(r[metric] == 0 for r in details[key] for metric in TOKEN_FIELDS)}
+        details = {key: details[key] for key in groups}
+
     sums = {key: (len(ids), requests, round(weighted) if weighted is not None else None, weighted / requests if weighted is not None else None)
             for key, (ids, requests, weighted) in groups.items()}
+    previous_groups = windows.previous(sums)
     print("Token details: input includes cache read/write; reasoning is part of output.")
     print("Context uses input tokens as a proxy, not a measured live context size; cost is unknown.")
     print("unknown = missing measurement; token_count-only requests are observed cumulative advances.")
@@ -223,7 +229,7 @@ def print_windows(sessions, windows):
     for key, (n, requests, weighted, per_request) in sorted(sums.items()):
         if not windows.shown(key):
             continue
-        previous = sums.get(key - windows.step)
+        previous = previous_groups.get(key)
         print(f"{windows.label(key)}{n:>10}{requests:>10,}{display(weighted):>16}{display(per_request):>15}"
               f"{ratio(previous and previous[2], weighted):>18}"
               f"{ratio(previous and previous[3], per_request):>17}")

@@ -21,7 +21,9 @@ def commit_time(ref, repo):
 
 
 def window_spec(value):
-    """argparse type: 'week' or a length such as 5h, 2d or 1week."""
+    """argparse type: 'week' or a length such as 5h, 1day, 2d or 1week."""
+    if re.fullmatch(r"[1-9][0-9]*day", value):
+        value = value[:-3] + "d"
     if re.fullmatch(r"[1-9][0-9]*week", value):
         value = value[:-4] + "w"
     if value != "week" and not re.fullmatch(r"[1-9][0-9]*[hdw]", value):
@@ -73,7 +75,18 @@ class Windows:
                  key.astimezone().strftime('%Y-%m-%d %H:%M'))
         return f"{label:<{self.width}}"
 
+    def previous(self, groups):
+        """Daily comparisons skip absent/zero days, including hidden history."""
+        if self.spec == "1d":
+            keys = sorted(groups)
+            return {key: groups[prev] for prev, key in zip(keys, keys[1:])}
+        return {key: groups.get(key - self.step) for key in groups}
+
     def vs_prev(self):
+        if self.spec == "1d":
+            return ("vs prev  = this day / previous retained day * 100 [%] "
+                    "(-: missing, unknown or zero baseline)\n"
+                    "           days with zero usage are omitted; unknown usage is retained\n")
         u = self.unit
         return f"vs prev  = this {u} / previous {u} * 100 [%] (-: no previous {u}, or it was 0)\n"
 
@@ -97,7 +110,7 @@ TIME is an ISO 8601 date or date-time; without an offset it is local time.
 --json emits JSON Lines per session; --window/-w and splits affect text only.
 
 examples:
-  {example}                                  last 10 weeks
+  {example}                                  last 10 calendar days
   {example} --since 2026-10-01 --until 2026-11-01
                                              sessions started in October
   {example} --window 5h -w 6                 last six 5-hour windows
@@ -121,10 +134,10 @@ examples:
     parser.add_argument("--project", help="only project paths containing this substring")
     parser.add_argument("--min-requests", type=int, default=1,
                         help="skip sessions with fewer API requests (default: 1)")
-    parser.add_argument("--window", type=window_spec, default="week",
+    parser.add_argument("--window", type=window_spec, default="1day",
                         help="aggregation window: week (local, from Monday) or a length such as "
                              "5h (ending now), 2d (ending tomorrow at local 00:00), "
-                             "1w/1week (ending next Monday at local 00:00; default: week)")
+                             "1w/1week (ending next Monday at local 00:00); default: 1day (1d)")
     parser.add_argument("-w", "--windows", "--weeks", type=int,
                         help="windows shown without a split, including the current one "
                              "(0: all; default: 10, or 0 with --since/--until)")
