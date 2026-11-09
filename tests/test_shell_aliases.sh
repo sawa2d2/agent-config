@@ -50,10 +50,10 @@ SCRIPT
   [[ "$output" == *"$root/bin/claude"* ]] || fail "$shell: claude alias missing: $output"
   [[ "$output" == *"$root/bin/codexla"* ]] || fail "$shell: codexla alias missing: $output"
   [[ "$output" == *'chat --auto-approve --resume latest'* ]] || fail "$shell: bob did not use the launcher: $output"
-  local resume='underlying-codex: --no-alt-screen --approve-for-me -c features.worktrees=false resume --last'
+  local resume='underlying-codex: -c tui.animations=false --no-alt-screen --approve-for-me -c features.worktrees=false resume --last'
   [[ $(printf '%s\n' "$output" | grep -Fxc -- "$resume") == 2 ]] || fail "$shell: Codex resume routing failed: $output"
-  [[ "$output" == *$'underlying-codex: --no-alt-screen --approve-for-me\n'* ]] || fail "$shell: Codex new routing failed: $output"
-  [[ "$output" == *'underlying-codex: --no-alt-screen --approve-for-me exec two words'* ]] || fail "$shell: Codex arguments lost: $output"
+  [[ "$output" == *$'underlying-codex: -c tui.animations=false --no-alt-screen --approve-for-me\n'* ]] || fail "$shell: Codex new routing failed: $output"
+  [[ "$output" == *'underlying-codex: -c tui.animations=false --no-alt-screen --approve-for-me exec two words'* ]] || fail "$shell: Codex arguments lost: $output"
 }
 
 check bash 'shopt -s expand_aliases'

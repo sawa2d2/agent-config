@@ -35,7 +35,7 @@ expect() {
     expected=${expected/resume/$'-c\nfeatures.worktrees=false\nresume'}
   fi
   case $1 in
-    codex|codexl|codexla) expected=$'--no-alt-screen\n'"$expected" ;;
+    codex|codexl|codexla) expected=$'-c\ntui.animations=false\n--no-alt-screen\n'"$expected" ;;
   esac
   "$@"
   [[ "$(cat "$tmp/args")" == "$expected" ]] || fail "$* passed: $(tr '\n' ' ' < "$tmp/args")"
@@ -126,12 +126,17 @@ expect $'--approve-for-me\n--\n--sandbox=read-only' codex new -- --sandbox=read-
 expect $'--approve-for-me\n-m\n--sandbox=read-only' codex new -m --sandbox=read-only
 
 codex new --sandbox read-only --no-alt-screen
-[[ $(cat "$tmp/args") == $'--sandbox\nread-only\n--no-alt-screen' ]] || fail 'Codex duplicated inline flag after sandbox'
+[[ $(cat "$tmp/args") == $'-c\ntui.animations=false\n--sandbox\nread-only\n--no-alt-screen' ]] || fail 'Codex duplicated inline flag after sandbox'
 
 # An explicit inline flag is passed through once; a prompt after -- is literal.
 codex new --no-alt-screen
-[[ $(cat "$tmp/args") == $'--approve-for-me\n--no-alt-screen' ]] || fail 'Codex duplicated --no-alt-screen'
+[[ $(cat "$tmp/args") == $'-c\ntui.animations=false\n--approve-for-me\n--no-alt-screen' ]] || fail 'Codex duplicated --no-alt-screen'
 expect $'--approve-for-me\n--\n--no-alt-screen' codex new -- --no-alt-screen
+
+# Explicit animation preferences follow the default; prompts remain literal.
+expect $'--approve-for-me\n-c\ntui.animations=true' codex new -c tui.animations=true
+expect $'--approve-for-me\n--config=tui.animations=true' codex new --config=tui.animations=true
+expect $'--approve-for-me\n--\n-c tui.animations=true' codex new -- '-c tui.animations=true'
 
 # Leaving a task that stopped at its cost limit offers a new task; in tmux the first message is typed.
 mkdir -p "$tmp/loop" "$tmp/work.git" "$HOME/.bob/db"

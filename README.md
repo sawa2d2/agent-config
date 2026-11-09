@@ -87,6 +87,10 @@ Launchers (`bin/`):
 
 Each script except the `claude`, `bob` and `codex` launchers (which pass it to the real CLI) prints its usage with `--help`; header comments in `bin/` and `scripts/` document the details.
 
+The Codex launcher uses inline mode and disables working animations so idle
+repaints do not interrupt terminal drag selection. New output still renders.
+Use `codex new -c tui.animations=true` to explicitly restore animations for a run.
+
 Installed by `./install` (`scripts/`):
 
 - Skills from `deploy/skills/` (`handoff`, `takeover`, `backlog`, `loop`) plus upstream skills, Spec Kit, rtk and Claude Code plugins (`install-tools`, `install-skill`, `install-rtk`, `install-claude-plugins`).

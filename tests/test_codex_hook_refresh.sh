@@ -55,7 +55,7 @@ assert d['hooks']['PreToolUse'] == [
     {'hooks': [{'type': 'command', 'command': root + '/agent-tmux-status working'}]},
     {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': root + '/codex-rtk-hook'}]}]
 PY
-[[ $(cat "$CODEX_HOME/argv") == $'--no-alt-screen\n--sandbox\nread-only' ]] || fail 'explicit sandbox changed'
+[[ $(cat "$CODEX_HOME/argv") == $'-c\ntui.animations=false\n--no-alt-screen\n--sandbox\nread-only' ]] || fail 'explicit sandbox changed'
 # Atomic rewrites replace the inode: verify both bytes and file identity stay stable.
 cp "$CODEX_HOME/hooks.json" "$tmp/before.json"
 file_identity() { python3 -c 'import os, sys; s = os.stat(sys.argv[1]); print(s.st_ino, s.st_mtime_ns)' "$CODEX_HOME/hooks.json"; }
@@ -63,7 +63,7 @@ identity=$(file_identity)
 launch new -a on-request
 cmp -s "$CODEX_HOME/hooks.json" "$tmp/before.json" || fail 'unchanged definitions rewritten'
 [[ $(file_identity) == "$identity" ]] || fail 'unchanged file replaced'
-[[ $(cat "$CODEX_HOME/argv") == $'--no-alt-screen\n-a\non-request' ]] || fail 'explicit approval changed'
+[[ $(cat "$CODEX_HOME/argv") == $'-c\ntui.animations=false\n--no-alt-screen\n-a\non-request' ]] || fail 'explicit approval changed'
 rm "$tmp/bin/rtk"
 launch
 python3 - "$CODEX_HOME/hooks.json" "$HOME/.local/share/agent-config/hooks" <<'PY'
@@ -73,7 +73,7 @@ assert d['hooks']['PreToolUse'] == [{'matcher': 'Bash', 'hooks': [{'type': 'comm
     {'hooks': [{'type': 'command', 'command': sys.argv[2] + '/agent-tmux-status working'}]}]
 assert d['description'] == 'user metadata'
 PY
-[[ $(cat "$CODEX_HOME/argv") == $'--no-alt-screen\n--approve-for-me\n-c\nfeatures.worktrees=false\nresume\n--last' ]] || fail 'default launch changed'
+[[ $(cat "$CODEX_HOME/argv") == $'-c\ntui.animations=false\n--no-alt-screen\n--approve-for-me\n-c\nfeatures.worktrees=false\nresume\n--last' ]] || fail 'default launch changed'
 
 for config in "$HOME/.bob/settings/settings.json" "$HOME/.claude/settings.json"; do
   [[ $(cat "$config") == '{invalid' ]] || fail 'unrelated settings modified'

@@ -88,6 +88,9 @@ fi
 if $no_alt_screen; then
   set -- --no-alt-screen "$@"
 fi
+# Working animations repaint about 30 times per second even without new output,
+# interrupting terminal drag selection. Later explicit config overrides still win.
+set -- -c tui.animations=false "$@"
 if $automatic_handoff; then
   exec python3 "$wrapper_dir/../scripts/codex-auto-handoff" --explicit "$real_cli" "$@"
 fi
