@@ -2,6 +2,12 @@
 set -euo pipefail
 
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# Global links must outlive development worktrees removed by finalization.
+original_root=$(git -C "$repo_dir" worktree list --porcelain | sed -n '1s/^worktree //p')
+if [[ "$original_root" != "$repo_dir" ]]; then
+  printf 'Refusing global installation from a linked worktree: %s\nRun the installer from the persistent original checkout: %s/install\n' "$repo_dir" "$original_root" >&2
+  exit 1
+fi
 git -C "$repo_dir" pull
 # Only registered checkouts establish ownership of another checkout's links.
 # Missing worktrees remain recognizable until Git prunes their registration.

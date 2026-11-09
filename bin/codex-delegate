@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import select
+import shlex
 import shutil
 import subprocess
 import sys
@@ -140,13 +141,18 @@ def observe(data, root):
 
 
 def worker_prompt(prompt, task_id):
-    command = f"codex-delegate --report {task_id}"
+    command = f"{shlex.quote(str(Path(__file__).resolve()))} --report {task_id}"
     return prompt + f"""
 
 Delegated Codex task ID: {task_id}
 Work on this assigned branch/worktree; do not delegate branch creation again.
 The originating Codex agent continues coordinating. You own this task's branch
 Git operations (commit and push verified changes), unless the task says otherwise.
+Existing user authorization for these development-branch operations carries over;
+do not ask for conversational confirmation again. Execution permissions are a
+separate boundary: obey the active runtime policy, use its normal approval path
+when required, and report any denial without bypassing it. Do not infer the
+worker's permissions from the coordinator's sandbox or a previous task's denial.
 Never commit to the default branch or merge it without the exact required approval.
 Report explicitly from this worktree using these concrete commands:
   {command} running --summary 'Describe your actual first action here'

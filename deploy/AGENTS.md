@@ -29,7 +29,7 @@ These govern all coding and maintenance work and override the process any skill,
 ## Repository and Git Safety
 - Preserve unrelated changes and untracked files; never discard user changes, run destructive operations, commit directly to the default branch, force-push, or merge into the default branch without explicit user approval.
 - Follow repository-specific branching rules. Before launching, coordinating, or reporting delegated branch work, read `$HOME/.local/share/agent-config/operations/delegation.md`. For new code in tmux, use the originating agent's delegate command instead of creating a branch here; outside tmux, create a development branch before editing. Workers use their assigned worktree and Git authorization.
-- The primary agent owns Git operations; subagents must not create branches, commit, or push unless it explicitly delegates that. Preserve existing user authorization when delegating development-branch Git operations, following the delegation procedures.
+- The primary agent owns Git operations; subagents must not create branches, commit, or push unless it explicitly delegates that. Preserve existing user authorization when delegating development-branch Git operations, following the delegation procedures. Commit and push verified assigned development-branch changes without asking for conversational confirmation again when already authorized. This does not waive runtime sandbox/approval requirements; use the normal tool approval path when required and report denials without bypassing them.
 - If a required operational reference is unavailable, stop and report the missing installation.
 
 ## Verification

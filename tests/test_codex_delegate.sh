@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 
@@ -182,6 +183,16 @@ assert shell_words(keys[0])[-1].startswith('Read .agent-handoff.md and continue 
 assert shell_words(keys[-1])[:8] == [str(root / 'bin/codex'), 'new', *permissions, '--model', model]
 assert shell_words(keys[-1])[-1].startswith(prompt)
 assert '--report ' + second['id'] in shell_words(keys[-1])[-1]
+# Report instructions must work even when codex-delegate is missing from PATH.
+worker_text = shell_words(keys[-1])[-1]
+report_line = next(line.strip() for line in worker_text.splitlines()
+                   if ' running --summary ' in line)
+report_args = shlex.split(report_line)
+assert report_args[:4] == [cli, '--report', second['id'], 'running']
+run(*report_args[:4], '--summary', 'Reporting without installed PATH launcher', cwd=second['worktree'])
+assert status(second)['report']['summary'] == 'Reporting without installed PATH launcher'
+assert 'do not ask for conversational confirmation again' in worker_text
+assert 'report any denial without bypassing it' in worker_text
 # Execute recorded input against the real launch wrapper with only a fake paid CLI.
 run('bash', '-c', keys[-1], extra={'PATH': str(root / 'bin') + ':' + env['PATH']})
 arguments = json.loads((base / 'codex.args').read_text())

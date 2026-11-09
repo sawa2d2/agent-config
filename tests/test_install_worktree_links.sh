@@ -81,11 +81,25 @@ git('push', '-qu', 'origin', 'main')
 git('worktree', 'add', '-qb', 'linked', str(linked))
 run('git', '-C', str(linked), 'push', '-qu', 'origin', 'linked')
 
-# Fresh install, idempotence, both checkout directions, paths containing spaces.
+# Fresh install and idempotence from the persistent original checkout.
 install()
 install()
-install(linked)
-install()
+# A development installer must stop before pull or any HOME mutation.
+run('git', '-C', str(linked), 'branch', '--unset-upstream')
+result = subprocess.run(['bash', str(linked / 'install')], text=True, capture_output=True)
+assert result.returncode != 0
+assert 'Refusing global installation from a linked worktree' in result.stderr
+assert 'There is no tracking information' not in result.stderr
+for dest, source in links.items():
+    assert (home / dest).readlink() == primary / source
+
+
+def seed_old_worktree_links():
+    # Reproduce links created by installers predating the original-checkout guard.
+    for dest, source in links.items():
+        path = home / dest
+        path.unlink()
+        path.symlink_to(linked / source)
 
 # Retire only rule symlinks owned by registered checkouts, including dangling links.
 rule = home / '.codex/rules/agent-config.rules'
@@ -141,24 +155,25 @@ for dest, source in links.items():
     path.symlink_to(primary / source)
 
 # Deleted but registered worktrees retain enough provenance for safe repair.
-install(linked)
+seed_old_worktree_links()
 shutil.rmtree(linked)
 install()
 
 # Removing a worktree also removes its registration; dangling links are repaired.
 git('worktree', 'prune', '--expire=now')
 git('worktree', 'add', '-q', str(linked), 'linked')
-install(linked)
+seed_old_worktree_links()
 
 # A failed pull stops before the installer changes HOME.
-run('git', '-C', str(linked), 'branch', '--unset-upstream')
+git('branch', '--unset-upstream')
 shutil.rmtree(home)
 home.mkdir()
-result = subprocess.run(['bash', str(linked / 'install')], text=True, capture_output=True)
+result = subprocess.run(['bash', str(primary / 'install')], text=True, capture_output=True)
 assert result.returncode != 0, 'installer continued after pull failed'
 assert 'There is no tracking information' in result.stderr, result.stderr
 assert not (home / '.local/share/agent-config/operations').exists()
 
+git('branch', '--set-upstream-to=origin/main', 'main')
 git('worktree', 'remove', str(linked))
 assert str(linked) not in git('worktree', 'list', '--porcelain')
 install()

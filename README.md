@@ -18,8 +18,10 @@ curl -fsSL https://raw.githubusercontent.com/sawa2d2/agent-config/main/bootstrap
 ```
 
 This clones into `~/agent-config` (override with `AGENT_CONFIG_DIR`) and runs
-`./install`. Re-running `./install` is safe: installed items are skipped and
-unmanaged files are never overwritten.
+`./install`. Run global installation only from the persistent original checkout;
+linked development worktrees are rejected before pull or HOME changes. Re-running
+`./install` is safe: installed items are skipped and unmanaged files are never
+overwritten.
 
 To enable the launchers in interactive Bash or Zsh, add to your startup file:
 
@@ -119,7 +121,13 @@ as trusted in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). Existi
 settings are preserved. Workers start with `--sandbox danger-full-access` and
 `--ask-for-approval on-request`: this disables the Codex sandbox for the whole
 worker session while retaining approval requests. It does not authorize merges;
-the exact `approved` requirement and approval marker remain. Direct Codex launches
+the exact `approved` requirement and approval marker remain. Existing user
+permission to commit/push verified development-branch changes carries over without
+another conversational confirmation; runtime approval requirements still apply.
+The coordinator retains its existing permissions, so its shared `.git` launch or
+report writes can need tool approval even when the worker has full access.
+The resolved repository launcher is embedded in worker report commands, avoiding
+reliance on an installed PATH link. Direct Codex launches
 keep their existing defaults. Managed environment restrictions still apply.
 Hook trust is separate. A failed trust registration stops the launch and is recorded in task
 status; the created worktree is retained.
@@ -377,12 +385,13 @@ are not a new skill or automatically invoked workflow.
 instruction and skill directories. This fixed path works from arbitrary
 repositories and linked worktrees; it does not depend on the session CWD or
 resolving the global instruction symlink. Existing foreign links/directories
-are refused. Reinstalling from another registered worktree of this repository
-retargets operations, global instruction/rule links and CLI links to that checkout.
-Deleted worktrees are recognized while their Git registration remains. After
-`git worktree remove` or pruning, their dangling links are refused because their
-origin can no longer be verified; review and remove those links manually before
-reinstalling. Regular files and unrelated symlinks are preserved.
+are refused. Installation from a linked development worktree is rejected before
+pull or HOME changes, so finalizing that branch cannot break global links.
+Reinstall from the persistent original checkout to repair links left by older
+installers. Deleted worktrees are recognized while their Git registration remains;
+dangling symlinks can also be repaired after removal/pruning. Existing regular
+files and live unrelated symlinks are preserved. Review dangling link destinations
+before authorizing a reinstall; the installer replaces missing symlink targets.
 Rerun the installer after updating to create this link before
 using the shortened global instructions; repair a missing reference rather
 than skipping its mandatory procedure.
