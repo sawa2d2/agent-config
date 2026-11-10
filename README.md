@@ -400,6 +400,16 @@ Rerun the installer after updating to create this link before
 using the shortened global instructions; repair a missing reference rather
 than skipping its mandatory procedure.
 
+Bob Shell 2.1.0 completes `$skill` against both names and descriptions, keeps
+registry order, and initially selects the first match without prioritizing an
+exact name. Repository skill descriptions therefore avoid other skill names:
+mentioning `handoff` (even inside `.agent-handoff.md`) in `takeover` or `backlog`
+made them competing completions for `$handoff`. Cross-references stay in the
+skill bodies. `tests/test_install_skill.sh` checks that each full repository
+skill name has a single match after deployment. Other installed skills can
+still introduce collisions. This metadata fix needs an authorized skill
+reinstall and a fresh Bob session; it does not patch the installed Bob binary.
+
 For skills with `disable-model-invocation: true`, `install-skill` fills an
 unspecified Codex `policy.allow_implicit_invocation` with `false`, including
 upstream metadata that contains only `interface` fields. Other parsed YAML

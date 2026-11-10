@@ -1,6 +1,6 @@
 ---
 name: takeover
-description: Continue earlier work from the handoff note (.agent-handoff.md) written by the handoff skill. Use when the user asks to take over, resume or continue from a handoff note, or to read .agent-handoff.md and continue the work it describes.
+description: Continue earlier work from a saved session note. Use when the user asks to take over, resume or continue from that note, or to read it and continue the work it describes.
 ---
 
 # Takeover

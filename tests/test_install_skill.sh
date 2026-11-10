@@ -24,6 +24,26 @@ assert fields.get("description"), fields
 PY
 done
 
+# Bob 2.1.0 searches both names and descriptions without prioritizing exact
+# names. Keep each repository skill's invocation unique after deployment,
+# regardless of registry order (takeover/backlog used to match $handoff).
+for skill in "$root"/deploy/skills/*/; do
+  skill=${skill%/}
+  install_skill "$skill" "${skill##*/}" "$HOME/.bob/skills" > /dev/null
+done
+python3 - "$HOME/.bob/skills" <<'PY'
+import pathlib, sys
+skills = []
+for path in pathlib.Path(sys.argv[1]).glob('*/SKILL.md'):
+    frontmatter = path.read_text().split('---', 2)[1]
+    skills.append(dict(line.split(': ', 1) for line in frontmatter.strip().splitlines()))
+for skill in skills:
+    query = skill['name'].lower()
+    matches = [s['name'] for s in skills
+               if query in s['name'].lower() or query in s['description'].lower()]
+    assert matches == [skill['name']], (query, matches)
+PY
+
 # The renamed repository skill distributes the explicit-only policy to all agents.
 install_skill "$root/deploy/skills/loop" loop > /dev/null
 for target in .bob .claude .codex; do

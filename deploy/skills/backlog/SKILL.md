@@ -1,6 +1,6 @@
 ---
 name: backlog
-description: Save, list, or remove future repository tasks shared by Bob, Claude Code and Codex across worktrees. Use when the user asks to defer work or consult the backlog; use handoff for current-task resumption.
+description: Save, list, or remove future repository tasks shared by Bob, Claude Code and Codex across worktrees. Use when the user asks to defer work or consult the backlog; current-task resumption is a separate workflow.
 ---
 
 # Shared Backlog
