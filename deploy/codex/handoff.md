@@ -1,14 +1,17 @@
 # Automatic Codex context handoff
 
-Ordinary `codex`, `codex new`, and resume launches use native compaction.
-Select the retained custom launcher with `codex auto-handoff`,
+Supported interactive launches, including `codex new`, use automatic handoff.
+Resume/fork with permission overrides falls back to native Codex. This includes
+the default `--approve-for-me`, so ordinary no-argument resume remains native.
+Explicit selection remains available with `codex auto-handoff`,
 `codex auto-handoff new`, or `codex auto-handoff resume`.
 See [all three agents](../../docs/automatic-handoff.md) for the common prefix
 and [native settings](../../docs/native-compaction.md) for comparison limits.
 
 The integration targets installed `codex-cli 0.167.0`. Explicit auto-handoff
-rejects unknown versions, profiles, remote endpoints and new worktrees.
-Ordinary launches pass directly to the native CLI. Python's standard library
+rejects unknown versions, profiles, remote endpoints, new worktrees, and
+resume/fork permission overrides.
+Ordinary launches fall back to the native CLI for unsupported options or versions. Python's standard library
 is the only added dependency.
 
 ## Measurement and threshold
@@ -68,7 +71,7 @@ The handoff turn itself has no timeout because approvals can take time.
 The normal TUI handles sandbox and approval choices; the launcher never
 answers an approval. CLI `-c`/`--config` and feature overrides are also forwarded
 to its owned server. Profiles, explicitly remote endpoints, and `--worktree`
-are rejected in this mode because their equivalent server setup is not
+are rejected when explicitly selecting auto-handoff because their equivalent server setup is not
 established. Ordinary launches pass those modes directly to the native CLI. An interactive terminal is
 required. CLI subcommands other than interactive `resume` are not intended
 for automatic handoff.
@@ -116,4 +119,9 @@ the handoff/takeover skills:
 
 ```sh
 python3 tests/codex_auto_handoff_cli_probe.py /absolute/path/to/real/codex
+python3 tests/codex_auto_handoff_cli_probe.py /absolute/path/to/real/codex --resume
 ```
+
+The resume probe seeds a saved session, sets `tui.resume_cwd = "current"`,
+and resumes with saved/configured permissions and without a user-provided `--cd`, exercising the previous immediate
+startup failure as well as the subsequent full handoff sequence.

@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -190,8 +191,54 @@ class RotationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             module.server_options(["--profile", "personal"])
 
+    def test_remote_resume_permission_overrides_require_native_cli(self):
+        options = (["--approve-for-me"], ["--full-auto"], ["--yolo"],
+                   ["--dangerously-bypass-approvals-and-sandbox"],
+                   ["-a", "never"], ["--ask-for-approval", "never"],
+                   ["--ask-for-approval=never"], ["-anever"],
+                   ["-s", "read-only"], ["--sandbox", "read-only"],
+                   ["--sandbox=read-only"], ["-sread-only"],
+                   ["--add-dir", "/other"], ["--add-dir=/other"])
+        options += tuple([prefix + key + '=true'] for prefix in ("-c", "--config=")
+                         for key in ("approval_policy", "approvals_reviewer", "sandbox_mode",
+                                     "default_permissions", "sandbox_permissions", "permissions", "network",
+                                     "sandbox_workspace_write.writable_roots"))
+        options += (["-c", '"approval_policy" = "never"'],)
+        for command in ("resume", "fork"):
+            for flags in options:
+                for args in (flags + [command, "--last"], [command, "--last"] + flags):
+                    with self.subTest(args=args):
+                        with self.assertRaisesRegex(ValueError, "permission overrides"):
+                            module.server_options(args)
+        for args in (["resume", "--last"], ["--cd", "/work", "resume"],
+                     ["-c", "tui.animations=false", "resume"],
+                     ["-m", "resume", "--approve-for-me", "task"],
+                     ["--approve-for-me", "--", "resume"]):
+            module.server_options(args)
+
 
 class TransportTests(unittest.TestCase):
+    def test_default_mode_falls_back_without_losing_arguments(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        cli = Path(directory.name) / "codex"
+        cli.write_text('#!/bin/sh\nif [ "$1" = --version ]; then echo "codex-cli 99.0.0"; else printf "%s\\n" "$@"; fi\n')
+        cli.chmod(0o755)
+        for args, warning in ((["resume", "--last"], "unverified CLI version"),
+                              (["--profile", "personal", "resume"], "profile"),
+                              (["exec", "fixture"], ""),
+                              (["--approve-for-me", "resume", "--last"], "permission overrides"),
+                              (["fork", "--last", "-a", "never"], "permission overrides")):
+            with self.subTest(args=args):
+                result = subprocess.run([sys.executable, module.__file__, "--default", str(cli), *args],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), args)
+                if warning:
+                    self.assertIn(warning, result.stderr)
+                else:
+                    self.assertEqual(result.stderr, "")
+
     def test_remote_tui_defaults_to_explicit_local_cwd(self):
         for args in ([], ["resume", "--last"], ["fork", "--last"],
                      ["--", "--cd=prompt-text"], ["-m", "-Cmodel", "resume"]):

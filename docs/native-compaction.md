@@ -1,8 +1,11 @@
 # Native context compaction
 
-Normal repository launchers (`bin/codex`, `bin/claude`, `bin/bob`) use the
-CLI's native compaction, including `new` and resume. This is an experiment
-with triggers near the retained custom handoff's 35k/50k measurements, not a
+Normal `bin/claude` launches use the CLI's native compaction,
+including `new` and resume. Bob and Codex now default to
+[automatic handoff](automatic-handoff.md), with native compaction still enabled.
+Codex resume/fork with permission overrides remains native, including the
+wrapper's default no-argument resume with `--approve-for-me`.
+The native defaults were introduced as an experiment with triggers near the retained custom handoff's 35k/50k measurements, not a
 claim that native compaction is faster, cheaper, or more accurate.
 
 | CLI inspected | Managed default | Approximate native trigger |
@@ -38,7 +41,8 @@ No real-model performance or summary-quality comparison has been run here.
 
 ## Selecting the retained handoff
 
-Put `auto-handoff` first, then use the ordinary launcher arguments:
+For Claude put `auto-handoff` first, then use the ordinary launcher
+arguments. Bob and Codex already enable it by default; their prefixes remain accepted:
 
 ```sh
 codex auto-handoff new
@@ -48,7 +52,7 @@ bob auto-handoff new
 
 Without `new`, the usual resume defaults apply. Manual handoff and takeover,
 custom rotation code, hook relays and their tests remain available. Native
-compaction stays enabled even in opt-in mode and can run before a custom
+compaction stays enabled alongside automatic handoff and can run before a custom
 rotation. To compare with the earlier native headroom, choose it explicitly:
 
 ```sh

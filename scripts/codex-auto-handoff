@@ -189,6 +189,8 @@ class Rotation:
 def server_options(args):
     """Forward config overrides to the owned server; TUI retains all original options."""
     result = []
+    command = None
+    permission_override = False
     index = 0
     while index < len(args):
         arg = args[index]
@@ -196,6 +198,25 @@ def server_options(args):
             break
         if arg in ("-p", "--profile", "--remote", "--remote-auth-token-env", "--worktree") or arg.startswith(("--profile=", "--remote=", "-p")):
             raise ValueError("auto-handoff does not support profiles, remote endpoints, or new worktrees")
+        if arg in ("--approve-for-me", "--full-auto", "--yolo",
+                   "--dangerously-bypass-approvals-and-sandbox", "--add-dir",
+                   "--sandbox", "--ask-for-approval") or arg.startswith(
+                       ("-a", "-s", "--ask-for-approval=", "--sandbox=", "--add-dir=")):
+            permission_override = True
+        config = None
+        if arg in ("-c", "--config") and index + 1 < len(args):
+            config = args[index + 1]
+        elif arg.startswith("--config="):
+            config = arg[len("--config="):]
+        elif arg.startswith("-c"):
+            config = arg[2:]
+        if config is not None:
+            key = config.split("=", 1)[0].strip().split(".", 1)[0].strip('"\'')
+            if key in {"approval_policy", "approvals_reviewer", "default_permissions",
+                       "sandbox_mode", "sandbox_permissions", "sandbox_workspace_write", "permissions", "network"}:
+                permission_override = True
+        if not arg.startswith("-") and command is None:
+            command = arg
         if arg in ("-c", "--config", "--enable", "--disable"):
             result.extend(args[index:index + 2])
             index += 2
@@ -205,6 +226,10 @@ def server_options(args):
         if arg in ("-m", "--model", "-s", "--sandbox", "-a", "--ask-for-approval", "-C", "--cd", "--add-dir", "-i", "--image", "--local-provider"):
             index += 1
         index += 1
+    # The remote TUI rejects these choices before thread/resume or thread/fork.
+    # Keep the choices intact by falling back; never silently discard permissions.
+    if command in ("resume", "fork") and permission_override:
+        raise ValueError("resume/fork with permission overrides requires native Codex")
     return result
 
 

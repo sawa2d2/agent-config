@@ -64,6 +64,66 @@ class LifecycleTests(unittest.TestCase):
         self.assertIs(self.event(state, "UserPromptSubmit", prompt=module.core.TAKEOVER_PROMPT), False)
         self.assertEqual(state.phase, "disabled")
 
+    def test_unverified_versions_retain_native_cli(self):
+        for agent, version, args in (("bob", "9.9.9", ["chat", "--resume", "latest"]),
+                                     ("claude", "2.1.322 (Claude Code)", ["--continue"])):
+            with self.subTest(agent=agent), patch.object(module.subprocess, "check_output", return_value=version), \
+                    patch.object(module.os, "execv", side_effect=SystemExit) as execute:
+                with self.assertRaises(SystemExit):
+                    module.run(agent, "/real/" + agent, args)
+            execute.assert_called_once_with("/real/" + agent, ["/real/" + agent, *args])
+
+    def test_bob_oversized_takeover_cannot_loop(self):
+        state = self.handoff("bob")
+        self.event(state, "SessionStart", "fresh", source="startup")
+        self.event(state, "UserPromptSubmit", "fresh", prompt=module.core.TAKEOVER_PROMPT)
+        with patch.object(module, "measurement", return_value=module.core.LIMIT):
+            self.event(state, "Stop", "fresh")
+        self.assertEqual(state.phase, "disabled")
+        self.assertIsNone(state.action)
+        self.assertTrue((self.root / ".agent-handoff.md").exists())
+
+    def test_bob_handoff_requires_completed_fresh_note(self):
+        for failure in ("missing", "stale", "compact", "input"):
+            with self.subTest(failure=failure):
+                note = self.root / ".agent-handoff.md"
+                note.write_text("Earlier handoff state")
+                state = module.Rotation("bob")
+                self.event(state, "SessionStart", source="startup")
+                self.event(state, "UserPromptSubmit", prompt="work")
+                with patch.object(module, "measurement", return_value=module.core.LIMIT):
+                    self.event(state, "Stop")
+                    self.assertEqual(state.phase, "requested")
+                    self.event(state, "UserPromptSubmit", prompt=state.action)
+                    if failure == "missing":
+                        note.unlink()
+                    elif failure in ("compact", "input"):
+                        note.write_text(state.marker)
+                    # Writing the note alone must never clear the current chat.
+                    self.assertEqual(state.phase, "handoff")
+                    self.assertNotEqual(state.action, "/clear")
+                    if failure == "compact":
+                        self.event(state, "PreCompact")
+                    elif failure == "input":
+                        state.user_input()
+                    self.event(state, "Stop")
+                self.assertEqual(state.phase, "disabled")
+                self.assertIsNone(state.action)
+                if failure != "missing":
+                    self.assertEqual(note.read_text(), "Earlier handoff state" if failure == "stale" else state.marker)
+
+    def test_bob_same_task_or_wrong_worktree_blocks_takeover(self):
+        for session, cwd in (("old", None), ("fresh", "/other-worktree")):
+            with self.subTest(session=session, cwd=cwd):
+                state = self.handoff("bob")
+                state.event(dict(hook_event_name="SessionStart", session_id=session,
+                                 cwd=cwd or str(self.root), source="startup"))
+                self.assertIs(self.event(state, "UserPromptSubmit", session,
+                                         prompt=module.core.TAKEOVER_PROMPT), False)
+                self.assertEqual(state.phase, "disabled")
+                self.assertIsNone(state.action)
+                self.assertTrue((self.root / ".agent-handoff.md").exists())
+
     def test_claude_wrong_session_source_prevents_takeover(self):
         state = self.handoff("claude")
         self.event(state, "SessionStart", "fresh", source="resume")
@@ -122,13 +182,45 @@ class LifecycleTests(unittest.TestCase):
                 self.event(state, "Stop", transcript_path=str(transcript))
                 self.assertEqual(state.phase, phase)
 
+    def test_bob_limit_error_at_stop_never_requests_or_clears(self):
+        home = self.root / ".bob"
+        (home / "db").mkdir(parents=True)
+        database = home / "db/bob.db"
+        with sqlite3.connect(database) as db:
+            db.executescript("CREATE TABLE tasks(id TEXT, parent_id TEXT, status TEXT); CREATE TABLE messages(task_id TEXT, role TEXT, data TEXT, created_at INTEGER);")
+            db.execute("INSERT INTO tasks VALUES ('old', NULL, 'running')")
+            db.execute("INSERT INTO messages VALUES ('old', 'assistant', ?, 1)",
+                       (json.dumps({"_meta": {"spend": {"contextTokens": 81000}}}),))
+        for during_handoff in (False, True):
+            with self.subTest(during_handoff=during_handoff), patch.dict(os.environ, HOME=str(self.root)):
+                with sqlite3.connect(database) as db:
+                    db.execute("UPDATE tasks SET status = 'running'")
+                state = module.Rotation("bob")
+                self.event(state, "SessionStart", source="startup")
+                self.event(state, "UserPromptSubmit", prompt="work")
+                note = self.root / ".agent-handoff.md"
+                note.write_text("Existing state")
+                if during_handoff:
+                    self.event(state, "Stop")
+                    self.assertEqual(state.phase, "requested")
+                    self.event(state, "UserPromptSubmit", prompt=state.action)
+                    note.write_text(state.marker)
+                # Native max cost / max turns persists error before emitting Stop.
+                with sqlite3.connect(database) as db:
+                    db.execute("UPDATE tasks SET status = 'error'")
+                self.event(state, "Stop")
+                self.assertEqual(state.phase, "disabled")
+                self.assertIsNone(state.action)
+                self.assertIn("Bob task failed", state.reason)
+                self.assertEqual(note.read_text(), state.marker if during_handoff else "Existing state")
+
     def test_bob_uses_latest_context_not_cumulative_cost(self):
         home = self.root / ".bob"
         (home / "db").mkdir(parents=True)
         # No settings file is needed: cost limits do not control rotation.
         with sqlite3.connect(home / "db/bob.db") as db:
-            db.executescript("CREATE TABLE tasks(id TEXT, costs TEXT, parent_id TEXT); CREATE TABLE messages(task_id TEXT, role TEXT, data TEXT, created_at INTEGER);")
-            db.execute("INSERT INTO tasks VALUES ('old', ?, NULL)", (json.dumps({"cost": 1000}),))
+            db.executescript("CREATE TABLE tasks(id TEXT, costs TEXT, parent_id TEXT, status TEXT); CREATE TABLE messages(task_id TEXT, role TEXT, data TEXT, created_at INTEGER);")
+            db.execute("INSERT INTO tasks VALUES ('old', ?, NULL, 'running')", (json.dumps({"cost": 1000}),))
         with patch.dict(os.environ, HOME=str(self.root)):
             for timestamp, tokens in enumerate((50001, 1000, 50000, 50001)):
                 with self.subTest(tokens=tokens), sqlite3.connect(home / "db/bob.db") as db:
@@ -139,7 +231,7 @@ class LifecycleTests(unittest.TestCase):
 
 
 class TerminalTests(unittest.TestCase):
-    def test_interactive_wrappers_require_explicit_opt_in(self):
+    def test_bob_and_codex_default_to_handoff_claude_requires_opt_in(self):
         for agent in ("claude", "bob", "codex"):
             for explicit in (False, True):
                 for args in ([], ["new"], ["chat", "--resume", "latest"] if agent == "bob" else ["resume"]):
@@ -172,8 +264,11 @@ class TerminalTests(unittest.TestCase):
                                 elif child.poll() is not None:
                                     break
                             self.assertEqual(child.wait(timeout=2), 0, output.decode(errors="replace"))
-                            self.assertIn(b"AUTO_HANDOFF" if explicit else b"NATIVE_CLI", output)
-                            self.assertNotIn(b"NATIVE_CLI" if explicit else b"AUTO_HANDOFF", output)
+                            automatic = explicit or agent in ("bob", "codex")
+                            self.assertIn(b"AUTO_HANDOFF" if automatic else b"NATIVE_CLI", output)
+                            self.assertNotIn(b"NATIVE_CLI" if automatic else b"AUTO_HANDOFF", output)
+                            if agent == "codex":
+                                self.assertIn(b"arg:--explicit" if explicit else b"arg:--default", output)
                             self.assertNotIn(b"arg:auto-handoff", output)
                             self.assertNotIn(b"arg:new", output)
                         finally:
@@ -183,8 +278,8 @@ class TerminalTests(unittest.TestCase):
                             os.close(master)
 
     def test_native_hook_relay_and_repeated_rotation(self):
-        for agent in ("claude", "bob"):
-            with self.subTest(agent=agent), tempfile.TemporaryDirectory() as directory:
+        for agent, version in (("claude", "2.1.319 (Claude Code)"), ("bob", "2.0.9"), ("bob", "2.1.0")):
+            with self.subTest(agent=agent, version=version), tempfile.TemporaryDirectory() as directory:
                 work = Path(directory)
                 subprocess.run(["git", "init", "-q", str(work)], check=True)
                 fake = work / "fake-cli"
@@ -195,8 +290,8 @@ class TerminalTests(unittest.TestCase):
                 (home / ".bob/settings").mkdir()
                 (home / ".bob/settings/settings.json").write_text('{"session":{"maxCost":20}}')
                 with sqlite3.connect(home / ".bob/db/bob.db") as db:
-                    db.executescript("CREATE TABLE tasks(id TEXT, costs TEXT, parent_id TEXT); CREATE TABLE messages(task_id TEXT, role TEXT, data TEXT, created_at INTEGER);")
-                env = {**os.environ, "HOME": str(home), "FIXTURE_AGENT": agent,
+                    db.executescript("CREATE TABLE tasks(id TEXT, costs TEXT, parent_id TEXT, status TEXT); CREATE TABLE messages(task_id TEXT, role TEXT, data TEXT, created_at INTEGER);")
+                env = {**os.environ, "HOME": str(home), "FIXTURE_AGENT": agent, "FIXTURE_VERSION": version,
                        "FIXTURE_RELAY": str(ROOT / "scripts/agent-handoff-event")}
                 master, slave = pty.openpty()
                 child = subprocess.Popen([sys.executable, str(ROOT / "scripts/agent-auto-handoff"), agent, str(fake)],
@@ -224,7 +319,7 @@ FAKE = r'''
 import json, os, pathlib, re, sqlite3, subprocess, sys, tty
 agent = os.environ['FIXTURE_AGENT']
 if '--version' in sys.argv:
-    print('2.1.319 (Claude Code)' if agent == 'claude' else '2.0.9')
+    print(os.environ['FIXTURE_VERSION'])
     sys.exit()
 root = pathlib.Path.cwd()
 session = 'old'
@@ -244,7 +339,7 @@ def usage(tokens):
     with sqlite3.connect(pathlib.Path.home()/'.bob/db/bob.db') as db:
         db.execute('DELETE FROM tasks')
         db.execute('DELETE FROM messages')
-        db.execute('INSERT INTO tasks VALUES (?, ?, NULL)', (session, '{"cost":0}'))
+        db.execute("INSERT INTO tasks VALUES (?, ?, NULL, 'running')", (session, '{"cost":0}'))
         db.execute('INSERT INTO messages VALUES (?, ?, ?, 1)', (session, 'assistant', json.dumps({'_meta':{'spend':{'contextTokens':tokens}}})))
 
 def prompt(text):

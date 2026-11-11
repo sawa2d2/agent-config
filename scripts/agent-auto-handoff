@@ -36,10 +36,14 @@ def measurement(agent, event):
         return tokens
     home = Path.home() / ".bob"
     with sqlite3.connect(f"file:{home / 'db/bob.db'}?mode=ro", uri=True) as database:
-        row = database.execute("select parent_id from tasks where id = ?",
+        row = database.execute("select parent_id, status from tasks where id = ?",
                                (event["session_id"],)).fetchone()
         if not row or row[0]:
             raise ValueError("not a root Bob task")
+        # Bob 2.1.0 emits Stop even after a cost/turn limit. Its task manager
+        # persists the error status before Stop; a fresh note alone is not success.
+        if row[1] == "error":
+            raise ValueError("Bob task failed; history and handoff note retained")
         row = database.execute("select data from messages where task_id = ? and role = 'assistant' "
                                "order by created_at desc limit 1", (event["session_id"],)).fetchone()
         tokens = json.loads(row[0]).get("_meta", {}).get("spend", {}).get("contextTokens", 0) if row else 0
@@ -110,8 +114,8 @@ class Rotation(core.Rotation):
 def run(agent, cli, args):
     output = subprocess.check_output([cli, "--version"], text=True).strip().splitlines()
     version = output[0] if output else "unknown"
-    expected = {"claude": "2.1.319 (Claude Code)", "bob": "2.0.9"}[agent]
-    if version != expected:
+    expected = {"claude": {"2.1.319 (Claude Code)"}, "bob": {"2.0.9", "2.1.0"}}[agent]
+    if version not in expected:
         print(f"{agent} auto-handoff disabled: unverified CLI version {version}", file=sys.stderr)
         os.execv(cli, [cli, *args])
     state = Rotation(agent)

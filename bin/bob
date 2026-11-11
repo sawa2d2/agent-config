@@ -24,9 +24,8 @@ bash "$wrapper_dir/../scripts/install-bob-theme" >/dev/null
 bash "$wrapper_dir/../scripts/install-bob-settings" >/dev/null
 bash "$wrapper_dir/../scripts/install-agent-hooks" >/dev/null
 
-automatic_handoff=false
+# Restore Bob's ordinary interactive handoff; the prefix remains compatible.
 if [[ ${1:-} == auto-handoff ]]; then
-  automatic_handoff=true
   shift
 fi
 
@@ -46,9 +45,6 @@ type_prompt() {
 # cost limit, offer to continue in a new task started by `bobtask handoff`.
 chat() {
   if [[ -t 0 && -t 1 ]]; then
-    if ! $automatic_handoff; then
-      exec "$real_bob" chat --auto-approve "$@"
-    fi
     exec python3 "$wrapper_dir/../scripts/agent-auto-handoff" bob "$real_bob" chat --auto-approve "$@"
   fi
   local since prompt='' status answer
@@ -81,7 +77,7 @@ interactive=true
 for arg in "$@"; do
   case "$arg" in --help|-h|--version|-v) interactive=false ;; esac
 done
-if $automatic_handoff && $interactive && [[ -t 0 && -t 1 ]]; then
+if $interactive && [[ -t 0 && -t 1 ]]; then
   case "${1:-}" in
     chat|-r|--resume|-p|--prompt)
       exec python3 "$wrapper_dir/../scripts/agent-auto-handoff" bob "$real_bob" "$@" ;;
