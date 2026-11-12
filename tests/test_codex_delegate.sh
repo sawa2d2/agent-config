@@ -196,13 +196,13 @@ assert 'report any denial without bypassing it' in worker_text
 # Execute recorded input against the real launch wrapper with only a fake paid CLI.
 run('bash', '-c', keys[-1], extra={'PATH': str(root / 'bin') + ':' + env['PATH']})
 arguments = json.loads((base / 'codex.args').read_text())
-assert arguments[:7] == ['--no-alt-screen', *permissions, '--model', model]
+assert arguments[:9] == ['-c', 'tui.animations=false', '--no-alt-screen', *permissions, '--model', model]
 assert '--approve-for-me' not in arguments
 assert arguments[-1].startswith(prompt)
 assert arguments[-1] == shell_words(keys[-1])[-1]
 assert not any(primary.glob('injected*'))
 third = launch('feat/model', '--status is a literal prompt', '--model', 'gpt-6-luna')
-assert json.loads((base / 'codex.args').read_text())[:7] == ['--no-alt-screen', *permissions, '--model', 'gpt-6-luna']
+assert json.loads((base / 'codex.args').read_text())[:9] == ['-c', 'tui.animations=false', '--no-alt-screen', *permissions, '--model', 'gpt-6-luna']
 
 # The intended wrapper refreshes only the isolated HOME; repeated launches
 # preserve the already installed configuration.
