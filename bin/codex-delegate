@@ -19,7 +19,7 @@ import time
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from delegate_startup import launcher, pane_alive, submit, wait_for
+from delegate_startup import check_length, launcher, pane_alive, submit, wait_for
 
 
 def run(*args, cwd=None):
@@ -251,6 +251,13 @@ def launch(args, context):
             raise ValueError("no .agent-handoff.md here; write one or pass a prompt")
         prompt = "Read .agent-handoff.md and continue the work it describes."
     task_id = uuid.uuid4().hex
+    command = [launcher("codex"), "new", "--sandbox", "danger-full-access",
+               "--ask-for-approval", "on-request"]
+    if args.model:
+        command += ["--model", args.model]
+    command.append(worker_prompt(prompt, task_id))
+    # Reject an oversized prompt before any task state, worktree or window.
+    check_length(command)
     data = dict(id=task_id, branch=args.branch, prompt=prompt, worktree=None,
                 session=None, pane=None, tmux_server=None, launch="starting", report=None,
                 created_at=now(), updated_at=now())
@@ -273,11 +280,6 @@ def launch(args, context):
                    "-c", directory, "-P", "-F", "#{pane_id}")
         update(context, task_id, pane=pane)
         run("tmux", "set-option", "-p", "-t", pane, "@codex_delegate_task", task_id)
-        command = [launcher("codex"), "new", "--sandbox", "danger-full-access",
-                   "--ask-for-approval", "on-request"]
-        if args.model:
-            command += ["--model", args.model]
-        command.append(worker_prompt(prompt, task_id))
         submit(pane, command)
         update(context, task_id, launch="sent")
         print(f"codex-delegate: launch input sent (pane {pane}); waiting up to 90s for worker report", flush=True)

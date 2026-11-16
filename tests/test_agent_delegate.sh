@@ -61,7 +61,7 @@ echo note > .agent-handoff.md
 "$root/bin/agent-delegate" feat/x > /dev/null
 [[ ! -e .agent-handoff.md && $(cat "$tmp/worktrees/feat/x/.agent-handoff.md") == note ]] || fail 'note was not moved'
 grep -qx "new-window -d -t \$7 -n feat/x -c $tmp/worktrees/feat/x -P -F #{pane_id}" "$tmp/tmux.log" || fail "window: $(cat "$tmp/tmux.log")"
-grep -Fqx "send-keys -t %9 -l \$'$root/bin/claude' \$'Read .agent-handoff.md and continue the work it describes.'" "$tmp/tmux.log" || fail "keys: $(cat "$tmp/tmux.log")"
+grep -Fqx "send-keys -t %9 -l -- \$'$root/bin/claude' \$'Read .agent-handoff.md and continue the work it describes.'" "$tmp/tmux.log" || fail "keys: $(cat "$tmp/tmux.log")"
 grep -qx 'send-keys -t %9 Enter' "$tmp/tmux.log" || fail 'Enter was not sent'
 # The new worktree is trusted; the rest of the config is kept.
 jq -e --arg dir "$tmp/worktrees/feat/x" \
@@ -71,16 +71,24 @@ jq -e --arg dir "$tmp/worktrees/feat/x" \
 # An explicit prompt works without a note.
 : > "$tmp/tmux.log"
 "$root/bin/agent-delegate" feat/y "fix the build" > /dev/null
-grep -Fqx "send-keys -t %9 -l \$'$root/bin/claude' \$'fix the build'" "$tmp/tmux.log" || fail "prompt: $(cat "$tmp/tmux.log")"
+grep -Fqx "send-keys -t %9 -l -- \$'$root/bin/claude' \$'fix the build'" "$tmp/tmux.log" || fail "prompt: $(cat "$tmp/tmux.log")"
 
 # A model is passed through to claude; a missing model value is rejected.
 : > "$tmp/tmux.log"
 "$root/bin/agent-delegate" --model sonnet feat/m "merge it" > /dev/null
-grep -Fqx "send-keys -t %9 -l \$'$root/bin/claude' \$'--model' \$'sonnet' \$'merge it'" "$tmp/tmux.log" || fail "model: $(cat "$tmp/tmux.log")"
+grep -Fqx "send-keys -t %9 -l -- \$'$root/bin/claude' \$'--model' \$'sonnet' \$'merge it'" "$tmp/tmux.log" || fail "model: $(cat "$tmp/tmux.log")"
 if "$root/bin/agent-delegate" -m 2>/dev/null; then fail 'ran with -m and no model'; fi
 
 # A prompt beginning with '-' remains a positional helper argument.
 "$root/bin/agent-delegate" feat/literal --literal > /dev/null
+
+# A prompt whose escaped launch command exceeds MAX_ARG_STRLEN (each newline
+# becomes 4 bytes) is rejected before a worktree or window exists.
+rm -rf -- "$tmp/worktrees" "$tmp/tmux.log"
+big=$(printf '%40000s' '' | tr ' ' '\n'; printf x)
+if "$root/bin/agent-delegate" feat/big "$big" 2> "$tmp/err"; then fail 'accepted an oversized prompt'; fi
+grep -q 'agent-delegate: prompt too long.*MAX_ARG_STRLEN' "$tmp/err" || fail "oversized error: $(cat "$tmp/err")"
+[[ ! -e $tmp/worktrees && ! -e $tmp/tmux.log ]] || fail 'created a worktree or window for an oversized prompt'
 
 # Outside tmux it refuses.
 if TMUX= "$root/bin/agent-delegate" feat/z "x" 2>/dev/null; then fail 'ran outside tmux'; fi

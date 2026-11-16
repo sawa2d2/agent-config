@@ -24,6 +24,11 @@ if [[ -z $prompt ]]; then
   prompt='Read .agent-handoff.md and continue the work it describes.'
 fi
 
+# Resolve the helper relative to the installed script, including symlinks.
+helper="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/../lib/delegate_startup.py"
+# Reject an oversized prompt before creating a worktree or window.
+python3 "$helper" --check -- '' claude "$prompt" "$model" || exit 1
+
 dir=$(gwt-path -b "$branch")
 # Move rather than copy, so this working tree does not keep a stale note.
 [[ -f $note ]] && mv -- "$note" "$dir/.agent-handoff.md"
@@ -37,7 +42,5 @@ if [[ -f $config ]]; then
 fi
 session=$(tmux display-message -p -t "${TMUX_PANE:-}" '#{session_id}')
 pane=$(tmux new-window -d -t "$session" -n "$branch" -c "$dir" -P -F '#{pane_id}')
-# Resolve the helper relative to the installed script, including symlinks.
-helper="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/../lib/delegate_startup.py"
 echo "agent-delegate: window for $branch (pane $pane) at $dir; checking startup"
 exec python3 "$helper" -- "$pane" claude "$prompt" "$model"

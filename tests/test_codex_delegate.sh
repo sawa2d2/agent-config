@@ -282,6 +282,13 @@ assert (Path(failed['worktree']) / '.agent-handoff.md').read_text() == 'retained
 failed = launch('feat/fail-gwt', extra={'FAIL_GWT': '1'}, ok=False)
 assert failed['launch'] == 'failed' and failed['worktree'] is None
 assert 'fixture worktree creation failed' in failed['launch_error']
+# A prompt whose escaped launch command exceeds MAX_ARG_STRLEN is rejected
+# before task state, worktree or window exist.
+before, tmux_before = listing(), (base / 'tmux.log').read_bytes()
+result = call('feat/oversized', '\n' * 33000, ok=False)
+assert 'MAX_ARG_STRLEN' in result.stderr, result.stderr
+assert listing() == before and (base / 'tmux.log').read_bytes() == tmux_before
+assert not (base / 'worktrees with spaces' / 'feat/oversized').exists()
 
 # Missing task, symlink storage and tracked storage fail explicitly.
 call('--status', 'a' * 32, ok=False)

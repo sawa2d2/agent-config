@@ -97,6 +97,48 @@ class StartupTests(unittest.TestCase):
                     os.kill(pid, signal.SIGHUP)
                     os.waitpid(pid, 0)
 
+    def test_long_prompt_reaches_real_tmux_pane_intact(self):
+        # One send-keys above ~16KB fails with "command too long" in tmux 3.7c.
+        import json
+        import shutil
+        import time
+        if not shutil.which('tmux'):
+            self.skipTest('tmux not installed')
+        # Newlines escape to 4 bytes; ';' and '-' land on chunk boundaries.
+        prompt = '日本語;-x\n' * 2500 + 'end'
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / 'result.json'
+            # Rename so a partially written result is never read.
+            code = ('import json,os,sys;open(sys.argv[1]+".tmp","w").write(json.dumps(sys.argv[2:]));'
+                    'os.replace(sys.argv[1]+".tmp",sys.argv[1])')
+            command = ['python3', '-c', code, str(target), prompt]
+            self.assertGreater(len(startup.shell_command(command).encode()), 16384)
+            socket = 'delegate-test-' + Path(directory).name
+            real = startup.tmux
+            chunks = []
+
+            def isolated(*args, **kwargs):
+                if args[0] == 'send-keys' and '-l' in args:
+                    chunks.append(args[-1])
+                return real('-L', socket, *args, **kwargs)
+            subprocess.run(['tmux', '-L', socket, '-f', '/dev/null', 'new-session', '-d',
+                            '-x', '200', '-y', '50', 'env PS1="$ " bash --norc -i'],
+                           cwd=directory, check=True)
+            try:
+                pane = subprocess.check_output(['tmux', '-L', socket, 'display-message', '-p',
+                                                '#{pane_id}'], text=True).strip()
+                with patch.object(startup, 'tmux', side_effect=isolated):
+                    startup.submit(pane, command)
+                deadline = time.monotonic() + 10
+                while not target.exists() and time.monotonic() < deadline:
+                    time.sleep(.1)
+                self.assertTrue(target.exists())
+                self.assertEqual(json.loads(target.read_text()), [prompt])
+                self.assertGreater(len(chunks), 2)
+                self.assertTrue(all(len(c.encode()) <= startup.SEND_KEYS_CHUNK_BYTES for c in chunks))
+            finally:
+                subprocess.run(['tmux', '-L', socket, 'kill-server'], capture_output=True)
+
     def test_codex_requires_explicit_report(self):
         from contextlib import nullcontext, redirect_stdout
         from importlib.machinery import SourceFileLoader

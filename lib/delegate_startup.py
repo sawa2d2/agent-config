@@ -8,6 +8,12 @@ import time
 import uuid
 
 
+# Linux MAX_ARG_STRLEN: the kernel refuses any single argument above this.
+MAX_ARG_STRLEN = 131072
+# tmux 3.7c rejects a send-keys command above about 16KB ("command too long").
+SEND_KEYS_CHUNK_BYTES = 8192
+
+
 class StartupError(ValueError):
     pass
 
@@ -30,18 +36,43 @@ def tmux(*args, input=None):
 def shell_command(arguments):
     # Real line breaks/control bytes sent as keys can execute shell bindings,
     # even inside quotes. ANSI-C quoting preserves bytes in Bash and Zsh while
-    # keeping the submitted command on one physical line.
+    # keeping the submitted command on one physical line. ';' is escaped too:
+    # tmux treats an argument ending in ';' as a command separator, which
+    # would corrupt a send-keys chunk boundary.
     def quote(value):
         escaped = ""
         for char in value:
             if char in "\\'":
                 escaped += "\\" + char
-            elif ord(char) < 32 or ord(char) == 127:
+            elif ord(char) < 32 or ord(char) == 127 or char == ";":
                 escaped += f"\\{ord(char):03o}"
             else:
                 escaped += char
         return "$'" + escaped + "'"
     return " ".join(quote(arg) for arg in arguments)
+
+
+def check_length(arguments):
+    size = len(shell_command(arguments).encode())
+    if size > MAX_ARG_STRLEN:
+        raise StartupError(f"prompt too long: escaped launch command is {size} bytes, above the "
+                           f"{MAX_ARG_STRLEN}-byte Linux MAX_ARG_STRLEN limit; shorten the prompt "
+                           "or put the details in .agent-handoff.md")
+
+
+def send_literal(pane, text):
+    # Split on characters so UTF-8 sequences stay whole; '--' keeps a chunk
+    # starting with '-' from being parsed as a flag.
+    chunk, size = "", 0
+    for char in text:
+        length = len(char.encode())
+        if chunk and size + length > SEND_KEYS_CHUNK_BYTES:
+            tmux("send-keys", "-t", pane, "-l", "--", chunk)
+            chunk, size = "", 0
+        chunk += char
+        size += length
+    if chunk:
+        tmux("send-keys", "-t", pane, "-l", "--", chunk)
 
 
 def wait_for(check, seconds, description):
@@ -66,14 +97,14 @@ def submit(pane, arguments):
     token = uuid.uuid4().hex
     probe = shell_command(["tmux", "set-option", "-p", "-t", pane,
                            "@delegate_ready", token])
-    tmux("send-keys", "-t", pane, "-l", probe)
+    send_literal(pane, probe)
     tmux("send-keys", "-t", pane, "Enter")
 
     def ready():
         pane_alive(pane)
         return tmux("display-message", "-p", "-t", pane, "#{@delegate_ready}") == token
     wait_for(ready, 10, "interactive shell acknowledgement")
-    tmux("send-keys", "-t", pane, "-l", shell_command(arguments))
+    send_literal(pane, shell_command(arguments))
     tmux("send-keys", "-t", pane, "Enter")
 
 
@@ -138,6 +169,8 @@ def bob_prompt(pane, prompt):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true",
+                        help="only validate the launch command length; the pane is unused")
     parser.add_argument("pane")
     parser.add_argument("agent", choices=("claude", "bob"))
     parser.add_argument("prompt")
@@ -151,6 +184,13 @@ def main():
         command.append(args.prompt)
     else:
         command.append("new")
+    if args.check:
+        try:
+            check_length(command)
+        except StartupError as error:
+            print(f"{label}: {error}", file=sys.stderr)
+            return 1
+        return 0
     try:
         submit(args.pane, command)
         print(f"{label}: launch input sent (pane {args.pane}); verifying startup", flush=True)
