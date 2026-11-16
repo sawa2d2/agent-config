@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import pty
 import select
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -228,6 +229,35 @@ class LifecycleTests(unittest.TestCase):
                                (json.dumps({"_meta": {"spend": {"contextTokens": tokens}}}), timestamp))
                 self.assertEqual(module.measurement("bob", {"session_id": "old"}),
                                  module.core.LIMIT if tokens > 50000 else 0)
+
+
+    def relayed(self, prompt):
+        # Short /tmp path keeps the socket under macOS's 104-byte sun_path limit.
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory, \
+                socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as server:
+            endpoint = directory + "/relay"
+            server.bind(endpoint)
+            event = dict(hook_event_name="UserPromptSubmit", session_id="old", cwd=str(self.root), prompt=prompt)
+            child = subprocess.Popen([sys.executable, str(ROOT / "scripts/agent-handoff-event")],
+                                     stdin=subprocess.PIPE, env={**os.environ, "AGENT_HANDOFF_SOCKET": endpoint})
+            child.stdin.write(json.dumps(event).encode())
+            child.stdin.close()
+            server.settimeout(5)
+            data, sender = server.recvfrom(65536)
+            server.sendto(b"ok", sender)
+            self.assertEqual(child.wait(timeout=5), 0)
+            return data
+
+    def test_relayed_prompt_fits_macos_datagram_limit(self):
+        data = self.relayed("日本語の長い指示。" * 1000)
+        self.assertLess(len(data), 2048)
+        state = module.Rotation("bob")
+        self.event(state, "SessionStart", source="startup")
+        self.event(state, "UserPromptSubmit", prompt="work")
+        with patch.object(module, "measurement", return_value=81000):
+            self.event(state, "Stop")
+        self.assertIn(state.marker, json.loads(self.relayed(state.action))["prompt"])
+        self.assertEqual(json.loads(self.relayed(module.core.TAKEOVER_PROMPT))["prompt"], module.core.TAKEOVER_PROMPT)
 
 
 class TerminalTests(unittest.TestCase):
