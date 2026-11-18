@@ -9,15 +9,19 @@ settings="$HOME/.bob/settings/settings.json"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 check() { python3 -c "import json, sys; d = json.load(open(sys.argv[1])); assert $1, d" "$settings" || fail "$1"; }
 
+bob_commands='["cat", "git diff", "git log", "git rev-parse", "git show", "git status", "grep", "head", "tail", "ls", "sort", "wc", "which", "du", "df"]'
+rtk_commands='["rtk read", "rtk git diff", "rtk git log", "rtk git show", "rtk git status", "rtk grep", "rtk ls", "rtk wc", "rtk du", "rtk df"]'
+executors="[{\"toolId\": \"execute_command\", \"approvedCommands\": $bob_commands + $rtk_commands, \"deniedCommands\": []}]"
+
 # Creates the file with the defaults when missing.
 bash "$root/scripts/install-bob-settings" > /dev/null
-check 'd == {"session": {"limitWarnings": True, "respectGitIgnore": True, "compactionThresholdPercent": 19, "maxCost": 0}, "approval": {"outsideWorkspaceAllowed": True, "permissionOptions": [{"groupId": "read", "enableOutsideWorkspace": True}]}}'
+check "d == {'session': {'limitWarnings': True, 'respectGitIgnore': True, 'compactionThresholdPercent': 19, 'maxCost': 0}, 'approval': {'outsideWorkspaceAllowed': True, 'allowed_permissions': ['read', 'execute'], 'allowedExecutors': $executors, 'permissionOptions': [{'groupId': 'read', 'enableOutsideWorkspace': True}]}}"
 
 # Keeps unrelated settings and values the user set; adds only missing keys.
 printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": false, "compactionThresholdPercent": 90}}' > "$settings"
 chmod 600 "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null
-check 'd == {"approval": {"forbiddenApprovalGroups": [], "outsideWorkspaceAllowed": True, "permissionOptions": [{"groupId": "read", "enableOutsideWorkspace": True}]}, "session": {"maxTurns": 50, "respectGitIgnore": False, "compactionThresholdPercent": 90, "limitWarnings": True, "maxCost": 0}}'
+check "d == {'approval': {'forbiddenApprovalGroups': [], 'outsideWorkspaceAllowed': True, 'allowed_permissions': ['read', 'execute'], 'allowedExecutors': $executors, 'permissionOptions': [{'groupId': 'read', 'enableOutsideWorkspace': True}]}, 'session': {'maxTurns': 50, 'respectGitIgnore': False, 'compactionThresholdPercent': 90, 'limitWarnings': True, 'maxCost': 0}}"
 [[ $(stat -c %a "$settings" 2>/dev/null || stat -f %Lp "$settings") == 600 ]] || fail 'mode not kept'
 
 # The 300-turn limit of earlier installs goes back to Bob's default.
@@ -42,11 +46,15 @@ done
 printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": false, "compactionThresholdPercent": 90}}' > "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null
 
-# A user's outside-workspace choices, including a read group entry, are kept.
-printf '%s\n' '{"approval": {"outsideWorkspaceAllowed": false, "permissionOptions": [{"groupId": "read", "enableOutsideWorkspace": false}]}}' > "$tmp/own.json"
+# Reads outside the workspace are always auto-approved; other groups and entries are kept.
+printf '%s\n' '{"approval": {"outsideWorkspaceAllowed": false, "allowed_permissions": ["mcp"], "permissionOptions": [{"groupId": "edit"}, {"groupId": "read", "enableOutsideWorkspace": false}]}}' > "$tmp/own.json"
 cp "$settings" "$tmp/kept.json"; cp "$tmp/own.json" "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null
-check 'd["approval"] == {"outsideWorkspaceAllowed": False, "permissionOptions": [{"groupId": "read", "enableOutsideWorkspace": False}]}'
+check "d['approval'] == {'outsideWorkspaceAllowed': True, 'allowed_permissions': ['mcp', 'read', 'execute'], 'allowedExecutors': $executors, 'permissionOptions': [{'groupId': 'edit'}, {'groupId': 'read', 'enableOutsideWorkspace': True}]}"
+# The user's own command lists are kept; only the rtk forms are added.
+printf '%s\n' '{"approval": {"allowedExecutors": [{"toolId": "execute_command", "approvedCommands": ["git status", "rtk ls"], "deniedCommands": ["rm"]}]}}' > "$settings"
+bash "$root/scripts/install-bob-settings" > /dev/null
+check "d['approval']['allowedExecutors'] == [{'toolId': 'execute_command', 'approvedCommands': ['git status', 'rtk ls'] + [c for c in $rtk_commands if c != 'rtk ls'], 'deniedCommands': ['rm']}]"
 cp "$tmp/kept.json" "$settings"
 
 # Leaves a complete file untouched.
