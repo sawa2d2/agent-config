@@ -20,6 +20,15 @@ set -euo pipefail
 # allowedExecutors, including the forms the rtk PreToolUse hook rewrites them
 # to (`git status` becomes `rtk git status`); Bob matches whole leading words
 # after that rewrite, so without them every rtk command asks for approval.
+# The command security check is disabled with the top-level
+# isCommandSecurityEnabled set to false, keeping a value the user set. When it
+# is on, an LLM reviews every shell command and any it flags (reasons such as
+# "Destructive actions" or "Hardcode Password") needs explicit approval even
+# when auto-approved, which stops unattended delegated tasks. The key is
+# undocumented (the docs describe only `bob run --command-security`): Bob Shell
+# 2.1.0 has it in its built-in defaults as true and reads `--command-security`
+# first, then this setting. Bob's checks for obfuscated command syntax and
+# ignore patterns still apply.
 command -v python3 >/dev/null 2>&1 || {
   echo 'python3 is required to merge Bob settings safely' >&2
   exit 1
@@ -78,6 +87,9 @@ if settings.get("session", {}).get("maxTurns") == OLD_MAX_TURNS:
     changed = True
 if settings.get("session", {}).get("compactionThresholdPercent") in OLD_COMPACTION_PERCENTS:
     del settings["session"]["compactionThresholdPercent"]
+    changed = True
+if "isCommandSecurityEnabled" not in settings:
+    settings["isCommandSecurityEnabled"] = False
     changed = True
 for section, values in defaults.items():
     current = settings.setdefault(section, {})

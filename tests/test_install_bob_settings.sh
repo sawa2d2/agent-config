@@ -15,14 +15,19 @@ executors="[{\"toolId\": \"execute_command\", \"approvedCommands\": $bob_command
 
 # Creates the file with the defaults when missing.
 bash "$root/scripts/install-bob-settings" > /dev/null
-check "d == {'session': {'limitWarnings': True, 'respectGitIgnore': True, 'compactionThresholdPercent': 19, 'maxCost': 0}, 'approval': {'outsideWorkspaceAllowed': True, 'allowed_permissions': ['read', 'execute'], 'allowedExecutors': $executors, 'permissionOptions': [{'groupId': 'read', 'enableOutsideWorkspace': True}]}}"
+check "d == {'isCommandSecurityEnabled': False, 'session': {'limitWarnings': True, 'respectGitIgnore': True, 'compactionThresholdPercent': 19, 'maxCost': 0}, 'approval': {'outsideWorkspaceAllowed': True, 'allowed_permissions': ['read', 'execute'], 'allowedExecutors': $executors, 'permissionOptions': [{'groupId': 'read', 'enableOutsideWorkspace': True}]}}"
 
 # Keeps unrelated settings and values the user set; adds only missing keys.
 printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": false, "compactionThresholdPercent": 90}}' > "$settings"
 chmod 600 "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null
-check "d == {'approval': {'forbiddenApprovalGroups': [], 'outsideWorkspaceAllowed': True, 'allowed_permissions': ['read', 'execute'], 'allowedExecutors': $executors, 'permissionOptions': [{'groupId': 'read', 'enableOutsideWorkspace': True}]}, 'session': {'maxTurns': 50, 'respectGitIgnore': False, 'compactionThresholdPercent': 90, 'limitWarnings': True, 'maxCost': 0}}"
+check "d == {'approval': {'forbiddenApprovalGroups': [], 'outsideWorkspaceAllowed': True, 'allowed_permissions': ['read', 'execute'], 'allowedExecutors': $executors, 'permissionOptions': [{'groupId': 'read', 'enableOutsideWorkspace': True}]}, 'session': {'maxTurns': 50, 'respectGitIgnore': False, 'compactionThresholdPercent': 90, 'limitWarnings': True, 'maxCost': 0}, 'isCommandSecurityEnabled': False}"
 [[ $(stat -c %a "$settings" 2>/dev/null || stat -f %Lp "$settings") == 600 ]] || fail 'mode not kept'
+
+# A command security value the user set is kept.
+printf '%s\n' '{"isCommandSecurityEnabled": true}' > "$settings"
+bash "$root/scripts/install-bob-settings" > /dev/null
+check 'd["isCommandSecurityEnabled"] is True'
 
 # The 300-turn limit of earlier installs goes back to Bob's default.
 printf '%s\n' '{"session": {"maxTurns": 300}}' > "$settings"
