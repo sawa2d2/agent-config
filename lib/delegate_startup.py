@@ -19,7 +19,7 @@ class StartupError(ValueError):
 
 
 def launcher(agent):
-    # Delegates need wrapper semantics (e.g. `codex new`), even when only
+    # Delegates need wrapper semantics (e.g. Codex's automatic review default), even when only
     # aliases select our launchers and PATH resolves the upstream CLI.
     return str(Path(__file__).resolve().parent.parent / "bin" / agent)
 
@@ -183,7 +183,7 @@ def main():
             command += ["--model", args.model]
         command.append(args.prompt)
     else:
-        command.append("new")
+        command += ["chat", "--auto-approve"]
     if args.check:
         try:
             check_length(command)

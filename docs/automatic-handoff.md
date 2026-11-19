@@ -120,8 +120,8 @@ Missing/stale notes, failed turns, a handoff compaction, mismatched identities,
 relay failures and transition timeouts report errors and disable further
 actions. Saved histories are never deleted. A failure after `/clear` cannot
 restore the old visible chat; resume its old ID using the native session picker,
-or start `claude new '/takeover'`, `bob new` followed by `$takeover`, or
-`codex new '$takeover'` in the same worktree. The note remains available.
+or start `claude '/takeover'`, `bob chat --auto-approve` followed by `$takeover`, or
+`codex '$takeover'` in the same worktree. The note remains available.
 
 ## Installation and scope
 

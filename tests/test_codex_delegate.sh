@@ -178,9 +178,9 @@ commands = [json.loads(line) for line in (base / 'tmux.log').read_text().splitli
 keys = [a[-1] for a in commands if a[:1] == ['send-keys'] and '-l' in a]
 keys = [key for key in keys if "codex" in key]
 permissions = ['--sandbox', 'danger-full-access', '--ask-for-approval', 'on-request']
-assert shell_words(keys[0])[:6] == [str(root / 'bin/codex'), 'new', *permissions]
+assert shell_words(keys[0])[:5] == [str(root / 'bin/codex'), *permissions]
 assert shell_words(keys[0])[-1].startswith('Read .agent-handoff.md and continue the work it describes.')
-assert shell_words(keys[-1])[:8] == [str(root / 'bin/codex'), 'new', *permissions, '--model', model]
+assert shell_words(keys[-1])[:7] == [str(root / 'bin/codex'), *permissions, '--model', model]
 assert shell_words(keys[-1])[-1].startswith(prompt)
 assert '--report ' + second['id'] in shell_words(keys[-1])[-1]
 # Report instructions must work even when codex-delegate is missing from PATH.
@@ -403,7 +403,7 @@ for index, options in enumerate([
     call(*options, f'feat/selected-grammar-{index}', literal)
     command = [json.loads(line)[-1] for line in (base / 'tmux.log').read_text().splitlines()
                if json.loads(line)[:1] == ['send-keys'] and '-l' in json.loads(line)][-1]
-    assert shell_words(command)[:8] == [str(root / 'bin/codex'), 'new', *permissions, '--model', model]
+    assert shell_words(command)[:7] == [str(root / 'bin/codex'), *permissions, '--model', model]
     assert shell_words(command)[-1].startswith(literal)
 
 # A selected linked checkout supplies its own HEAD and note, not the main root.

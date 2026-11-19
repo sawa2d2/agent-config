@@ -251,7 +251,7 @@ def launch(args, context):
             raise ValueError("no .agent-handoff.md here; write one or pass a prompt")
         prompt = "Read .agent-handoff.md and continue the work it describes."
     task_id = uuid.uuid4().hex
-    command = [launcher("codex"), "new", "--sandbox", "danger-full-access",
+    command = [launcher("codex"), "--sandbox", "danger-full-access",
                "--ask-for-approval", "on-request"]
     if args.model:
         command += ["--model", args.model]

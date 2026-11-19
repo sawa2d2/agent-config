@@ -264,7 +264,7 @@ class TerminalTests(unittest.TestCase):
     def test_bob_and_codex_default_to_handoff_claude_requires_opt_in(self):
         for agent in ("claude", "bob", "codex"):
             for explicit in (False, True):
-                for args in ([], ["new"], ["chat", "--resume", "latest"] if agent == "bob" else ["resume"]):
+                for args in ([], ["chat"] if agent == "bob" else ["hello"], ["chat", "--resume", "latest"] if agent == "bob" else ["resume"]):
                     with self.subTest(agent=agent, explicit=explicit, args=args), tempfile.TemporaryDirectory() as directory:
                         base = Path(directory)
                         (base / "bin").mkdir()
@@ -300,7 +300,6 @@ class TerminalTests(unittest.TestCase):
                             if agent == "codex":
                                 self.assertIn(b"arg:--explicit" if explicit else b"arg:--default", output)
                             self.assertNotIn(b"arg:auto-handoff", output)
-                            self.assertNotIn(b"arg:new", output)
                         finally:
                             if child.poll() is None:
                                 child.kill()

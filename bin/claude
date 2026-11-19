@@ -78,9 +78,5 @@ if (( $# == 0 )); then
   fi
   launch
 fi
-# "new" starts a new session instead of sending "new" as the first prompt.
-if [[ $1 == new ]]; then
-  launch "${@:2}"
-fi
 
 launch "$@"

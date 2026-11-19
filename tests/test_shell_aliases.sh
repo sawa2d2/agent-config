@@ -38,7 +38,7 @@ alias claude
 alias codexla
 bob
 codex
-codex new
+codex hello
 codex exec 'two words'
 # An installer update can replace its own link without replacing the alias.
 rm '$tmp/local/bin/codex'
@@ -52,7 +52,7 @@ SCRIPT
   [[ "$output" == *'chat --auto-approve --resume latest'* ]] || fail "$shell: bob did not use the launcher: $output"
   local resume='underlying-codex: -c tui.animations=false --no-alt-screen --approve-for-me -c features.worktrees=false resume --last'
   [[ $(printf '%s\n' "$output" | grep -Fxc -- "$resume") == 2 ]] || fail "$shell: Codex resume routing failed: $output"
-  [[ "$output" == *$'underlying-codex: -c tui.animations=false --no-alt-screen --approve-for-me\n'* ]] || fail "$shell: Codex new routing failed: $output"
+  [[ "$output" == *$'underlying-codex: -c tui.animations=false --no-alt-screen --approve-for-me hello'* ]] || fail "$shell: Codex prompt routing failed: $output"
   [[ "$output" == *'underlying-codex: -c tui.animations=false --no-alt-screen --approve-for-me exec two words'* ]] || fail "$shell: Codex arguments lost: $output"
 }
 

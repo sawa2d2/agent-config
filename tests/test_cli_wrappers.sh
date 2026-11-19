@@ -48,14 +48,14 @@ expect() {
 expect $'chat\n--auto-approve\n--resume\nlatest' bob
 # All wrappers mark their process tree as an agent for gfinish.
 for cli in bob claude codex; do
-  XDG_RUNTIME_DIR="$tmp/run" "$cli" new
+  XDG_RUNTIME_DIR="$tmp/run" "$cli"
   expected="$tmp/run/agent-approval"
   [[ $(cat "$tmp/approval") == "$expected" ]] || fail "$cli: AGENT_APPROVAL_DIR=$(cat "$tmp/approval")"
 done
 # An explicit directory wins; without a runtime directory use HOME's cache.
-AGENT_APPROVAL_DIR="$tmp/custom" codex new
+AGENT_APPROVAL_DIR="$tmp/custom" codex
 [[ $(cat "$tmp/approval") == "$tmp/custom" ]] || fail 'Codex replaced explicit approval directory'
-(env -u XDG_RUNTIME_DIR codex new)
+(env -u XDG_RUNTIME_DIR codex)
 [[ $(cat "$tmp/approval") == "$HOME/.cache/agent-approval" ]] || fail 'Codex approval cache fallback'
 # Claude continues only when this directory has a session; otherwise it starts a new one.
 mkdir -p "$tmp/work.dir"
@@ -72,13 +72,9 @@ cd "$root"
 expect $'--approve-for-me\nresume\n--last' codex
 grep -q '^model_auto_compact_token_limit = 35000$' "$HOME/.codex/config.toml" || fail 'codex: compaction default missing'
 
-# "new" starts a new session and passes the remaining arguments on.
-expect $'chat\n--auto-approve' bob new
-expect $'chat\n--auto-approve\n--mode\nx' bob new --mode x
-expect '' claude new
-expect 'two words' claude new 'two words'
-expect '--approve-for-me' codex new
-expect $'--approve-for-me\ntwo words' codex new 'two words'
+# Arguments start a new session.
+expect 'two words' claude 'two words'
+expect $'--approve-for-me\ntwo words' codex 'two words'
 
 # Arguments are preserved; Codex adds its automatic-review default.
 expect $'chat\n--auto-approve' bob chat --auto-approve
@@ -104,39 +100,39 @@ expect $'--approve-for-me\nreview\n--uncommitted' codex review --uncommitted
 for option in '--approve-for-me' '--sandbox=read-only' '-sread-only' \
   '--ask-for-approval=on-request' '-aon-request' \
   '--dangerously-bypass-approvals-and-sandbox' '--yolo' '--full-auto'; do
-  expect "$option" codex new "$option"
+  expect "$option" codex "$option"
 done
 expect $'resume\n-s\nread-only' codex resume -s read-only
-expect $'--sandbox\nread-only' codex new --sandbox read-only
+expect $'--sandbox\nread-only' codex --sandbox read-only
 expect $'resume\n--all\n-a\non-request' codexla -a on-request
-expect $'--ask-for-approval\non-request' codex new --ask-for-approval on-request
+expect $'--ask-for-approval\non-request' codex --ask-for-approval on-request
 for setting in 'approval_policy="on-request"' 'approvals_reviewer="user"' \
   'sandbox_mode="read-only"' 'sandbox_permissions=["disk-read-access"]' \
   'default_permissions=":read-only"'; do
-  expect $'-c\n'"$setting" codex new -c "$setting"
-  expect "--config=$setting" codex new "--config=$setting"
-  expect "-c$setting" codex new "-c$setting"
+  expect $'-c\n'"$setting" codex -c "$setting"
+  expect "--config=$setting" codex "--config=$setting"
+  expect "-c$setting" codex "-c$setting"
 done
-expect $'--profile\ncustom' codex new --profile custom
-expect $'--approve-for-me\n-m\ntest\nhello' codex new -m test hello
-expect $'--approve-for-me\n-c\nmodel="test"' codex new -c 'model="test"'
-expect $'--approve-for-me\n-c\nmodel_auto_compact_token_limit=64000' codex new -c model_auto_compact_token_limit=64000
+expect $'--profile\ncustom' codex --profile custom
+expect $'--approve-for-me\n-m\ntest\nhello' codex -m test hello
+expect $'--approve-for-me\n-c\nmodel="test"' codex -c 'model="test"'
+expect $'--approve-for-me\n-c\nmodel_auto_compact_token_limit=64000' codex -c model_auto_compact_token_limit=64000
 # Option-looking prompts after -- are literal, and values are not options.
-expect $'--approve-for-me\n--\n--sandbox=read-only' codex new -- --sandbox=read-only
-expect $'--approve-for-me\n-m\n--sandbox=read-only' codex new -m --sandbox=read-only
+expect $'--approve-for-me\n--\n--sandbox=read-only' codex -- --sandbox=read-only
+expect $'--approve-for-me\n-m\n--sandbox=read-only' codex -m --sandbox=read-only
 
-codex new --sandbox read-only --no-alt-screen
+codex --sandbox read-only --no-alt-screen
 [[ $(cat "$tmp/args") == $'-c\ntui.animations=false\n--sandbox\nread-only\n--no-alt-screen' ]] || fail 'Codex duplicated inline flag after sandbox'
 
 # An explicit inline flag is passed through once; a prompt after -- is literal.
-codex new --no-alt-screen
+codex --no-alt-screen
 [[ $(cat "$tmp/args") == $'-c\ntui.animations=false\n--approve-for-me\n--no-alt-screen' ]] || fail 'Codex duplicated --no-alt-screen'
-expect $'--approve-for-me\n--\n--no-alt-screen' codex new -- --no-alt-screen
+expect $'--approve-for-me\n--\n--no-alt-screen' codex -- --no-alt-screen
 
 # Explicit animation preferences follow the default; prompts remain literal.
-expect $'--approve-for-me\n-c\ntui.animations=true' codex new -c tui.animations=true
-expect $'--approve-for-me\n--config=tui.animations=true' codex new --config=tui.animations=true
-expect $'--approve-for-me\n--\n-c tui.animations=true' codex new -- '-c tui.animations=true'
+expect $'--approve-for-me\n-c\ntui.animations=true' codex -c tui.animations=true
+expect $'--approve-for-me\n--config=tui.animations=true' codex --config=tui.animations=true
+expect $'--approve-for-me\n--\n-c tui.animations=true' codex -- '-c tui.animations=true'
 
 # Leaving a task that stopped at its cost limit offers a new task; in tmux the first message is typed.
 mkdir -p "$tmp/loop" "$tmp/work.git" "$HOME/.bob/db"
@@ -178,16 +174,16 @@ CLI
 printf '%s\n' '#!/usr/bin/env bash' > "$tmp/loop/sleep"
 chmod +x "$tmp/loop/bob" "$tmp/loop/tmux" "$tmp/loop/sleep"
 cd "$tmp/work.git"
-echo y | TMUX=1 TMUX_PANE=%1 TMPDIR="$tmp" PATH="$root/bin:$tmp/loop:/usr/bin:/bin" bob new 2> /dev/null
-[[ $(cat "$tmp/chats") == $'chat --auto-approve\nchat --auto-approve' ]] || fail "handoff chats: $(cat "$tmp/chats")"
+echo y | TMUX=1 TMUX_PANE=%1 TMPDIR="$tmp" PATH="$root/bin:$tmp/loop:/usr/bin:/bin" bob 2> /dev/null
+[[ $(cat "$tmp/chats") == $'chat --auto-approve --resume latest\nchat --auto-approve' ]] || fail "handoff chats: $(cat "$tmp/chats")"
 for _ in 1 2 3 4 5; do [[ -s $tmp/tmux ]] && break; /bin/sleep 0.2; done
 [[ $(cat "$tmp/tmux") == "send-keys -t %1 -l The transcript of an earlier Bob task in this workspace is $tmp/bob-handoff/limited.md."*$'\nsend-keys -t %1 Enter' ]] \
   || fail "handoff typing: $(cat "$tmp/tmux")"
 [[ $(wc -l < "$tmp/looks") == 3 ]] || fail "handoff typing did not wait for the input box: $(wc -l < "$tmp/looks")"
 # Declining ends the loop.
 rm "$tmp/chats"
-echo n | TMPDIR="$tmp" PATH="$root/bin:$tmp/loop:/usr/bin:/bin" bob new 2> /dev/null
-[[ $(cat "$tmp/chats") == 'chat --auto-approve' ]] || fail "declined handoff chats: $(cat "$tmp/chats")"
+echo n | TMPDIR="$tmp" PATH="$root/bin:$tmp/loop:/usr/bin:/bin" bob 2> /dev/null
+[[ $(cat "$tmp/chats") == 'chat --auto-approve --resume latest' ]] || fail "declined handoff chats: $(cat "$tmp/chats")"
 cd "$root"
 
 # Without the original CLI, fail instead of recursing.

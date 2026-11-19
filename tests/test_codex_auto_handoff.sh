@@ -10,7 +10,7 @@ export HOME="$tmp/home" CODEX_HOME="$tmp/codex"
 mkdir -p "$HOME" "$CODEX_HOME" "$tmp/bin"
 printf '#!/bin/sh\nexit 99\n' > "$tmp/bin/codex"
 chmod +x "$tmp/bin/codex"
-if PATH="$tmp/bin:/usr/bin:/bin" bash "$root/bin/codex" auto-handoff new -s read-only > "$tmp/out" 2> "$tmp/error"; then
+if PATH="$tmp/bin:/usr/bin:/bin" bash "$root/bin/codex" auto-handoff -s read-only > "$tmp/out" 2> "$tmp/error"; then
   echo 'FAIL: noninteractive automatic mode was accepted' >&2
   exit 1
 fi

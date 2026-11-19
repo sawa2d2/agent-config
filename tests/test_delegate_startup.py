@@ -199,7 +199,7 @@ class StartupTests(unittest.TestCase):
              patch.object(startup.time, 'sleep'), \
              patch.object(startup, 'tmux', return_value='0') as tmux:
             with self.assertRaisesRegex(startup.StartupError, 'shell acknowledgement'):
-                startup.submit('%9', ['codex', 'new', 'task'])
+                startup.submit('%9', ['codex', 'task'])
         sends = [c.args for c in tmux.call_args_list if c.args[0] == 'send-keys']
         self.assertEqual(len(sends), 2)  # only the readiness probe, no agent
 
@@ -220,7 +220,7 @@ class StartupTests(unittest.TestCase):
             with self.subTest(failure=failure), patch.object(startup, 'wait_for'), \
                  patch.object(startup, 'tmux', side_effect=tmux):
                 with self.assertRaises(startup.StartupError):
-                    startup.submit('%9', ['codex', 'new', 'task'])
+                    startup.submit('%9', ['codex', 'task'])
                 self.assertEqual(len(sent), failure)
 
     def test_bob_failed_paste_never_submits(self):

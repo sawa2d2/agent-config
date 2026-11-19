@@ -30,7 +30,7 @@ for config in "$HOME/.bob/settings/settings.json" "$HOME/.claude/settings.json";
 done
 
 # Status and handoff hooks are registered even without RTK.
-launch new
+launch
 python3 - "$CODEX_HOME/hooks.json" <<'PYTEST'
 import json, sys
 hooks = json.load(open(sys.argv[1]))['hooks']
@@ -42,7 +42,7 @@ chmod +x "$tmp/bin/rtk"
 cat > "$CODEX_HOME/hooks.json" <<'JSON'
 {"description":"user metadata","hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/old/scripts/codex-rtk-hook"},{"type":"command","command":"echo user","timeout":7}]}],"Stop":[{"hooks":[{"type":"command","command":"echo done"}]}]}}
 JSON
-launch new --sandbox read-only
+launch --sandbox read-only
 python3 - "$CODEX_HOME/hooks.json" "$HOME/.local/share/agent-config/hooks" <<'PY'
 import json, sys
 p, root = sys.argv[1:]
@@ -60,7 +60,7 @@ PY
 cp "$CODEX_HOME/hooks.json" "$tmp/before.json"
 file_identity() { python3 -c 'import os, sys; s = os.stat(sys.argv[1]); print(s.st_ino, s.st_mtime_ns)' "$CODEX_HOME/hooks.json"; }
 identity=$(file_identity)
-launch new -a on-request
+launch -a on-request
 cmp -s "$CODEX_HOME/hooks.json" "$tmp/before.json" || fail 'unchanged definitions rewritten'
 [[ $(file_identity) == "$identity" ]] || fail 'unchanged file replaced'
 [[ $(cat "$CODEX_HOME/argv") == $'-c\ntui.animations=false\n--no-alt-screen\n-a\non-request' ]] || fail 'explicit approval changed'
@@ -82,7 +82,7 @@ done
 # Malformed configuration must fail visibly before starting the CLI.
 printf '{invalid\n' > "$CODEX_HOME/hooks.json"
 rm "$CODEX_HOME/argv"
-if launch new > "$tmp/out" 2> "$tmp/error"; then fail 'invalid hooks accepted'; fi
+if launch > "$tmp/out" 2> "$tmp/error"; then fail 'invalid hooks accepted'; fi
 [[ -s $tmp/error && ! -e $CODEX_HOME/argv ]] || fail 'refresh error hidden'
 [[ $(cat "$CODEX_HOME/hooks.json") == '{invalid' ]] || fail 'invalid hooks overwritten'
 echo 'PASS: Codex startup refreshes hooks safely'

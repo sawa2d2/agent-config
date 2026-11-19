@@ -37,9 +37,6 @@ fi
 
 if (( $# == 0 )); then
   set -- resume --last
-elif [[ $1 == new ]]; then
-  # "new" starts a new session; Codex has no such subcommand.
-  shift
 fi
 
 # Codex's worktrees feature expands resume's cwd filter to every linked

@@ -1,6 +1,6 @@
 # Automatic Codex context handoff
 
-Supported interactive launches, including `codex new`, use automatic handoff.
+Supported interactive launches, including new sessions, use automatic handoff.
 Resume/fork with permission overrides falls back to native Codex. This includes
 the default `--approve-for-me`, so ordinary no-argument resume remains native.
 Explicit selection remains available with `codex auto-handoff`,
@@ -87,7 +87,7 @@ To recover manually, ask the active agent to use the handoff skill, then exit
 normally and run in the same worktree:
 
 ```sh
-codex new '$takeover'
+codex '$takeover'
 ```
 
 `resume` continues the old conversation; `fork` retains its history. Neither

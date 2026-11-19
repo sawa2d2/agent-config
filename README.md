@@ -72,7 +72,7 @@ refresh runs. Download and update failures return a nonzero status.
 
 Launchers (`bin/`):
 
-- `claude`, `bob`, `codex`: resume the latest session in the current directory; `<tool> new` starts a new one. They refresh managed settings and hooks on launch.
+- `claude`, `bob`, `codex`: resume the latest session in the current directory; any arguments start a new one (`bob chat --auto-approve` for Bob). They refresh managed settings and hooks on launch.
 - `claudel`, `bobl`, `codexl`, `codexla`: session pickers (current directory; `codexla` for all directories).
 - `agent-delegate`, `bob-delegate`, `codex-delegate`: start a new branch in a new worktree and tmux window with the same agent.
 - `bobtask`: list, resume, delete, move, dump or hand off Bob tasks (`bobrm` = `bobtask rm -c`).
@@ -89,7 +89,7 @@ Each script except the `claude`, `bob` and `codex` launchers (which pass it to t
 
 The Codex launcher uses inline mode and disables working animations so idle
 repaints do not interrupt terminal drag selection. New output still renders.
-Use `codex new -c tui.animations=true` to explicitly restore animations for a run.
+Use `codex -c tui.animations=true` to explicitly restore animations for a run.
 
 Installed by `./install` (`scripts/`):
 
