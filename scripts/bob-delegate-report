@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Usage: bob-delegate-report <Stop|SessionEnd> <status-file>
+#
+# Bob Shell workspace hook installed by bob-delegate. Reads the hook payload on
+# stdin and records the worker's latest event in <status-file> as one JSON
+# object: event, at, and the payload's session_id, cwd, last_assistant_message
+# (Stop) or reason (SessionEnd). Fields absent from a later event keep their
+# previous values, so SessionEnd keeps the last turn's message.
+set -euo pipefail
+(($# == 2)) || { echo 'Usage: bob-delegate-report <event> <status-file>' >&2; exit 2; }
+event=$1 file=$2
+previous='{}'
+[[ -f $file ]] && previous=$(cat -- "$file")
+# Write to a temporary file and rename, so a reader never sees a partial report.
+jq -c --argjson previous "$previous" --arg event "$event" \
+  --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  '$previous + ({session_id, cwd, last_assistant_message, reason} | with_entries(select(.value != null)))
+   + {event: $event, at: $at}' > "$file.tmp"
+mv -- "$file.tmp" "$file"

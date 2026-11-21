@@ -33,9 +33,28 @@ mkdir -p -- "$(dirname -- "$trusted")"
 jq --arg dir "$(cd -- "$dir" && pwd -P)" \
   '.folders[$dir] = "TRUST_FOLDER"' "$trusted" > "$trusted.bob-delegate.tmp"
 mv -- "$trusted.bob-delegate.tmp" "$trusted"
+# Event-driven completion report: workspace hooks in the new worktree record
+# each finished turn (Stop) and the session's end (SessionEnd) in $status.
+# Workspace settings keep this out of the user's global Bob settings, so other
+# Bob sessions are unaffected; Bob reads them because the folder is trusted.
+here=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")
+status="$dir/.bob/delegate-status.json"
+if git -C "$dir" ls-files --error-unmatch .bob/settings.json >/dev/null 2>&1; then
+  # Never let a worker commit delegate hooks into a repository's own settings.
+  echo "bob-delegate: .bob/settings.json is tracked here; no completion report" >&2
+  status=
+else
+  mkdir -p -- "$dir/.bob"
+  hook() { printf '%q %q %q' "$here/../scripts/bob-delegate-report" "$1" "$status"; }
+  jq -n --arg stop "$(hook Stop)" --arg end "$(hook SessionEnd)" \
+    '{hooks: {Stop: [{hooks: [{type: "command", command: $stop}]}],
+              SessionEnd: [{hooks: [{type: "command", command: $end}]}]}}' > "$dir/.bob/settings.json"
+  exclude=$(git -C "$dir" rev-parse --path-format=absolute --git-path info/exclude)
+  mkdir -p -- "$(dirname -- "$exclude")"
+  grep -qxF /.bob/ "$exclude" 2>/dev/null || echo /.bob/ >> "$exclude"
+fi
 session=$(tmux display-message -p -t "${TMUX_PANE:-}" '#{session_id}')
 pane=$(tmux new-window -d -t "$session" -n "$branch" -c "$dir" -P -F '#{pane_id}')
-# Resolve the helper relative to the installed script, including symlinks.
-helper="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/../lib/delegate_startup.py"
 echo "bob-delegate: window for $branch (pane $pane) at $dir; checking startup"
-exec python3 "$helper" -- "$pane" bob "$prompt"
+[[ -z $status ]] || echo "bob-delegate: completion report (each turn end and session end): $status"
+exec python3 "$here/../lib/delegate_startup.py" -- "$pane" bob "$prompt"

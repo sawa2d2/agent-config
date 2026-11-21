@@ -12,7 +12,7 @@ mkdir -p "$tmp/fake"
 cat > "$tmp/fake/gwt-path" <<'SH'
 #!/usr/bin/env bash
 [[ $1 == -b ]] || exit 2
-mkdir -p "$TEST_ROOT/worktrees/$2"
+git worktree add -q -b "$2" "$TEST_ROOT/worktrees/$2"
 printf '%s\n' "$TEST_ROOT/worktrees/$2"
 SH
 cat > "$tmp/fake/tmux" <<'SH'
@@ -52,6 +52,7 @@ echo '{"version":1,"folders":{"/other":"TRUST_FOLDER"}}' > "$tmp/home/.bob/trust
 export HOME="$tmp/home"
 git init -q "$tmp/repo"
 cd "$tmp/repo"
+git -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
 
 # Without a note or a prompt nothing is created.
 if "$root/bin/bob-delegate" feat/x 2>/dev/null; then fail 'ran without a note or prompt'; fi
@@ -72,6 +73,23 @@ grep -qx 'send-keys -t %9 Enter' "$tmp/tmux.log" || fail 'Enter was not sent'
 jq -e --arg dir "$tmp/worktrees/feat/x" \
   '.version == 1 and .folders[$dir] == "TRUST_FOLDER" and .folders["/other"] == "TRUST_FOLDER"' \
   "$HOME/.bob/trustedFolders.json" > /dev/null || fail "trust: $(cat "$HOME/.bob/trustedFolders.json")"
+
+# Workspace hooks report each turn end and the session end; .bob stays untracked.
+wt=$tmp/worktrees/feat/x
+run_hook() { bash -c "$(jq -r --arg e "$1" '.hooks[$e][0].hooks[0].command' "$wt/.bob/settings.json")" <<< "$2"; }
+run_hook Stop '{"session_id":"s1","cwd":"/w","last_assistant_message":"done: tests pass"}'
+jq -e '.event == "Stop" and .session_id == "s1" and .last_assistant_message == "done: tests pass" and (.at | length) > 0' \
+  "$wt/.bob/delegate-status.json" > /dev/null || fail "Stop report: $(cat "$wt/.bob/delegate-status.json")"
+run_hook SessionEnd '{"session_id":"s1","reason":"exit"}'
+jq -e '.event == "SessionEnd" and .reason == "exit" and .last_assistant_message == "done: tests pass"' \
+  "$wt/.bob/delegate-status.json" > /dev/null || fail "SessionEnd report: $(cat "$wt/.bob/delegate-status.json")"
+[[ -z $(git -C "$wt" status --porcelain --ignored=no -- .bob) ]] || fail ".bob not excluded: $(git -C "$wt" status --porcelain -- .bob)"
+
+# A repository that tracks .bob/settings.json keeps it untouched.
+mkdir .bob && echo '{}' > .bob/settings.json
+git add -f .bob/settings.json && git -c user.name=t -c user.email=t@t commit -q -m bob
+"$root/bin/bob-delegate" feat/tracked "x" > /dev/null 2>&1
+[[ $(cat "$tmp/worktrees/feat/tracked/.bob/settings.json") == '{}' ]] || fail 'tracked settings changed'
 
 # A missing trust file is created.
 rm "$HOME/.bob/trustedFolders.json"
