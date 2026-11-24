@@ -15,7 +15,7 @@ executors="[{\"toolId\": \"execute_command\", \"approvedCommands\": $bob_command
 
 # Creates the file with the defaults when missing.
 bash "$root/scripts/install-bob-settings" > /dev/null
-check "d == {'isCommandSecurityEnabled': False, 'session': {'limitWarnings': True, 'respectGitIgnore': True, 'compactionThresholdPercent': 19, 'maxCost': 0}, 'approval': {'outsideWorkspaceAllowed': True, 'allowed_permissions': ['read', 'execute'], 'allowedExecutors': $executors, 'permissionOptions': [{'groupId': 'read', 'enableOutsideWorkspace': True}]}}"
+check "d == {'isCommandSecurityEnabled': False, 'session': {'limitWarnings': True, 'respectGitIgnore': True, 'compactionThresholdPercent': 50, 'maxCost': 0}, 'approval': {'outsideWorkspaceAllowed': True, 'allowed_permissions': ['read', 'execute'], 'allowedExecutors': $executors, 'permissionOptions': [{'groupId': 'read', 'enableOutsideWorkspace': True}]}}"
 
 # Keeps unrelated settings and values the user set; adds only missing keys.
 printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": false, "compactionThresholdPercent": 90}}' > "$settings"
@@ -43,10 +43,10 @@ for cost in 0 0.5 10 25; do
   check "d['session']['maxCost'] == $cost"
 done
 # The earlier compaction default moves to the new one.
-for old in 37 80; do
+for old in 19 37 80; do
   printf '{"session": {"compactionThresholdPercent": %s}}\n' "$old" > "$settings"
   bash "$root/scripts/install-bob-settings" > /dev/null
-  check 'd["session"]["compactionThresholdPercent"] == 19'
+  check 'd["session"]["compactionThresholdPercent"] == 50'
 done
 printf '%s\n' '{"approval": {"forbiddenApprovalGroups": []}, "session": {"maxTurns": 50, "respectGitIgnore": false, "compactionThresholdPercent": 90}}' > "$settings"
 bash "$root/scripts/install-bob-settings" > /dev/null

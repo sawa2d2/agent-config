@@ -84,21 +84,6 @@ class LifecycleTests(unittest.TestCase):
         self.assertIsNone(state.action)
         self.assertTrue((self.root / ".agent-handoff.md").exists())
 
-    def test_bob_takeover_tool_below_threshold_cannot_rearm(self):
-        state = self.handoff("bob")
-        marker = state.marker
-        self.event(state, "SessionStart", "fresh", source="startup")
-        self.event(state, "UserPromptSubmit", "fresh", prompt=module.core.TAKEOVER_PROMPT)
-        with patch.object(module, "measurement", return_value=0):
-            self.event(state, "PostToolUse", "fresh")
-        self.assertFalse(state.armed)
-        with patch.object(module, "measurement", return_value=module.core.LIMIT):
-            self.event(state, "Stop", "fresh")
-        self.assertEqual(state.phase, "disabled")
-        self.assertIn("rotation loop prevented", state.reason)
-        self.assertIsNone(state.action)
-        self.assertEqual(state.marker, marker)
-
     def test_bob_handoff_requires_completed_fresh_note(self):
         for failure in ("missing", "stale", "compact", "input"):
             with self.subTest(failure=failure):

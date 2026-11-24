@@ -56,8 +56,8 @@ failure as the reason. The investigation found these separate Bob problems:
   measurement reads the latest request rather than waiting for UI output.
 
 Shared state-machine rules and Bob's native compaction settings are unchanged. At the
-managed 19% threshold (51,300 for a 270k window), a long turn may compact
-before reaching a successful boundary above 50k; if compaction occurs during
+managed 50% threshold (135,000 for a 270k window), a turn that grows far past
+50k may compact before reaching a successful boundary; if compaction occurs during
 handoff, automation stops and retains the note instead of clearing. This is
 an intentional recovery condition, not evidence of successful rotation.
 No real user settings are changed by development or deterministic tests.

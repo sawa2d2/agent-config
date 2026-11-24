@@ -12,7 +12,7 @@ claim that native compaction is faster, cheaper, or more accurate.
 | --- | --- | --- |
 | Codex 0.167.0 | `model_auto_compact_token_limit = 35000` | 35k active-context tokens, subject to native model limits |
 | Claude Code 2.1.319 | `autoCompactWindow: 100000` | Typically 67k: 100k minus up to 20k output reserve and 13k summary reserve |
-| Bob Shell 2.0.9 | `session.compactionThresholdPercent: 19` | 51,300 at a 270k model window; 19% of the server-provided window otherwise |
+| Bob Shell 2.0.9 | `session.compactionThresholdPercent: 50` | 135,000 at a 270k model window; 50% of the server-provided window otherwise |
 
 Claude cannot reach 35k using the documented window setting: 100k is its
 minimum, so this is the nearest supported window. Per-model settings, CLI and
@@ -23,8 +23,12 @@ this internal override or fake a model's context window.
 
 Bob's installed distribution reads the native session percentage, divides it
 by 100, and compares current context with `window * fraction`. No minimum
-clamp was found in that path or the shipped setting definitions. 19 is the
-nearest whole percentage to 50k for the observed 270k window. This is evidence
+clamp was found in that path or the shipped setting definitions. The earlier
+19% (about 50k for the observed 270k window) left too little room: after
+compaction, the system prompt, summary and recent large tool results could
+still exceed it, so Bob stopped with "compaction was unable to reduce the
+context enough to continue". Automatic handoff at 50k still rotates tasks
+before 50% is normally reached. This is evidence
 from 2.0.9, not a published minimum/range guarantee: the public Shell settings
 schema does not describe this key. Recheck the installed implementation after
 upgrades. A different model/window changes the absolute trigger; no model
@@ -63,7 +67,7 @@ claude auto-handoff new --autocompact 120000
 For Bob, back up settings and explicitly set
 `session.compactionThresholdPercent` to `37` for that comparison, then start
 the underlying CLI through the launcher only after accounting for the managed
-migration below. A wrapper refresh migrates 37 to 19; to keep 37, run the real
+migration below. A wrapper refresh migrates 37 to 50; to keep 37, run the real
 Bob CLI via `scripts/agent-auto-handoff bob /absolute/path/to/bob chat --auto-approve`
 after setting it, bypassing the settings installer. Restore settings after the
 comparison. The wrapper opt-in alone never disables native compaction.
@@ -73,7 +77,7 @@ See [automatic handoff](automatic-handoff.md) for its safety and recovery rules.
 
 The installers add missing settings and migrate only recognized old defaults:
 Codex's exact first line of 100000 or 200000; Claude's numeric 120000 or 200000;
-Bob's numeric 37 or 80. Other explicit values, Codex profiles/quoted/dotted
+Bob's numeric 19, 37 or 80. Other explicit values, Codex profiles/quoted/dotted
 keys, Claude model-specific choices and compaction-disable settings survive.
 Old JSON settings have no provenance marker, so an intentional value equal to
 an old managed default is indistinguishable and will migrate. Review/back up

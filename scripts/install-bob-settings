@@ -6,7 +6,8 @@ set -euo pipefail
 # limit, or at 80% of an explicit cost limit, so the agent wraps up before
 # Bob stops the task; file tools
 # that skip ignored files such as dependencies and build output; compaction
-# at about 50k tokens, which keeps each turn smaller; and unlimited task cost
+# at half the context window, which keeps each turn smaller while leaving the
+# retained context room below the threshold; and unlimited task cost
 # (keys observed in Bob Shell 2.0.6; Bob compacts at 90% and has no cost limit
 # by default). Reads outside the workspace are always auto-approved, replacing
 # any other value, so a task started by `bobtask handoff` can read the earlier
@@ -42,7 +43,7 @@ import tempfile
 
 settings_file = Path.home() / ".bob/settings/settings.json"
 defaults = {"session": {"limitWarnings": True, "respectGitIgnore": True,
-                        "compactionThresholdPercent": 19, "maxCost": 0},
+                        "compactionThresholdPercent": 50, "maxCost": 0},
             "approval": {}}
 # Outside the workspace, only the read group goes through: Bob still asks
 # before edits and commands there.
@@ -64,10 +65,13 @@ OLD_MAX_TURNS = 300
 # Remove the repository's earlier task cost cap; Bob uses 0 for unlimited.
 OLD_MAX_COST = 20
 # Bob Shell 2.0.9 reads this native session setting as percent / 100,
-# with no lower clamp in the installed distribution. 19% of the observed
-# premium-ide 270000-token window is 51300 (nearest whole percent to 50k).
-# The window comes from the server and can differ by model.
-OLD_COMPACTION_PERCENTS = (37, 80)
+# with no lower clamp in the installed distribution. 50% of the observed
+# premium-ide 270000-token window is 135000. The earlier 19% (51300) left too
+# little room: after compaction the system prompt, summary and recent tool
+# results could still exceed it, and Bob stopped with "compaction was unable
+# to reduce the context enough". Automatic handoff at 50k tokens still rotates
+# tasks first. The window comes from the server and can differ by model.
+OLD_COMPACTION_PERCENTS = (19, 37, 80)
 
 # Write through a symlink (settings kept in a dotfiles checkout, say) so the link survives.
 settings_file = Path(os.path.realpath(settings_file))
