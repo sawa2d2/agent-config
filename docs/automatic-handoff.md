@@ -1,5 +1,7 @@
 # Automatic interactive handoff
 
+> Bob's automatic handoff is currently disabled: `bin/bob` runs the real Bob CLI directly.
+
 Ordinary interactive `bob` and `codex` launches use automatic handoff, including
 `new` and supported resume launches. Their `auto-handoff` prefix remains accepted.
 Codex resume/fork with permission overrides uses native compaction; this includes

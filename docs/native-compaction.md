@@ -2,7 +2,7 @@
 
 Normal `bin/claude` launches use the CLI's native compaction,
 including `new` and resume. Bob and Codex now default to
-[automatic handoff](automatic-handoff.md), with native compaction still enabled.
+[automatic handoff](automatic-handoff.md) (Bob's is currently disabled), with native compaction still enabled.
 Codex resume/fork with permission overrides remains native, including the
 wrapper's default no-argument resume with `--approve-for-me`.
 The native defaults were introduced as an experiment with triggers near the retained custom handoff's 35k/50k measurements, not a

@@ -41,11 +41,14 @@ type_prompt() {
   tmux send-keys -t "$TMUX_PANE" -l "$1" && tmux send-keys -t "$TMUX_PANE" Enter
 }
 
-# Run an auto-approved chat. When the user leaves a task that stopped at its
+# Run an auto-approved chat. Automatic handoff (scripts/agent-auto-handoff) is
+# temporarily disabled for Bob because the handoff -> takeover launcher does not
+# work reliably; restore the launcher exec lines below to re-enable it. When the user leaves a task that stopped at its
 # cost limit, offer to continue in a new task started by `bobtask handoff`.
 chat() {
   if [[ -t 0 && -t 1 ]]; then
-    exec python3 "$wrapper_dir/../scripts/agent-auto-handoff" bob "$real_bob" chat --auto-approve "$@"
+    # exec python3 "$wrapper_dir/../scripts/agent-auto-handoff" bob "$real_bob" chat --auto-approve "$@"
+    exec "$real_bob" chat --auto-approve "$@"
   fi
   local since prompt='' status answer
   while :; do
@@ -72,10 +75,6 @@ interactive=true
 for arg in "$@"; do
   case "$arg" in --help|-h|--version|-v) interactive=false ;; esac
 done
-if $interactive && [[ -t 0 && -t 1 ]]; then
-  case "${1:-}" in
-    chat|-r|--resume|-p|--prompt)
-      exec python3 "$wrapper_dir/../scripts/agent-auto-handoff" bob "$real_bob" "$@" ;;
-  esac
-fi
+# Disabled (see chat()); to re-enable, run the launcher for these cases:
+#   chat|-r|--resume|-p|--prompt) exec python3 "$wrapper_dir/../scripts/agent-auto-handoff" bob "$real_bob" "$@" ;;
 exec "$real_bob" "$@"

@@ -294,7 +294,8 @@ class TerminalTests(unittest.TestCase):
                                 elif child.poll() is not None:
                                     break
                             self.assertEqual(child.wait(timeout=2), 0, output.decode(errors="replace"))
-                            automatic = explicit or agent in ("bob", "codex")
+                            # Bob's automatic handoff is temporarily disabled in bin/bob.
+                            automatic = agent != "bob" and (explicit or agent == "codex")
                             self.assertIn(b"AUTO_HANDOFF" if automatic else b"NATIVE_CLI", output)
                             self.assertNotIn(b"NATIVE_CLI" if automatic else b"AUTO_HANDOFF", output)
                             if agent == "codex":
