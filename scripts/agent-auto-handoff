@@ -56,6 +56,7 @@ class Rotation(core.Rotation):
         self.agent = agent
         self.serial = 0
         self.verify_bob_takeover = False
+        self.bob_takeover_turn = False
 
     def event(self, event):
         name, session = event.get("hook_event_name"), event.get("session_id")
@@ -80,6 +81,9 @@ class Rotation(core.Rotation):
         if session != self.thread or event["cwd"] != self.cwd:
             return
         if name == "UserPromptSubmit":
+            # Bob's PostToolUse must not re-arm before the takeover turn completes,
+            # or an oversized fresh task would hand off again instead of hitting the loop guard.
+            self.bob_takeover_turn = self.agent == "bob" and self.phase == "takeover"
             self.client({"method": "turn/start", "params": {
                 "threadId": session, "input": [{"text": event.get("prompt", "")}]}})
             self.serial += 1
@@ -87,7 +91,8 @@ class Rotation(core.Rotation):
         elif name in ("StopFailure", "PreCompact"):
             if self.phase not in ("watch", "disabled"):
                 self.cancel("handoff failed or compacted; history retained")
-        elif name == "PostToolUse" and self.phase == "watch" and not self.armed:
+        elif name == "PostToolUse" and self.phase == "watch" and not self.armed \
+                and not self.bob_takeover_turn:
             try:
                 if measurement(self.agent, event) < core.LIMIT:
                     self.armed = True
@@ -107,6 +112,7 @@ class Rotation(core.Rotation):
                 return
             self.server({"method": "turn/completed", "params": {
                 "threadId": session, "turn": {"id": self.turn, "status": "completed"}}})
+            self.bob_takeover_turn = False
             if self.agent == "bob" and self.phase == "clearing":
                 self.verify_bob_takeover = True
 
