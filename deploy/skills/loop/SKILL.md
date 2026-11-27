@@ -42,7 +42,7 @@ Write the task and its scope into the prompt file. Use a trusted executable
 check: exit 0 means complete, 1 means more work, any other status stops the
 runner. Choose a finite iteration limit. Each iteration starts `codex exec`
 from the current workspace; agent errors stop immediately. Existing sandbox,
-approval, Git and delegated-verification rules still apply. When checks must
+approval, Git and verification rules still apply. When checks must
 run in a child agent, have that child own the runner and its check.
 
 The runner appends each completed check's command, exit status and combined

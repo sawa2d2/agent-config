@@ -164,8 +164,8 @@ these examples verbatim. Send the starting report first, before investigation.
 Use repeated --commit for multiple commits; if no commit was needed, explain why
 in the summary. Terminal reports require --checks. Report running when starting,
 needs-input when blocked, and completed or failed before ending; also give the
-final outcome in this tmux session. Reporting is explicit, not automatic. Delegate
-test runs as instructed. Never claim unrun checks passed. If reporting is
+final outcome in this tmux session. Reporting is explicit, not automatic. Run
+checks per the verification rules. Never claim unrun checks passed. If reporting is
 blocked, explain the missing report in the session; never use a local fallback.
 Pane presence does not prove progress.
 """

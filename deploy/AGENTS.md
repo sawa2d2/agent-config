@@ -34,9 +34,9 @@ These govern all coding and maintenance work and override the process any skill,
 
 ## Verification
 - Use the repository's existing verification commands, running only relevant checks in a quiet mode that shows failures, not full logs.
-- Delegate each test run to a subagent (Bob's `spawn_subagent`, a Claude Code subagent, or a Codex subagent via `spawn_agent`, as available); that child executes the checks itself without delegating further.
-- The parent defines the exact commands, working directory, and scope, reviews the child's exit statuses and failure evidence, and handles fixes and Git operations; reruns after fixes also go to a child. The child reports what actually ran and the results, without modifying source files or Git state.
-- If delegation is unavailable or fails, report the blocker and unrun checks; missing results never count as a pass.
+- Run short, quiet checks (expected to finish quickly with brief output, e.g. a single test file or a lint of changed files) directly. Delegate long-running or high-output checks (full suites, builds, verbose logs) to a subagent (Bob's `spawn_subagent`, a Claude Code subagent, or a Codex subagent via `spawn_agent`, as available); that child runs them itself without delegating further, reports what actually ran and the results, and does not modify source files or Git state.
+- The parent defines the exact commands, working directory, and scope, reviews exit statuses and failure evidence, and handles fixes and Git operations.
+- If delegation of a check is unavailable or fails, run it inline or report the blocker and unrun checks; missing results never count as a pass.
 - Iterate through implementation, testing, diagnosis, and fixes while making meaningful progress, until relevant tests pass.
 - Run executable checks yourself rather than handing them to the user, except slow or costly ones; give those as copy-paste commands with expected results.
 - Do not retry an unchanged failing operation without a concrete reason to expect a different result. A transient network error during a remote check (such as DNS resolution failure) is a concrete reason: wait 10 seconds, then retry the same operation once before reporting blocked. If that retry fails, report that verification could not be completed; cached tracking refs do not establish current remote state.
