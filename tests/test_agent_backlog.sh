@@ -206,7 +206,7 @@ for repository in repositories:
         shared = (root / 'deploy/AGENTS.md').read_text()
         if codex:
             assert text.startswith(shared.rstrip() + '\n\n')
-            assert 'only a user message exactly `approved`' in text
+            assert 'only a user message exactly `approved` or `A`' in text
             assert 'codex-deleted-worktree.md' in text
         else:
             assert text == shared

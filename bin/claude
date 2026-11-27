@@ -22,7 +22,7 @@ real_cli=$(command -v claude || true)
 }
 
 # Mark this process tree as an agent: gfinish (dotfiles) then merges only after
-# scripts/agent-approval-marker recorded the user's "approved" prompt here.
+# scripts/agent-approval-marker recorded the user's "approved" or "A" prompt here.
 export AGENT_APPROVAL_DIR=${AGENT_APPROVAL_DIR:-${XDG_RUNTIME_DIR:-$HOME/.cache}/agent-approval}
 
 # Preserve RGB colors inside tmux; otherwise Claude may quantize them to 256 colors.

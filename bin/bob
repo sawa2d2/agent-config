@@ -16,7 +16,7 @@ real_bob=$(command -v bob || true)
 [[ -n "$real_bob" ]] || { echo 'bob: original Bob Shell executable not found' >&2; exit 127; }
 
 # Mark this process tree as an agent: gfinish (dotfiles) then merges only after
-# scripts/agent-approval-marker recorded the user's "approved" prompt here.
+# scripts/agent-approval-marker recorded the user's "approved" or "A" prompt here.
 export AGENT_APPROVAL_DIR=${AGENT_APPROVAL_DIR:-${XDG_RUNTIME_DIR:-$HOME/.cache}/agent-approval}
 
 # Refresh the selected theme, missing default settings and tmux status hooks.

@@ -2,7 +2,7 @@
 """Claude Code, Bob Shell and Codex UserPromptSubmit hook: record that the user
 approved finalizing the current repository.
 
-When the whole prompt, trimmed, is exactly "approved", touch
+When the whole prompt, trimmed, is exactly "approved" or "A", touch
 $AGENT_APPROVAL_DIR/<sha256 of the real path of the session's git top level>.
 gfinish (in the dotfiles) refuses to merge from an agent process tree without
 a fresh marker, so a question such as "approve 可能？" cannot count as
@@ -25,7 +25,7 @@ def main():
     try:
         event = json.load(sys.stdin)
         prompt, cwd = event["prompt"], event["cwd"]
-        if not approval_dir or not isinstance(prompt, str) or prompt.strip() != "approved":
+        if not approval_dir or not isinstance(prompt, str) or prompt.strip() not in ("approved", "A"):
             return
         top = subprocess.run(["git", "-C", cwd, "rev-parse", "--show-toplevel"], capture_output=True,
                              text=True, check=True).stdout.rstrip("\n")

@@ -16,8 +16,8 @@ hook() {
     | "$root/scripts/agent-approval-marker"
 }
 
-# Anything but the exact word, trimmed, leaves no marker and prints nothing.
-for prompt in 'approve 可能？' 'Approved' 'approved?' 'approved, merge it' 'not approved' ''; do
+# Anything but exactly "approved" or "A", trimmed, leaves no marker and prints nothing.
+for prompt in 'approve 可能？' 'Approved' 'approved?' 'approved, merge it' 'not approved' 'a' 'A?' 'A ok' ''; do
   out=$(hook "$prompt" "$tmp/link/sub")
   [[ -z $out && ! -e $AGENT_APPROVAL_DIR ]] || fail "marker or output for: $prompt"
 done
@@ -26,6 +26,10 @@ done
 [[ -z $(hook $'  approved\n' "$tmp/link/sub") ]] || fail 'output on approval'
 [[ -f $marker ]] || fail "marker missing: $(ls -A "$AGENT_APPROVAL_DIR")"
 [[ $(ls -A "$AGENT_APPROVAL_DIR" | wc -l) == 1 ]] || fail 'extra markers'
+# "A" with surrounding whitespace is an alternative approval.
+rm -- "$marker"
+[[ -z $(hook $' A \n' "$tmp/link/sub") ]] || fail 'output on A approval'
+[[ -f $marker ]] || fail 'marker missing for A'
 # A Codex-shaped event uses its cwd, including a different worktree/repository.
 mkdir "$tmp/other"
 git -C "$tmp/other" init -q
