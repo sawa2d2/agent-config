@@ -140,7 +140,7 @@ examples:
                              "1w/1week (ending next Monday at local 00:00); default: 1day (1d)")
     parser.add_argument("-w", "--windows", "--weeks", type=int,
                         help="windows shown without a split, including the current one "
-                             "(0: all; default: 10, or 0 with --since/--until)")
+                             "(0: all; default: 30, or 0 with --since/--until)")
     parser.add_argument("--json", action="store_true", help="print per-session rows as JSON")
     args = parser.parse_args()
     if args.windows is not None and args.windows < 0:
@@ -157,7 +157,7 @@ examples:
     if args.since and args.until and args.since >= args.until:
         parser.error("--since must precede --until")
     args.windows = (args.windows if args.windows is not None else
-                    0 if args.since or args.until else 10)
+                    0 if args.since or args.until else 30)
     return args
 
 

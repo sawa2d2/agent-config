@@ -75,7 +75,7 @@ for spec, hours in (('5h', 5), ('24h', 24)):
 for agent in ('claude', 'bob', 'codex'):
     with patch('sys.argv', ['aistats', agent]):
         args = arguments()
-    assert args.window == '1d' and args.windows == 10
+    assert args.window == '1d' and args.windows == 30
 assert window_spec('1day') == '1d' and window_spec('2day') == '2d'
 
 os.environ['TZ'] = 'UTC'

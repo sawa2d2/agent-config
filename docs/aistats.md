@@ -49,9 +49,9 @@ examples work with all three agents.
   retained day still all contribute to its per-request calculations. Explicit
   weekly, multi-day and hourly windows keep their existing aggregation and
   adjacent-window comparisons. JSON and per-session split statistics are unchanged.
-- `-w`, `--windows`, and `--weeks` are aliases. Default: 10 windows, or all
+- `-w`, `--windows`, and `--weeks` are aliases. Default: 30 windows, or all
   windows with `--since`/`--until`; 0 means all. The default therefore covers
-  today and the previous nine dates, without extending the range for omitted
+  today and the previous 29 dates, without extending the range for omitted
   days. The previous retained day (or adjacent window for other window lengths)
   remains available for ratios even when it is hidden.
 - `--json` emits one JSON object per selected session, oldest first. It takes
